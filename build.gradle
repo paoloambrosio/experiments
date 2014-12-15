@@ -1,0 +1,15 @@
+apply plugin: 'java'
+
+sourceCompatibility = 1.8
+version = '1.0-SNAPSHOT'
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    compile 'org.apache.httpcomponents:httpclient:4.3.5'
+    compile 'org.apache.httpcomponents:fluent-hc:4.3.5'
+    testCompile 'junit:junit:4.12'
+    testCompile 'com.github.tomakehurst:wiremock:1.52'
+}
