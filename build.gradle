@@ -12,4 +12,5 @@ dependencies {
     compile 'org.apache.httpcomponents:fluent-hc:4.3.5'
     testCompile 'junit:junit:4.12'
     testCompile 'com.github.tomakehurst:wiremock:1.52'
+    testCompile 'com.github.tomakehurst:crash-lab:0.2'
 }
