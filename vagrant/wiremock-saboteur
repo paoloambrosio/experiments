@@ -1,0 +1,5 @@
+#!/bin/sh
+
+service saboteur-agent start
+su -c "java -jar  /usr/lib/wiremock/wiremock-standalone.jar --verbose >/var/log/wiremock/wiremock.log 2>/var/log/wiremock/wiremock.err" wiremock &
+

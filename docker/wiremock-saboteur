@@ -1,5 +1,0 @@
-#!/bin/sh
-
-su -c "/usr/bin/saboteur-agent" saboteur &
-su -c "java -jar  /usr/lib/wiremock/wiremock-standalone.jar --verbose" wiremock
-
