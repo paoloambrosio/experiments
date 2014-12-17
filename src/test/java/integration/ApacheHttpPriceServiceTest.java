@@ -11,13 +11,16 @@ import static net.paoloambrosio.wiremock.ApacheHttpPriceService.CONNECTION_TIMEO
 import static net.paoloambrosio.wiremock.ApacheHttpPriceService.SOCKET_TIMEOUT_MS;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
 import net.paoloambrosio.wiremock.ApacheHttpPriceService;
 
+import org.junit.AfterClass;
 import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
 import com.github.tomakehurst.wiremock.client.WireMock;
+import com.tomakehurst.crashlab.saboteur.NetworkFailure;
 import com.tomakehurst.crashlab.saboteur.Saboteur;
 
 public class ApacheHttpPriceServiceTest {
@@ -27,7 +30,7 @@ public class ApacheHttpPriceServiceTest {
 
 	public static final int TIMEOUT_TOLERANCE_MS = 500;
 
-    private Saboteur priceServiceSaboteur = Saboteur.defineClient("test-price-service", PRICE_SERVICE_PORT, PRICE_SERVICE_HOST);
+    private static Saboteur priceServiceSaboteur = Saboteur.defineService("test-price-service", PRICE_SERVICE_PORT, PRICE_SERVICE_HOST);
 
     private ApacheHttpPriceService priceService = new ApacheHttpPriceService();
 
@@ -37,9 +40,14 @@ public class ApacheHttpPriceServiceTest {
 	}
 
 	@Before
-	public void init() {
+	public void resetBeforeEachTest() {
 		priceServiceSaboteur.reset();
 		WireMock.reset();
+	}
+
+	@AfterClass
+	public static void resetSaboteurAtTheEnd() {
+		priceServiceSaboteur.reset();
 	}
 
 	@Test
@@ -71,11 +79,21 @@ public class ApacheHttpPriceServiceTest {
 				aResponse().withStatus(200).withBody("1.25")));
 
 		priceServiceSaboteur.addFault(
-				firewallTimeout("price-service-firewall-timeout")
-					.timeout(CONNECTION_TIMEOUT_MS + TIMEOUT_TOLERANCE_MS, MILLISECONDS));
+				NetworkFailure.networkFailure("network-totally-down")
+//				firewallTimeout("price-service-firewall-timeout")
+//					.timeout(CONNECTION_TIMEOUT_MS + TIMEOUT_TOLERANCE_MS, MILLISECONDS)
+				);
 
+		long startTime = System.nanoTime() / 1000000;
 		float result = priceService.fetchPrice();
+		long finishTime = System.nanoTime() / 1000000;
 		assertTrue("NaN expected, got " + result, Float.isNaN(result));
+		assertWithinTolerance("Elapsed time not within tolerance", (int) (finishTime - startTime), CONNECTION_TIMEOUT_MS, TIMEOUT_TOLERANCE_MS);
 	}
 
+	private void assertWithinTolerance(String description, int expected, int actual, int tolerance) {
+		if (actual > expected + tolerance || actual < expected - tolerance) {
+			fail(String.format("%s (expected: %d, actual: %d)", description, expected, actual));
+		}
+	}
 }
