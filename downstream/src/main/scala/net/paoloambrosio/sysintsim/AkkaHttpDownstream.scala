@@ -8,10 +8,12 @@ import akka.http.model.HttpResponse
 import akka.http.model.StatusCodes._
 import akka.http.server.Directives._
 import akka.http.server.ExceptionHandler
+import akka.pattern.after
 import akka.stream.FlowMaterializer
 import com.typesafe.config.{Config, ConfigFactory}
 
-import scala.concurrent.ExecutionContextExecutor
+import scala.concurrent.{Future, ExecutionContextExecutor}
+import scala.concurrent.duration._
 
 trait Service {
   implicit val system: ActorSystem
@@ -24,13 +26,13 @@ trait Service {
   val routes = {
     get {
       complete {
-        ToResponseMarshallable("not_implemented")
+        after(2 second, using = system.scheduler)(Future("success"))
       }
     }
   }
 
   implicit def exceptionHandler = ExceptionHandler {
-    case t: Throwable => complete(HttpResponse(InternalServerError, entity = "exception"))
+    case t: Throwable => complete(HttpResponse(InternalServerError, entity = "failure"))
   }
 }
 
