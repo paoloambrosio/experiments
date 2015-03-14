@@ -9,15 +9,20 @@ class DownstreamSimulation extends Simulation {
   val httpConf = http.baseURL("http://localhost:9000")
 
   val scn = scenario("DownstreamSimulation")
-    .exec(http("OnlyRequest").get("/"))
-//    .pause(1 second)
+    .forever { exec(http("OnlyRequest").get("/")) }
 
   setUp(
-    scn.inject(rampUsers(100) over (10 seconds))
+    scn
+      .inject(atOnceUsers(1000))
+      .throttle(
+        reachRps(100) in (10 seconds),
+        holdFor(50 seconds)
+      )
   ).assertions(
     // no FiniteDuration!
     global.responseTime.min.greaterThan(2000),
     global.responseTime.percentile2.lessThan(2020),
     global.responseTime.max.lessThan(2050)
   ).protocols(httpConf)
+
 }
