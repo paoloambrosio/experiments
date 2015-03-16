@@ -13,10 +13,10 @@ class DownstreamSimulation extends Simulation {
 
   setUp(
     scn
-      .inject(atOnceUsers(1000))
+      .inject(atOnceUsers(2000))
       .throttle(
-        reachRps(100) in (10 seconds),
-        holdFor(50 seconds)
+        reachRps(500) in (30 seconds),
+        holdFor(90 seconds)
       )
   ).assertions(
     // no FiniteDuration!

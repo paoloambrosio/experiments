@@ -3,7 +3,6 @@ package net.paoloambrosio.sysintsim
 import akka.actor.ActorSystem
 import akka.event.{Logging, LoggingAdapter}
 import akka.http.Http
-import akka.http.marshalling.ToResponseMarshallable
 import akka.http.model.HttpResponse
 import akka.http.model.StatusCodes._
 import akka.http.server.Directives._
@@ -11,9 +10,10 @@ import akka.http.server.ExceptionHandler
 import akka.pattern.after
 import akka.stream.FlowMaterializer
 import com.typesafe.config.{Config, ConfigFactory}
+import org.jmxtrans.embedded.config.ConfigurationParser
 
-import scala.concurrent.{Future, ExecutionContextExecutor}
 import scala.concurrent.duration._
+import scala.concurrent.{ExecutionContextExecutor, Future}
 
 trait Service {
   implicit val system: ActorSystem
@@ -44,5 +44,13 @@ object AkkaHttpDownstream extends App with Service {
   override val config = ConfigFactory.load()
   override val logger = Logging(system, getClass)
 
+  private val jmxTrans = {
+    val jt = new ConfigurationParser().newEmbeddedJmxTrans("classpath:jmxtrans.json")
+    jt.start()
+    //sys.addShutdownHook { jt.stop() }
+    jt
+  }
+
   Http().bind(interface = config.getString("http.interface"), port = config.getInt("http.port")).startHandlingWith(routes)
+
 }

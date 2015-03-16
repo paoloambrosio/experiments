@@ -1,0 +1,29 @@
+{
+  "queryIntervalInSeconds": 5,
+  "exportIntervalInSeconds": 10,
+  "queries": [
+    {
+      "objectName": "java.lang:type=Memory",
+      "resultAlias": "JVM.Memory",
+      "attributes": ["HeapMemoryUsage", "NonHeapMemoryUsage"]
+    },{
+      "objectName": "java.lang:type=Threading",
+      "resultAlias": "JVM.Threads",
+      "attributes": ["ThreadCount"]
+    },{
+      "objectName": "java.lang:type=OperatingSystem",
+      "resultAlias": "OS",
+      "attributes": ["SystemLoadAverage", "NonHeapMemoryUsage"]
+    }
+  ],
+  "outputWriters": [
+    {
+      "@class": "org.jmxtrans.embedded.output.GraphiteWriter",
+      "settings": {
+        "host": "${graphite.host:localhost}",
+        "port": "${graphite.port:2003}",
+        "namePrefix": "servers.${server.name:downstream}."
+      }
+    }
+  ]
+}
