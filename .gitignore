@@ -1,4 +1,6 @@
 target/
+.gradle/
+build/
 
 # Eclipse
 .project
@@ -10,4 +12,4 @@ bin/
 # IntelliJ Idea
 .idea
 .idea_modules
-
+*.iml
