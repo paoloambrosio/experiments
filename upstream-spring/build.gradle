@@ -21,4 +21,6 @@ repositories {
 
 dependencies {
     compile("org.springframework.boot:spring-boot-starter-web:1.2.2.RELEASE")
+    compile("org.jmxtrans.embedded:embedded-jmxtrans:1.0.14")
+    compile("org.apache.httpcomponents:fluent-hc:4.4")
 }

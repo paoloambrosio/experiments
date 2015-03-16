@@ -1,6 +1,4 @@
-
-
-Collect and graph stats from Gatling and App:
+Collect and graph stats from Gatling and Downstream:
  - Gatling conf file to point to Graphite
  - JmxTrans conf to point to Graphite
  - Run Grafana Docker image exposing Grafana and Graphite ports
@@ -8,4 +6,10 @@ Collect and graph stats from Gatling and App:
    (https://github.com/kamon-io/docker-grafana-graphite)
  - Run app (sbt run) and performance test (sbt test)
  - Add metrics to dashboard
+
+Exercise Spring Boot Upstream:
+ - As before, run downstream app and Graphite
+ - Run upstream app (gradle run)
+ - Run performance test (sbt 'testOnly gatling.UpstreamSimulation')
+ - Watch the synchronous app die ;-)
 

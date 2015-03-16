@@ -44,12 +44,7 @@ object AkkaHttpDownstream extends App with Service {
   override val config = ConfigFactory.load()
   override val logger = Logging(system, getClass)
 
-  private val jmxTrans = {
-    val jt = new ConfigurationParser().newEmbeddedJmxTrans("classpath:jmxtrans.json")
-    jt.start()
-    //sys.addShutdownHook { jt.stop() }
-    jt
-  }
+  new ConfigurationParser().newEmbeddedJmxTrans("classpath:jmxtrans.json").start()
 
   Http().bind(interface = config.getString("http.interface"), port = config.getInt("http.port")).startHandlingWith(routes)
 
