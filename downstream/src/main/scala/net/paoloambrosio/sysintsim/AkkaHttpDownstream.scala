@@ -8,7 +8,9 @@ import akka.http.model.StatusCodes._
 import akka.http.server.Directives._
 import akka.http.server.ExceptionHandler
 import akka.pattern.after
+import akka.pattern.ask
 import akka.stream.FlowMaterializer
+import akka.util.Timeout
 import com.typesafe.config.{Config, ConfigFactory}
 import org.jmxtrans.embedded.config.ConfigurationParser
 
@@ -23,10 +25,15 @@ trait Service {
   def config: Config
   val logger: LoggingAdapter
 
+  implicit val timeout = Timeout(10 seconds)
+
   val routes = {
+    lazy val slowdownActor = system.actorOf(SlowdownActor.props(x => 2 seconds))
     get {
       complete {
-        after(2 second, using = system.scheduler)(Future("success"))
+        (slowdownActor ? "hello").mapTo[FiniteDuration].map { d =>
+          after(d, using = system.scheduler)(Future("success"))
+        }
       }
     }
   }
