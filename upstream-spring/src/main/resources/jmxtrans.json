@@ -11,9 +11,13 @@
       "resultAlias": "JVM.Threads",
       "attributes": ["ThreadCount"]
     },{
-      "objectName": "java.lang:type=OperatingSystem",
-      "resultAlias": "OS",
-      "attributes": ["SystemLoadAverage", "NonHeapMemoryUsage"]
+      "objectName": "java.lang:type=Threading",
+      "resultAlias": "JVM.Threads",
+      "attributes": ["ThreadCount"]
+    },{
+      "objectName": "Tomcat:type=ThreadPool,name=http-nio-8080",
+      "resultAlias": "Tomcat.Threads",
+      "attributes": ["currentThreadCount", "currentThreadsBusy"]
     }
   ],
   "outputWriters": [

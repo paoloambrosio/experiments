@@ -1,3 +1,12 @@
+How to run:
+ $ docker run --rm -p 80:80 -p 2003:2003 --name kamon-grafana-dashboard kamon/grafana_graphite
+ - Point browser to http://localhost/ and import the dashboard
+ $ cd downstream; sbt run
+ $ cd upstream-spring; gradle run
+ $ cd perftest; sbt 'testOnly gatling.UpstreamSimulation'
+
+
+
 Collect and graph stats from Gatling and Downstream:
  - Gatling conf file to point to Graphite
  - JmxTrans conf to point to Graphite
