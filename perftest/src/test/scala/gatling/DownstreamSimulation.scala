@@ -18,11 +18,6 @@ class DownstreamSimulation extends Simulation {
         reachRps(500) in (30 seconds),
         holdFor(90 seconds)
       )
-  ).assertions(
-    // no FiniteDuration!
-    global.responseTime.min.greaterThan(2000),
-    global.responseTime.percentile2.lessThan(2020),
-    global.responseTime.max.lessThan(2050)
   ).protocols(httpConf)
 
 }

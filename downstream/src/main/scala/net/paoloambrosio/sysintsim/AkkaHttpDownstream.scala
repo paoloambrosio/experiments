@@ -1,5 +1,7 @@
 package net.paoloambrosio.sysintsim
 
+import java.util.concurrent.TimeUnit
+
 import akka.actor.ActorSystem
 import akka.event.{Logging, LoggingAdapter}
 import akka.http.Http
@@ -12,6 +14,7 @@ import akka.pattern.ask
 import akka.stream.FlowMaterializer
 import akka.util.Timeout
 import com.typesafe.config.{Config, ConfigFactory}
+import net.paoloambrosio.sysintsim.SlowdownActor.Distribution
 import org.jmxtrans.embedded.config.ConfigurationParser
 
 import scala.concurrent.duration._
@@ -25,10 +28,20 @@ trait Service {
   def config: Config
   val logger: LoggingAdapter
 
+  lazy val slowdownActor = {
+    val ac = config.getConfig("application.slowdown-strategy")
+    val windowSize = ac.getDuration("window-size", TimeUnit.MILLISECONDS).toInt
+    val maxRequests = ac.getInt("max-requests")
+    val distribution = Map[String, Distribution](
+      "linear" -> { load => load millis },
+      "constant2s" -> { load => 2 seconds }
+    ).get(ac.getString("distribution")).get
+    system.actorOf(SlowdownActor.props(windowSize, maxRequests, distribution))
+  }
+
   implicit val timeout = Timeout(10 seconds)
 
   val routes = {
-    lazy val slowdownActor = system.actorOf(SlowdownActor.props(x => 2 seconds))
     get {
       complete {
         (slowdownActor ? "hello").mapTo[FiniteDuration].map { d =>
@@ -39,7 +52,10 @@ trait Service {
   }
 
   implicit def exceptionHandler = ExceptionHandler {
-    case t: Throwable => complete(HttpResponse(InternalServerError, entity = "failure"))
+    case t: Throwable => {
+      logger.error(t, "Exception caught")
+      complete(HttpResponse(InternalServerError, entity = "failure"))
+    }
   }
 }
 

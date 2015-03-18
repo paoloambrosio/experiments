@@ -5,6 +5,9 @@ How to run:
  $ cd upstream-spring; gradle run
  $ cd perftest; sbt 'testOnly gatling.UpstreamSimulation'
 
+To change the downstream slowdown distribution:
+ $ sbt -Dapplication.slowdown-strategy.distribution=constant2s run
+
 
 
 Collect and graph stats from Gatling and Downstream:

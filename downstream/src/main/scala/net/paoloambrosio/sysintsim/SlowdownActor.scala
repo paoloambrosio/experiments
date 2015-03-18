@@ -3,25 +3,38 @@ package net.paoloambrosio.sysintsim
 import akka.actor.{Actor, Props}
 import akka.event.Logging
 
+import scala.collection.mutable.{Seq => MutableSeq}
+import scala.compat.Platform
 import scala.concurrent.duration.FiniteDuration
 
 object SlowdownActor {
 
-  type Strategy = Int => FiniteDuration
+  type Distribution = Int => FiniteDuration
 
-  def props(strategy: Strategy) = Props(new SlowdownActor(strategy))
+  def props(windowSizeMs: Int, maxRequests: Int, distribution: Distribution) = Props(new SlowdownActor(windowSizeMs, maxRequests, distribution))
 
 }
 
-class SlowdownActor(strategy: SlowdownActor.Strategy) extends Actor {
+/**
+ *
+ * @param windowSizeMs max size of window to keep
+ * @param maxRequests max requests to keep
+ * @param distribution returns the time a request should take based on the
+ *                 current load
+ */
+class SlowdownActor(windowSizeMs: Int, maxRequests: Int, distribution: SlowdownActor.Distribution) extends Actor {
 
-  val log = Logging(context.system, this)
-  var count = 0
+  val counter = MutableSeq[Long]()
 
   override def receive = {
     case _ => {
-      count += 1
-      sender ! strategy(count)
+      updateCounter
+      sender ! distribution(counter.length)
     }
+  }
+  
+  def updateCounter: Unit = {
+    val epochMs = Platform.currentTime
+    (epochMs +: (counter.filter(_ >= epochMs - windowSizeMs))).take(maxRequests)
   }
 }
