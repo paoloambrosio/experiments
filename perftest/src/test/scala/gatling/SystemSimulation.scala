@@ -5,9 +5,10 @@ import io.gatling.http.Predef._
 
 import scala.concurrent.duration._
 
-class UpstreamSimulation extends Simulation {
+class SystemSimulation extends Simulation {
 
-  val httpConf = http.baseURL("http://localhost:8080")
+  val port = System.getProperty("undertest.port", "8080")
+  val httpConf = http.baseURL(s"http://localhost:$port")
 
   val scn = scenario("UpstreamSimulation")
     .forever { exec(http("OnlyRequest").get("/")) }

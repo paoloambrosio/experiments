@@ -3,10 +3,13 @@ How to run:
  - Point browser to http://localhost/ and import the dashboard
  $ cd downstream; sbt run
  $ cd upstream-spring; gradle run
- $ cd perftest; sbt 'testOnly gatling.UpstreamSimulation'
+ $ cd perftest; sbt test
 
 To change the downstream slowdown distribution:
  $ sbt -Dapplication.slowdown-strategy.distribution=constant2s run
+
+To run Gatling on the downstream only:
+ $ sbt -Dundertest.port=9000 test
 
 
 

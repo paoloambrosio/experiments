@@ -30,13 +30,12 @@ trait Service {
 
   lazy val slowdownActor = {
     val ac = config.getConfig("application.slowdown-strategy")
-    val windowSize = ac.getDuration("window-size", TimeUnit.MILLISECONDS).toInt
     val maxRequests = ac.getInt("max-requests")
     val distribution = Map[String, Distribution](
       "linear" -> { load => load millis },
       "constant2s" -> { load => 2 seconds }
     ).get(ac.getString("distribution")).get
-    system.actorOf(SlowdownActor.props(windowSize, maxRequests, distribution))
+    system.actorOf(SlowdownActor.props(maxRequests, distribution))
   }
 
   implicit val timeout = Timeout(10 seconds)
