@@ -20,3 +20,5 @@ libraryDependencies ++= {
 libraryDependencies ++= Seq(
   "org.jmxtrans.embedded" % "embedded-jmxtrans" % "1.0.14"
 )
+
+enablePlugins(JavaAppPackaging)

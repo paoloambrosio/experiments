@@ -202,6 +202,69 @@
           "aliasColors": {},
           "seriesOverrides": [],
           "links": []
+        },
+        {
+          "title": "Response Times",
+          "error": false,
+          "span": 6,
+          "editable": true,
+          "type": "graph",
+          "id": 4,
+          "datasource": null,
+          "renderer": "flot",
+          "x-axis": true,
+          "y-axis": true,
+          "y_formats": [
+            "short",
+            "short"
+          ],
+          "grid": {
+            "leftMax": null,
+            "rightMax": null,
+            "leftMin": null,
+            "rightMin": null,
+            "threshold1": null,
+            "threshold2": null,
+            "threshold1Color": "rgba(216, 200, 27, 0.27)",
+            "threshold2Color": "rgba(234, 112, 112, 0.22)"
+          },
+          "lines": true,
+          "fill": 0,
+          "linewidth": 1,
+          "points": false,
+          "pointradius": 5,
+          "bars": false,
+          "stack": false,
+          "percentage": false,
+          "legend": {
+            "show": true,
+            "values": false,
+            "min": false,
+            "max": false,
+            "current": false,
+            "total": false,
+            "avg": false
+          },
+          "nullPointMode": "connected",
+          "steppedLine": false,
+          "tooltip": {
+            "value_type": "cumulative",
+            "shared": false
+          },
+          "targets": [
+            {
+              "target": "gatling.systemsimulation.OnlyRequest.all.percentiles95-0"
+            },
+            {
+              "target": "gatling.systemsimulation.OnlyRequest.all.max"
+            },
+            {
+              "target": "gatling.systemsimulation.OnlyRequest.all.min"
+            }
+          ],
+          "aliasColors": {},
+          "seriesOverrides": [],
+          "links": []
         }
       ]
     }
@@ -236,12 +299,12 @@
         "2h",
         "1d"
       ],
-      "now": false
+      "now": true
     }
   ],
   "time": {
-    "from": "2015-03-16T19:06:32.066Z",
-    "to": "2015-03-16T19:16:32.066Z"
+    "from": "now-5m",
+    "to": "now"
   },
   "templating": {
     "list": [
@@ -284,9 +347,10 @@
     "enable": true
   },
   "annotations": {
-    "enable": false
+    "enable": false,
+    "list": []
   },
-  "refresh": false,
+  "refresh": "10s",
   "version": 6,
   "hideAllLegends": false
 }

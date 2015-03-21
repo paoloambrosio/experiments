@@ -16,6 +16,7 @@ import java.io.IOException;
 public class UpstreamController {
 
     private final Executor executor;
+    private final String downstreamUrl;
 
     @Autowired
     public UpstreamController(DownstreamConnectionConfig dcc) {
@@ -30,13 +31,14 @@ public class UpstreamController {
             );
         CloseableHttpClient client = HttpClients.custom().setConnectionManager(cm).build();
         executor = Executor.newInstance(client);
+        downstreamUrl = dcc.getUrl();
     }
 
     @RequestMapping("/")
     public String index() {
         String downstreamResponse;
         try {
-            downstreamResponse = executor.execute(Request.Get("http://localhost:9000/")).returnContent().asString();
+            downstreamResponse = executor.execute(Request.Get(downstreamUrl)).returnContent().asString();
         } catch (IOException e) {
             downstreamResponse = "unknown";
         }

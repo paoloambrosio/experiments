@@ -8,6 +8,9 @@ import org.springframework.stereotype.Component;
 //@ConfigurationProperties(prefix="service.downstream")
 public class DownstreamConnectionConfig {
 
+    @Value("${service.downstream.url}")
+    private String url;
+
     @Value("${service.downstream.pool-size}")
     private int poolSize;
 
@@ -16,6 +19,10 @@ public class DownstreamConnectionConfig {
 
     //@Value("${service.downstream.tcp-no-delay}")
     private boolean tcpNoDelay; // Disable Nagle
+
+    public String getUrl() {
+        return url;
+    }
 
     public int getPoolSize() {
         return poolSize;

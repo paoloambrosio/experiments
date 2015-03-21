@@ -7,8 +7,10 @@ import scala.concurrent.duration._
 
 class SystemSimulation extends Simulation {
 
+  val host = System.getProperty("undertest.host", "localhost")
   val port = System.getProperty("undertest.port", "8080")
-  val httpConf = http.baseURL(s"http://localhost:$port")
+
+  val httpConf = http.baseURL(s"http://$host:$port")
 
   val scn = scenario("UpstreamSimulation")
     .forever { exec(http("OnlyRequest").get("/")) }
