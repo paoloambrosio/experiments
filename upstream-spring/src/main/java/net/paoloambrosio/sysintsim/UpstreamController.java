@@ -7,10 +7,13 @@ import org.apache.http.impl.client.CloseableHttpClient;
 import org.apache.http.impl.client.HttpClients;
 import org.apache.http.impl.conn.PoolingHttpClientConnectionManager;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.io.IOException;
+import java.net.SocketTimeoutException;
 
 @RestController
 public class UpstreamController {
@@ -35,14 +38,16 @@ public class UpstreamController {
     }
 
     @RequestMapping("/")
-    public String index() {
-        String downstreamResponse;
+    public ResponseEntity<String> index() {
         try {
-            downstreamResponse = executor.execute(Request.Get(downstreamUrl)).returnContent().asString();
+            String downstreamResponse = executor.execute(Request.Get(downstreamUrl)).returnContent().asString();
+            HttpStatus status = "success".equals(downstreamResponse) ? HttpStatus.OK : HttpStatus.SERVICE_UNAVAILABLE;
+            return new ResponseEntity<String>("success-" + downstreamResponse, status);
+        } catch (SocketTimeoutException e) {
+            return new ResponseEntity<String>("success-timeout", HttpStatus.GATEWAY_TIMEOUT);
         } catch (IOException e) {
-            downstreamResponse = "unknown";
+            return new ResponseEntity<String>("success-unknown", HttpStatus.GATEWAY_TIMEOUT);
         }
-        return "success-" + downstreamResponse;
     }
 
 }

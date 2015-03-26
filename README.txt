@@ -1,6 +1,5 @@
 How to run:
- $ docker run --rm -p 80:80 -p 2003:2003 --name kamon-grafana-dashboard kamon/grafana_graphite
- - Point browser to http://localhost/ and import the dashboard
+ $ cd grafana; ./docker-build.sh; cd -; docker run --rm -p 80:80 -p 2003:2003 --name grafana my-grafana
  $ cd downstream; sbt run
  $ cd upstream-spring; gradle run
  $ cd perftest; sbt test
@@ -15,6 +14,5 @@ To run Gatling on the downstream only:
 How to run in Docker:
  $ docker-build.sh
  $ docker-system-up.sh
- - Point browser to http://localhost/ and import the dashboard
  $ docker-run-perftest.sh
  $ docker-system-down.sh # When done
