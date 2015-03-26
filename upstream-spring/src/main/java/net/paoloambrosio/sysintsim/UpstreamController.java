@@ -44,9 +44,9 @@ public class UpstreamController {
             HttpStatus status = "success".equals(downstreamResponse) ? HttpStatus.OK : HttpStatus.SERVICE_UNAVAILABLE;
             return new ResponseEntity<String>("success-" + downstreamResponse, status);
         } catch (SocketTimeoutException e) {
-            return new ResponseEntity<String>("success-timeout", HttpStatus.GATEWAY_TIMEOUT);
+            return new ResponseEntity<String>("failure-timeout", HttpStatus.GATEWAY_TIMEOUT);
         } catch (IOException e) {
-            return new ResponseEntity<String>("success-unknown", HttpStatus.GATEWAY_TIMEOUT);
+            return new ResponseEntity<String>("failure-unknown", HttpStatus.GATEWAY_TIMEOUT);
         }
     }
 
