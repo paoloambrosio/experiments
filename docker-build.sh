@@ -7,4 +7,4 @@ function build {
 build downstream
 build upstream-spring
 build perftest
-
+build grafana

@@ -172,12 +172,12 @@
             "threshold2Color": "rgba(234, 112, 112, 0.22)"
           },
           "lines": true,
-          "fill": 0,
+          "fill": 5,
           "linewidth": 1,
           "points": false,
           "pointradius": 5,
           "bars": false,
-          "stack": false,
+          "stack": true,
           "percentage": false,
           "legend": {
             "show": true,
@@ -196,7 +196,10 @@
           },
           "targets": [
             {
-              "target": "gatling.*.allRequests.all.count"
+              "target": "gatling.*.allRequests.ok.count"
+            },
+            {
+              "target": "gatling.*.allRequests.ko.count"
             }
           ],
           "aliasColors": {},
@@ -229,7 +232,7 @@
             "threshold2Color": "rgba(234, 112, 112, 0.22)"
           },
           "lines": true,
-          "fill": 0,
+          "fill": 5,
           "linewidth": 1,
           "points": false,
           "pointradius": 5,
@@ -253,10 +256,10 @@
           },
           "targets": [
             {
-              "target": "gatling.systemsimulation.OnlyRequest.all.percentiles95-0"
+              "target": "gatling.systemsimulation.OnlyRequest.all.max"
             },
             {
-              "target": "gatling.systemsimulation.OnlyRequest.all.max"
+              "target": "gatling.systemsimulation.OnlyRequest.all.percentiles95-0"
             },
             {
               "target": "gatling.systemsimulation.OnlyRequest.all.min"
