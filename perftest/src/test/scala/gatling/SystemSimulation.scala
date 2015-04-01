@@ -21,7 +21,7 @@ class SystemSimulation extends Simulation {
     scn
       .inject(atOnceUsers(2000))
       .throttle(
-        reachRps(500) in (30 seconds),
+        reachRps(1500) in (30 seconds),
         holdFor(90 seconds)
       )
   ).protocols(httpConf)

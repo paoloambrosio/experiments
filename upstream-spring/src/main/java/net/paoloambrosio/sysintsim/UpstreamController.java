@@ -1,5 +1,6 @@
 package net.paoloambrosio.sysintsim;
 
+import com.netflix.hystrix.exception.HystrixRuntimeException;
 import org.apache.http.client.fluent.Executor;
 import org.apache.http.client.fluent.Request;
 import org.apache.http.config.SocketConfig;
@@ -18,35 +19,25 @@ import java.net.SocketTimeoutException;
 @RestController
 public class UpstreamController {
 
-    private final Executor executor;
-    private final String downstreamUrl;
+    private final DownstreamService downstreamService;
 
     @Autowired
-    public UpstreamController(DownstreamConnectionConfig dcc) {
-        PoolingHttpClientConnectionManager cm = new PoolingHttpClientConnectionManager();
-        cm.setMaxTotal(dcc.getPoolSize());
-        cm.setDefaultMaxPerRoute(dcc.getPoolSize());
-        cm.setDefaultSocketConfig(SocketConfig.custom()
-                .setSoKeepAlive(true)
-                .setSoTimeout(dcc.getSocketTimeout())
-                .setTcpNoDelay(dcc.isTcpNoDelay())
-                .build()
-            );
-        CloseableHttpClient client = HttpClients.custom().setConnectionManager(cm).build();
-        executor = Executor.newInstance(client);
-        downstreamUrl = dcc.getUrl();
+    public UpstreamController(DownstreamService downstreamService) {
+        this.downstreamService = downstreamService;
     }
 
     @RequestMapping("/")
     public ResponseEntity<String> index() {
         try {
-            String downstreamResponse = executor.execute(Request.Get(downstreamUrl)).returnContent().asString();
+            String downstreamResponse = downstreamService.call();
             HttpStatus status = "success".equals(downstreamResponse) ? HttpStatus.OK : HttpStatus.SERVICE_UNAVAILABLE;
             return new ResponseEntity<String>("success-" + downstreamResponse, status);
         } catch (SocketTimeoutException e) {
             return new ResponseEntity<String>("failure-timeout", HttpStatus.GATEWAY_TIMEOUT);
         } catch (IOException e) {
             return new ResponseEntity<String>("failure-unknown", HttpStatus.GATEWAY_TIMEOUT);
+        } catch (HystrixRuntimeException e) {
+            return new ResponseEntity<String>("failure-tripped", HttpStatus.GATEWAY_TIMEOUT);
         }
     }
 
