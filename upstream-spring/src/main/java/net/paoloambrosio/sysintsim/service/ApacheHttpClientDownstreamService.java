@@ -1,4 +1,4 @@
-package net.paoloambrosio.sysintsim;
+package net.paoloambrosio.sysintsim.service;
 
 import com.netflix.hystrix.contrib.javanica.annotation.HystrixCommand;
 import org.apache.http.client.fluent.Executor;
@@ -12,14 +12,13 @@ import org.springframework.stereotype.Component;
 
 import java.io.IOException;
 
-@Component
-public class DownstreamService {
+public class ApacheHttpClientDownstreamService implements DownstreamService {
 
     private final Executor executor;
     private final String downstreamUrl;
 
     @Autowired
-    public DownstreamService(DownstreamConnectionConfig dcc) {
+    public ApacheHttpClientDownstreamService(DownstreamConnectionConfig dcc) {
         PoolingHttpClientConnectionManager cm = new PoolingHttpClientConnectionManager();
         cm.setMaxTotal(dcc.getPoolSize());
         cm.setDefaultMaxPerRoute(dcc.getPoolSize());
