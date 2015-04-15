@@ -9,5 +9,5 @@ EXPOSE 8080
 ENTRYPOINT java \
   -Dgraphite.host=$GRAPHITE_PORT_2003_TCP_ADDR -Dgraphite.port=$GRAPHITE_PORT_2003_TCP_PORT \
   -Dservice.downstream.url=http://$DOWNSTREAM_PORT_9000_TCP_ADDR:$DOWNSTREAM_PORT_9000_TCP_PORT/ \
-#  -Dconfig.enable.circuit-breaker=$CONFIG_ENABLE_CIRCUIT_BREAKER \
+  -Dconfig.enable.circuit-breaker=$CONFIG_ENABLE_CIRCUIT_BREAKER \
   -jar service-spring-boot.jar
