@@ -1,4 +1,4 @@
-package net.paoloambrosio.sysintsim.service;
+package net.paoloambrosio.sysintsim.downstream;
 
 import java.io.IOException;
 

@@ -1,7 +1,7 @@
 package net.paoloambrosio.sysintsim.controller;
 
 import com.netflix.hystrix.exception.HystrixRuntimeException;
-import net.paoloambrosio.sysintsim.service.DownstreamService;
+import net.paoloambrosio.sysintsim.downstream.DownstreamService;
 import net.paoloambrosio.sysintsim.slowdown.SlowdownStrategy;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
@@ -15,13 +15,13 @@ import java.time.Duration;
 import java.time.Instant;
 
 @RestController
-public class UpstreamController {
+public class ServiceController {
 
     private final DownstreamService downstreamService;
     private final SlowdownStrategy slowdownStrategy;
 
     @Autowired
-    public UpstreamController(DownstreamService downstreamService, SlowdownStrategy slowdownStrategy) {
+    public ServiceController(DownstreamService downstreamService, SlowdownStrategy slowdownStrategy) {
         this.downstreamService = downstreamService;
         this.slowdownStrategy = slowdownStrategy;
     }

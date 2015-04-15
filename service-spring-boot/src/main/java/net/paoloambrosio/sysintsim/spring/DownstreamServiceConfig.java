@@ -1,15 +1,16 @@
-package net.paoloambrosio.sysintsim.service;
+package net.paoloambrosio.sysintsim.spring;
 
 import com.netflix.hystrix.contrib.javanica.aop.aspectj.HystrixCommandAspect;
+import net.paoloambrosio.sysintsim.downstream.ApacheHttpClientDownstreamService;
+import net.paoloambrosio.sysintsim.downstream.DownstreamConnectionConfig;
+import net.paoloambrosio.sysintsim.downstream.DownstreamService;
 import net.paoloambrosio.sysintsim.slowdown.SlowdownStrategy;
 import net.paoloambrosio.sysintsim.slowdown.SlowdownStrategyFactory;
 import org.apache.commons.lang.StringUtils;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 
-import java.io.IOException;
-
-public class ServiceSpringConfig {
+public class DownstreamServiceConfig {
 
     @Value("${service.downstream.url}")
     private String url;

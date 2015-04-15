@@ -58,7 +58,7 @@ trait Service {
   }
 }
 
-object AkkaHttpDownstream extends App with Service {
+object AkkaHttpService extends App with Service {
   override implicit val system = ActorSystem()
   override implicit val executor = system.dispatcher
   override implicit val materializer = FlowMaterializer()

@@ -4,7 +4,7 @@ function build {
   cd $1; ./docker-build.sh; cd -
 }
 
-build downstream
-build upstream-spring
+build service-spring-boot
+build service-akka
 build perftest
 build grafana
