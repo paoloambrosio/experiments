@@ -1,0 +1,33 @@
+apply plugin: 'scala'
+apply plugin: 'gradle-one-jar'
+
+buildscript {
+    dependencies {
+        classpath 'com.github.rholder:gradle-one-jar:1.0.4'
+    }
+}
+
+dependencies {
+    def scalaMV     = "2.11"
+    def akkaV       = "2.3.9"
+    def akkaStreamV = "1.0-M2" // TODO upgrade to M5
+
+    compile 'org.scala-lang:scala-library:${scalaMV}.6'
+    compile "com.typesafe.akka:akka-actor_${scalaMV}:${akkaV}"
+    compile "com.typesafe.akka:akka-stream-experimental_${scalaMV}:${akkaStreamV}"
+    compile "com.typesafe.akka:akka-http-core-experimental_${scalaMV}:${akkaStreamV}"
+    compile "com.typesafe.akka:akka-http-experimental_${scalaMV}:${akkaStreamV}"
+    compile "com.typesafe.akka:akka-http-spray-json-experimental_${scalaMV}:${akkaStreamV}"
+
+    compile 'org.jmxtrans.embedded:embedded-jmxtrans:1.0.14'
+    compile project(':slowdown-strategies')
+}
+
+// Enable incremental compiler
+tasks.withType(ScalaCompile) {
+    scalaCompileOptions.useAnt = false
+}
+
+task fatJar(type: OneJar) {
+    mainClass = 'net.paoloambrosio.sysintsim.AkkaHttpService'
+}

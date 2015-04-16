@@ -1,5 +1,5 @@
 #!/bin/bash
 
-sbt stage
+gradle fatJar
 docker rmi my-service-akka
 docker build --rm=true -t my-service-akka .
