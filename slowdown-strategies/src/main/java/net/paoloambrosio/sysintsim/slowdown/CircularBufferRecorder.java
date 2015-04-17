@@ -1,7 +1,6 @@
 package net.paoloambrosio.sysintsim.slowdown;
 
 import javax.annotation.concurrent.NotThreadSafe;
-import java.time.Duration;
 import java.util.Arrays;
 import java.util.stream.IntStream;
 

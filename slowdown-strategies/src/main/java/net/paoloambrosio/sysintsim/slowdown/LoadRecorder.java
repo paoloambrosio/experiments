@@ -1,6 +1,5 @@
 package net.paoloambrosio.sysintsim.slowdown;
 
-import java.time.Duration;
 import java.util.stream.IntStream;
 
 /**

@@ -2,8 +2,6 @@ package net.paoloambrosio.sysintsim.slowdown;
 
 import java.time.Duration;
 import java.time.Instant;
-import java.time.LocalDateTime;
-import java.time.ZoneId;
 
 public final class LinearSlowdownStrategy implements SlowdownStrategy {
 

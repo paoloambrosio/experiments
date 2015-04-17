@@ -1,7 +1,5 @@
 package net.paoloambrosio.sysintsim
 
-import java.util.concurrent.TimeUnit
-
 import akka.actor.ActorSystem
 import akka.event.{Logging, LoggingAdapter}
 import akka.http.Http
@@ -14,7 +12,7 @@ import akka.pattern.ask
 import akka.stream.FlowMaterializer
 import akka.util.Timeout
 import com.typesafe.config.{Config, ConfigFactory}
-import net.paoloambrosio.sysintsim.SlowdownActor.Distribution
+import net.paoloambrosio.sysintsim.slowdown.SlowdownProviderFactory
 import org.jmxtrans.embedded.config.ConfigurationParser
 
 import scala.concurrent.duration._
@@ -29,13 +27,9 @@ trait Service {
   val logger: LoggingAdapter
 
   lazy val slowdownActor = {
-    val ac = config.getConfig("application.slowdown-strategy")
-    val maxRequests = ac.getInt("max-requests")
-    val distribution = Map[String, Distribution](
-      "linear" -> { load => load millis },
-      "constant2s" -> { load => 2 seconds }
-    ).get(ac.getString("distribution")).get
-    system.actorOf(SlowdownActor.props(maxRequests, distribution))
+    val slowdownStrategy = config.getString("application.slowdown-strategy")
+    val slowdownProvider = SlowdownProviderFactory.notThreadSafe(slowdownStrategy)
+    system.actorOf(SlowdownActor.props(slowdownProvider))
   }
 
   implicit val timeout = Timeout(10 seconds)

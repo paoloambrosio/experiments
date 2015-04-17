@@ -4,8 +4,8 @@ import com.netflix.hystrix.contrib.javanica.aop.aspectj.HystrixCommandAspect;
 import net.paoloambrosio.sysintsim.downstream.ApacheHttpClientDownstreamService;
 import net.paoloambrosio.sysintsim.downstream.DownstreamConnectionConfig;
 import net.paoloambrosio.sysintsim.downstream.DownstreamService;
-import net.paoloambrosio.sysintsim.slowdown.SlowdownStrategy;
-import net.paoloambrosio.sysintsim.slowdown.SlowdownStrategyFactory;
+import net.paoloambrosio.sysintsim.slowdown.SlowdownProvider;
+import net.paoloambrosio.sysintsim.slowdown.SlowdownProviderFactory;
 import org.apache.commons.lang.StringUtils;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
@@ -43,11 +43,11 @@ public class DownstreamServiceConfig {
     }
 
     @Value("${config.slowdown-strategy}")
-    private String slowdownStrategyDescription;
+    private String slowdownStrategy;
 
     @Bean
-    public SlowdownStrategy slowdownStrategy() {
-        return SlowdownStrategyFactory.fromDescription(slowdownStrategyDescription);
+    public SlowdownProvider slowdownProvider() {
+        return SlowdownProviderFactory.threadSafe(slowdownStrategy);
     }
 
 
