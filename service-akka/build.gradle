@@ -1,4 +1,5 @@
 apply plugin: 'scala'
+apply plugin: 'application'
 apply plugin: 'gradle-one-jar'
 
 buildscript {
@@ -6,6 +7,8 @@ buildscript {
         classpath 'com.github.rholder:gradle-one-jar:1.0.4'
     }
 }
+
+mainClassName = 'net.paoloambrosio.sysintsim.AkkaHttpService'
 
 dependencies {
     def scalaMV     = "2.11"
@@ -29,5 +32,5 @@ tasks.withType(ScalaCompile) {
 }
 
 task fatJar(type: OneJar) {
-    mainClass = 'net.paoloambrosio.sysintsim.AkkaHttpService'
+    mainClass = mainClassName
 }

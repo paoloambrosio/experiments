@@ -6,16 +6,19 @@ import scala.concurrent.duration._
 
 object SlowdownActor {
 
+  object ComputeSlowdown
+
   def props(slowdownProvider: SlowdownProvider) = Props(new SlowdownActor(slowdownProvider))
 
 }
 
 class SlowdownActor(slowdownProvider: SlowdownProvider) extends Actor {
 
+  import SlowdownActor._
+
   override def receive = {
-    case _ => {
-      val slowdown = slowdownProvider.computeSlowdown() millis
-      sender ! slowdown
+    case ComputeSlowdown => {
+      sender ! (slowdownProvider.computeSlowdown() millis)
     }
   }
 

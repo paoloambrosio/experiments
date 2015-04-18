@@ -8,4 +8,6 @@ WORKDIR /opt/sysintsim
 EXPOSE 9000
 ENTRYPOINT java \
   -Dgraphite.host=$GRAPHITE_PORT_2003_TCP_ADDR -Dgraphite.port=$GRAPHITE_PORT_2003_TCP_PORT \
+  -Dapplication.downstream.host=$DOWNSTREAM_PORT_9000_TCP_ADDR \
+  -Dapplication.downstream.port=$DOWNSTREAM_PORT_9000_TCP_PORT \
   -jar service-akka.jar
