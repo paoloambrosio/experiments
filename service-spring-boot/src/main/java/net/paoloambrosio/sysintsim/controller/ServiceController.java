@@ -45,7 +45,7 @@ public class ServiceController {
         } catch (SocketTimeoutException e) {
             return new ResponseEntity<>("failure-timeout", HttpStatus.SERVICE_UNAVAILABLE);
         } catch (IOException e) {
-            return new ResponseEntity<>("failure-unknown", HttpStatus.SERVICE_UNAVAILABLE);
+            return new ResponseEntity<>("failure-unknown: " + e.getMessage(), HttpStatus.SERVICE_UNAVAILABLE);
         } catch (HystrixRuntimeException e) {
             return new ResponseEntity<>("failure-tripped", HttpStatus.SERVICE_UNAVAILABLE);
         }

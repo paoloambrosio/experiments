@@ -12,8 +12,11 @@ import org.springframework.context.annotation.Bean;
 
 public class DownstreamServiceConfig {
 
-    @Value("${service.downstream.url}")
-    private String url;
+    @Value("${service.downstream.host}")
+    private String host;
+
+    @Value("${service.downstream.port}")
+    private String port; // int does not work if not specified
 
     @Value("${service.downstream.pool-size}")
     private int poolSize;
@@ -24,7 +27,7 @@ public class DownstreamServiceConfig {
     //@Value("${service.downstream.tcp-no-delay}")
     private boolean tcpNoDelay; // Disable Nagle
 
-    private DownstreamConnectionConfig downstreamConnectionConfig() {
+    private DownstreamConnectionConfig downstreamConnectionConfig(String url) {
         return new DownstreamConnectionConfig() {
             @Override public String getUrl() { return url; }
             @Override public int getPoolSize() { return poolSize; }
@@ -35,10 +38,11 @@ public class DownstreamServiceConfig {
 
     @Bean
     public DownstreamService downstreamService() {
-        if (StringUtils.isEmpty(url)) {
+        if (StringUtils.isEmpty(host)) {
             return () -> "";
         } else {
-            return new ApacheHttpClientDownstreamService(downstreamConnectionConfig());
+            String url = String.format("http://%s:%s/", host, port);
+            return new ApacheHttpClientDownstreamService(downstreamConnectionConfig(url));
         }
     }
 
