@@ -55,7 +55,7 @@ public class DownstreamServiceConfig {
     }
 
 
-    @Value("${config.enable.circuit-breaker}")
+    @Value("${config.circuit-breaker-enabled}")
     public boolean circuitBreakerEnabled;
 
     @Bean

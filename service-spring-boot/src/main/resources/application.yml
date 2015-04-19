@@ -1,0 +1,16 @@
+server:
+  address: 0.0.0.0
+  port: 8080
+  tomcat:
+    max-threads: 1000
+
+service:
+  downstream:
+    host: localhost
+    port: 9000
+    pool-size: 1000
+    socket-timeout: 1000
+
+config:
+  slowdown-strategy: constant:0s
+  circuit-breaker-enabled: false

@@ -32,7 +32,7 @@ trait Service {
   val httpClient: Option[OutgoingConnection]
 
   lazy val slowdownActor = {
-    val slowdownStrategy = config.getString("application.slowdown-strategy")
+    val slowdownStrategy = config.getString("config.slowdown-strategy")
     val slowdownProvider = SlowdownProviderFactory.notThreadSafe(slowdownStrategy)
     system.actorOf(SlowdownActor.props(slowdownProvider))
   }
@@ -75,15 +75,15 @@ object AkkaHttpService extends App with Service {
 
   new ConfigurationParser().newEmbeddedJmxTrans("classpath:jmxtrans.json").start()
 
-  Http().bind(interface = config.getString("http.interface"), port = config.getInt("http.port")).startHandlingWith(routes)
+  Http().bind(interface = config.getString("server.address"), port = config.getInt("server.port")).startHandlingWith(routes)
 
   val httpClient = {
     // FIXME cannot believe the config library is this bad
-    val host = config.getString("application.downstream.host")
+    val host = config.getString("service.downstream.host")
     if (host.isEmpty) {
       None
     }else {
-      val port = config.getInt("application.downstream.port")
+      val port = config.getInt("service.downstream.port")
       Some(Http(system).outgoingConnection(host, port))
     }
   }
