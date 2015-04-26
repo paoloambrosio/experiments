@@ -2,16 +2,16 @@ package net.paoloambrosio.sysintsim
 
 import akka.actor.ActorSystem
 import akka.event.{Logging, LoggingAdapter}
-import akka.http.Http
-import akka.http.Http.OutgoingConnection
-import akka.http.model.{HttpRequest, Uri, HttpResponse}
-import akka.http.model.StatusCodes._
-import akka.http.server.Directives._
-import akka.http.server.ExceptionHandler
-import akka.http.unmarshalling.Unmarshal
+import akka.http.scaladsl.Http
+import akka.http.scaladsl.model.{HttpRequest, Uri, HttpResponse}
+import akka.http.scaladsl.model.StatusCodes._
+import akka.http.scaladsl.Http.OutgoingConnection
+import akka.http.scaladsl.server.Directives._
+import akka.http.scaladsl.server.ExceptionHandler
+import akka.http.scaladsl.unmarshalling.Unmarshal
 import akka.pattern.after
 import akka.pattern.ask
-import akka.stream.FlowMaterializer
+import akka.stream.{ActorFlowMaterializer, FlowMaterializer}
 import akka.stream.scaladsl._
 import akka.util.Timeout
 import com.typesafe.config.{Config, ConfigFactory}
@@ -29,7 +29,7 @@ trait Service {
 
   val config: Config
   val logger: LoggingAdapter
-  val httpClient: Option[OutgoingConnection]
+  val downstreamConnectionFlow: Option[Flow[HttpRequest, HttpResponse, Any]]
 
   lazy val slowdownActor = {
     val slowdownStrategy = config.getString("config.slowdown-strategy")
@@ -51,8 +51,9 @@ trait Service {
   }
 
   def callDownstream(): Future[String] = {
-    httpClient match {
-      case Some(hc) => Source.single(HttpRequest(uri = Uri("/"))).via(hc.flow).mapAsync(Unmarshal(_).to[String]).runWith(Sink.head)
+    downstreamConnectionFlow match {
+      case Some(dcf) => Source.single(HttpRequest(uri = Uri("/"))).via(dcf).runWith(Sink.head)
+        .flatMap(Unmarshal(_).to[String])
       case None => Future.successful("success")
     }
   }
@@ -68,16 +69,16 @@ trait Service {
 object AkkaHttpService extends App with Service {
   override implicit val system = ActorSystem()
   override implicit val executor = system.dispatcher
-  override implicit val materializer = FlowMaterializer()
+  override implicit val materializer = ActorFlowMaterializer()
 
   override val config = ConfigFactory.load()
   override val logger = Logging(system, getClass)
 
   new ConfigurationParser().newEmbeddedJmxTrans("classpath:jmxtrans.json").start()
 
-  Http().bind(interface = config.getString("server.address"), port = config.getInt("server.port")).startHandlingWith(routes)
+  Http().bindAndHandle(handler=routes, interface=config.getString("server.address"), port=config.getInt("server.port"))
 
-  val httpClient = {
+  override val downstreamConnectionFlow = {
     // FIXME cannot believe the config library is this bad
     val host = config.getString("service.downstream.host")
     if (host.isEmpty) {
