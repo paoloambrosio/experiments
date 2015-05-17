@@ -1,0 +1,4 @@
+#!/bin/bash
+
+docker-compose -f sboot-akka.yml -p sysintsim up
+

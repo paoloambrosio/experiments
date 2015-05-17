@@ -1,6 +1,12 @@
+Dependencies:
+ - Gradle to build sources
+ - Docker and Docker-Compose to run simulation on Linux containers
+
 How to run in Docker:
- $ docker-build.sh
+ $ gradle build
+ $ ./docker-sboot-akka-up # or docker-akka-sboot-up for Akka upstream
  - Point the Web browser to http://localhost/ to see the dashboard
- $ docker-system-sa-up.sh # for Spring upstream or docker-system-as-up.sh for Akka upstream
- $ docker-run-perftest.sh
- $ docker-system-down.sh # When done
+ $ ./docker-run-perftest
+
+Use CTRL+C to tear down running services.
+

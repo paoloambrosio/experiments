@@ -1,0 +1,4 @@
+#!/bin/bash
+
+docker-compose -f perftest.yml -p sysintsim up
+

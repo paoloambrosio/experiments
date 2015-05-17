@@ -34,3 +34,6 @@ tasks.withType(ScalaCompile) {
 task fatJar(type: OneJar) {
     mainClass = mainClassName
 }
+
+build.dependsOn fatJar
+

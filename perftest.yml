@@ -1,0 +1,5 @@
+perftest:
+  build: perftest
+  external_links:
+    - sysintsim_grafana_1:graphite
+    - sysintsim_upstream_1:undertest

@@ -1,0 +1,17 @@
+upstream:
+  build: service-akka
+  links:
+    - grafana:graphite
+    - downstream:downstream
+
+downstream:
+  build: service-spring-boot
+  links:
+    - grafana:graphite
+  environment:
+    - CONFIG_ENABLE_CIRCUIT_BREAKER=false
+
+grafana:
+  build: grafana
+  ports:
+    - "80:80"

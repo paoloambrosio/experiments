@@ -1,0 +1,4 @@
+#!/bin/bash
+
+docker-compose -f akka-sboot.yml -p sysintsim up
+
