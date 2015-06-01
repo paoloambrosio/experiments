@@ -1,15 +1,45 @@
 {
+  "variables": {
+    "vm_name": "centos-7.1",
+    "iso_url": "http://centos.mirrors.ovh.net/ftp.centos.org/7/isos/x86_64/CentOS-7-x86_64-NetInstall-1503.iso",
+    "iso_checksum": "111379a06402e1e445c6aeee9401d031",
+    "iso_checksum_type": "md5",
+    "ssh_username": "packer",
+    "ssh_password": "packer",
+    "ssh_wait_timeout": "30m",
+    "headless": true
+  },
   "builders": [
     {
+      "name": "virtualbox",
       "type": "virtualbox-iso",
-      "vm_name": "centos-7.1",
       "guest_os_type": "RedHat_64",
-      "iso_url": "http://centos.mirrors.ovh.net/ftp.centos.org/7/isos/x86_64/CentOS-7-x86_64-NetInstall-1503.iso",
-      "iso_checksum": "111379a06402e1e445c6aeee9401d031",
-      "iso_checksum_type": "md5",
-      "ssh_username": "packer",
-      "ssh_password": "packer",
-	  "ssh_wait_timeout": "120m",
+      "format": "ovf",
+      "vm_name": "{{user `vm_name`}}",
+      "iso_url": "{{user `iso_url`}}",
+      "iso_checksum": "{{user `iso_checksum`}}",
+      "iso_checksum_type": "{{user `iso_checksum_type`}}",
+      "ssh_username": "{{user `ssh_username`}}",
+      "ssh_password": "{{user `ssh_password`}}",
+      "ssh_wait_timeout": "{{user `ssh_wait_timeout`}}",
+      "headless": "{{user `headless`}}",
+      "shutdown_command": "sudo -S shutdown -P now",
+      "http_directory": "http",
+      "boot_command": [
+        "<tab> text ks=http://{{ .HTTPIP }}:{{ .HTTPPort }}/ks.cfg<enter>"
+      ]
+    },{
+      "name": "vmware",
+      "type": "vmware-iso",
+      "guest_os_type": "rhel7-64",
+      "vm_name": "{{user `vm_name`}}",
+      "iso_url": "{{user `iso_url`}}",
+      "iso_checksum": "{{user `iso_checksum`}}",
+      "iso_checksum_type": "{{user `iso_checksum_type`}}",
+      "ssh_username": "{{user `ssh_username`}}",
+      "ssh_password": "{{user `ssh_password`}}",
+      "ssh_wait_timeout": "{{user `ssh_wait_timeout`}}",
+      "headless": "{{user `headless`}}",
       "shutdown_command": "sudo -S shutdown -P now",
       "http_directory": "http",
       "boot_command": [
