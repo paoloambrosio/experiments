@@ -2,6 +2,7 @@ import akka.actor.ActorSystem
 import akka.event.{Logging, LoggingAdapter}
 import akka.http.scaladsl.Http
 import akka.http.scaladsl.server.Directives._
+import akka.http.scaladsl.server.directives.UserCredentials
 import akka.stream.{ActorMaterializer, Materializer}
 import com.typesafe.config.{Config, ConfigFactory}
 
@@ -18,10 +19,19 @@ trait Service {
 
   val routes = {
     logRequestResult("akka-http") {
-      get {
-        complete("Resource content\n")
+      authenticated { username =>
+        get {
+          complete(s"Resource content for '$username'")
+        }
       }
     }
+  }
+
+  def authenticated = authenticateBasic("myrealm", passwordMatchCorrect)
+
+  def passwordMatchCorrect: Authenticator[String] = {
+    case uc: UserCredentials.Provided => if (uc.verifySecret("correct")) Some(uc.username) else None
+    case UserCredentials.Missing => None
   }
 }
 
