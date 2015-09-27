@@ -1,12 +1,13 @@
 import akka.actor.ActorSystem
 import akka.event.{Logging, LoggingAdapter}
 import akka.http.scaladsl.Http
+import akka.http.scaladsl.model.headers.{HttpCredentials, BasicHttpCredentials}
 import akka.http.scaladsl.server.Directives._
-import akka.http.scaladsl.server.directives.UserCredentials
+import akka.http.scaladsl.server.directives.{AuthenticationDirective, AuthenticationResult}
 import akka.stream.{ActorMaterializer, Materializer}
 import com.typesafe.config.{Config, ConfigFactory}
 
-import scala.concurrent.ExecutionContextExecutor
+import scala.concurrent.{ExecutionContextExecutor, Future}
 
 
 trait Service {
@@ -17,9 +18,14 @@ trait Service {
   def config: Config
   val logger: LoggingAdapter
 
+  /*
+   * correct   -> 200 OK
+   * incorrect -> 401 Unauthorized
+   * failed    -> 500 Internal Server Error
+   */
   val routes = {
     logRequestResult("akka-http") {
-      authenticated { username =>
+      authenticated(myCheckCredentials) { username =>
         get {
           complete(s"Resource content for '$username'")
         }
@@ -27,11 +33,29 @@ trait Service {
     }
   }
 
-  def authenticated = authenticateBasic("myrealm", passwordMatchCorrect)
+  /**
+   * Returns failed future is call failed. A successful future would contain if the credentials were correct or not.
+   */
+  type UserAuthenticator[T] = (String, String) => Future[Option[T]]
 
-  def passwordMatchCorrect: Authenticator[String] = {
-    case uc: UserCredentials.Provided => if (uc.verifySecret("correct")) Some(uc.username) else None
-    case UserCredentials.Missing => None
+  def authenticated[T](f: UserAuthenticator[T]): AuthenticationDirective[T] = {
+    val failedCredentials = AuthenticationResult.failWithChallenge(challengeFor("myrealm"))
+
+    def authenticator: Option[HttpCredentials] ⇒ Future[AuthenticationResult[T]] = {
+      case Some(BasicHttpCredentials(username, password)) => f(username, password) map {
+        case Some(u) => AuthenticationResult.success(u)
+        case None => failedCredentials
+      }
+      case _ => Future.successful(failedCredentials)
+    }
+
+    authenticateOrRejectWithChallenge(authenticator)
+  }
+
+  def myCheckCredentials: UserAuthenticator[String] = (username, password) => password match {
+    case "correct" => Future.successful(Some(username))
+    case "failed" => Future.failed(new Throwable("Something went wrong"))
+    case _ => Future.successful(None)
   }
 }
 
