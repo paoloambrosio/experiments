@@ -1,8 +1,10 @@
 import akka.actor.ActorSystem
 import akka.event.{Logging, LoggingAdapter}
 import akka.http.scaladsl.Http
+import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.model.headers.{HttpCredentials, BasicHttpCredentials}
 import akka.http.scaladsl.server.Directives._
+import akka.http.scaladsl.server.{Rejection, ExceptionHandler}
 import akka.http.scaladsl.server.directives.{AuthenticationDirective, AuthenticationResult}
 import akka.stream.{ActorMaterializer, Materializer}
 import com.typesafe.config.{Config, ConfigFactory}
@@ -18,10 +20,16 @@ trait Service {
   def config: Config
   val logger: LoggingAdapter
 
+  case object FailedDependencyException extends Exception
+
+  implicit def myExceptionHandler = ExceptionHandler {
+    case FailedDependencyException => complete(StatusCodes.ServiceUnavailable, "Dependency failure")
+  }
+
   /*
    * correct   -> 200 OK
    * incorrect -> 401 Unauthorized
-   * failed    -> 500 Internal Server Error
+   * failed    -> 503 Service Unavailable
    */
   val routes = {
     logRequestResult("akka-http") {
@@ -38,6 +46,12 @@ trait Service {
    */
   type UserAuthenticator[T] = (String, String) => Future[Option[T]]
 
+  /*
+   * authenticateOrRejectWithChallenge's onSuccess will bubble up any Trowable to the nearest ExceptionHandler
+   *
+   * An exception handler can be defined locally to transform this into a rejection and a RejectionHandler defined
+   * to handle the custom rejection, but I'm not sure it's needed.
+   */
   def authenticated[T](f: UserAuthenticator[T]): AuthenticationDirective[T] = {
     val failedCredentials = AuthenticationResult.failWithChallenge(challengeFor("myrealm"))
 
@@ -54,7 +68,7 @@ trait Service {
 
   def myCheckCredentials: UserAuthenticator[String] = (username, password) => password match {
     case "correct" => Future.successful(Some(username))
-    case "failed" => Future.failed(new Throwable("Something went wrong"))
+    case "failed" => Future.failed(FailedDependencyException)
     case _ => Future.successful(None)
   }
 }
