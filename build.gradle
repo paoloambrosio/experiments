@@ -6,6 +6,9 @@ allprojects {
         repositories {
             mavenCentral()
         }
+        dependencies {
+            classpath 'com.bmuschko:gradle-docker-plugin:2.6'
+        }
     }
 
     apply plugin: 'java'
