@@ -1,1 +1,2 @@
 include 'spring-boot-app'
+include 'slowdown-strategies'
