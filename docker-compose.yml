@@ -1,0 +1,6 @@
+load-injector:
+  image: dssim/load-injector
+  links:
+   - app:undertest
+app:
+  image: dssim/spring-boot-app

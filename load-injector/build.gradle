@@ -1,0 +1,35 @@
+apply plugin: 'com.bmuschko.docker-remote-api'
+apply plugin: 'scala'
+
+dependencies {
+    compile 'org.scala-lang:scala-library:2.11.7'
+    compile 'io.gatling:gatling-test-framework:2.1.7'
+}
+
+import com.bmuschko.gradle.docker.tasks.image.Dockerfile
+import com.bmuschko.gradle.docker.tasks.image.DockerBuildImage
+
+docker {
+    // http://container-solutions.com/how-to-build-docker-images-with-gradle/
+    if (System.env.DOCKER_HOST) {
+        url = System.env.DOCKER_HOST.replace('tcp','https')
+        if (System.env.DOCKER_CERT_PATH) {
+            certPath = new File(System.env.DOCKER_CERT_PATH)
+        }
+    } else {
+        url = 'unix:///var/run/docker.sock'
+    }
+}
+
+task dockerCopyDistResources(type: Copy) {
+    dependsOn compileScala
+    from 'src/main/scala'
+    from 'src/main/docker'
+    into 'build/docker'
+}
+
+task dockerBuildImage(type: DockerBuildImage) {
+    dependsOn dockerCopyDistResources
+    inputDir = project.file('build/docker')
+    tag = "dssim/${project.name}"
+}

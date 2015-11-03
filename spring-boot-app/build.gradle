@@ -16,8 +16,8 @@ docker {
     javaApplication {
         baseImage = 'dockerfile/java:oracle-java8'
         maintainer = 'Paolo Ambrosio "docker@paolo.ambrosio.name"'
+        tag = "dssim/${project.name}"
     }
-
     // http://container-solutions.com/how-to-build-docker-images-with-gradle/
     if (System.env.DOCKER_HOST) {
         url = System.env.DOCKER_HOST.replace('tcp','https')
