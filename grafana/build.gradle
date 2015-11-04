@@ -1,0 +1,14 @@
+apply plugin: 'com.bmuschko.docker-remote-api'
+
+import com.bmuschko.gradle.docker.tasks.image.DockerBuildImage
+
+task dockerCopyDistResources(type: Copy) {
+    from 'src/main/docker'
+    into 'build/docker'
+}
+
+task dockerBuildImage(type: DockerBuildImage) {
+    dependsOn dockerCopyDistResources
+    inputDir = project.file('build/docker')
+    tag = "dssim/${project.name}"
+}

@@ -1,6 +1,13 @@
-load-injector:
-  image: dssim/load-injector
-  links:
-   - app:undertest
+grafana:
+  image: dssim/grafana
+  ports:
+    - "80:80"
 app:
   image: dssim/spring-boot-app
+  links:
+   - grafana:graphite
+load-injector:
+  image: dssim/gatling
+  links:
+   - app:undertest
+   - grafana:graphite

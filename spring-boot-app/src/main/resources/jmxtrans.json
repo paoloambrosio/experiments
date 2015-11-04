@@ -1,0 +1,33 @@
+{
+  "queryIntervalInSeconds": 5,
+  "exportIntervalInSeconds": 10,
+  "queries": [
+    {
+      "objectName": "java.lang:type=Memory",
+      "resultAlias": "JVM.Memory",
+      "attributes": ["HeapMemoryUsage", "NonHeapMemoryUsage"]
+    },{
+      "objectName": "java.lang:type=Threading",
+      "resultAlias": "JVM.Threads",
+      "attributes": ["ThreadCount"]
+    },{
+      "objectName": "java.lang:type=Threading",
+      "resultAlias": "JVM.Threads",
+      "attributes": ["ThreadCount"]
+    },{
+      "objectName": "Tomcat:type=ThreadPool,name=http-nio-8080",
+      "resultAlias": "Tomcat.Threads",
+      "attributes": ["currentThreadCount", "currentThreadsBusy"]
+    }
+  ],
+  "outputWriters": [
+    {
+      "@class": "org.jmxtrans.embedded.output.GraphiteWriter",
+      "settings": {
+        "host": "${graphite.host:localhost}",
+        "port": "${graphite.port:2003}",
+        "namePrefix": "apps.${app.name:spring-boot-app}."
+      }
+    }
+  ]
+}

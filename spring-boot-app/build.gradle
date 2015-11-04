@@ -10,21 +10,13 @@ apply plugin: 'com.bmuschko.docker-java-application'
 dependencies {
     compile 'org.springframework.boot:spring-boot-starter-web'
     compile project(':slowdown-strategies')
+    compile 'org.jmxtrans.embedded:embedded-jmxtrans:1.0.14'
 }
 
 docker {
     javaApplication {
         baseImage = 'dockerfile/java:oracle-java8'
-        maintainer = 'Paolo Ambrosio "docker@paolo.ambrosio.name"'
+        maintainer = 'Paolo Ambrosio "dockerfile@paolo.ambrosio.name"'
         tag = "dssim/${project.name}"
-    }
-    // http://container-solutions.com/how-to-build-docker-images-with-gradle/
-    if (System.env.DOCKER_HOST) {
-        url = System.env.DOCKER_HOST.replace('tcp','https')
-        if (System.env.DOCKER_CERT_PATH) {
-            certPath = new File(System.env.DOCKER_CERT_PATH)
-        }
-    } else {
-        url = 'unix:///var/run/docker.sock'
     }
 }

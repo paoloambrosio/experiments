@@ -6,20 +6,7 @@ dependencies {
     compile 'io.gatling:gatling-test-framework:2.1.7'
 }
 
-import com.bmuschko.gradle.docker.tasks.image.Dockerfile
 import com.bmuschko.gradle.docker.tasks.image.DockerBuildImage
-
-docker {
-    // http://container-solutions.com/how-to-build-docker-images-with-gradle/
-    if (System.env.DOCKER_HOST) {
-        url = System.env.DOCKER_HOST.replace('tcp','https')
-        if (System.env.DOCKER_CERT_PATH) {
-            certPath = new File(System.env.DOCKER_CERT_PATH)
-        }
-    } else {
-        url = 'unix:///var/run/docker.sock'
-    }
-}
 
 task dockerCopyDistResources(type: Copy) {
     dependsOn compileScala

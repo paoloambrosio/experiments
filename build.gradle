@@ -18,4 +18,18 @@ allprojects {
     repositories {
         mavenCentral()
     }
+
+    // Configure Docker plugin to use standard docker-machine environment variables
+    afterEvaluate { project ->
+        if (project.plugins.hasPlugin('com.bmuschko.docker-remote-api')) {
+            if (System.env.DOCKER_HOST) {
+                project.docker.url = System.env.DOCKER_HOST.replace('tcp','https')
+            } else {
+                project.docker.url = 'unix:///var/run/docker.sock'
+            }
+            if (System.env.DOCKER_CERT_PATH) {
+                project.docker.certPath = new File(System.env.DOCKER_CERT_PATH)
+            }
+        }
+    }
 }

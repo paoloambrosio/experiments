@@ -1,3 +1,4 @@
 include 'spring-boot-app'
 include 'slowdown-strategies'
-include 'load-injector'
+include 'gatling'
+include 'grafana'
