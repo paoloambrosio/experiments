@@ -190,9 +190,9 @@
           },
           "targets": [
             {
-              "target": "gatling.*.allRequests.ok.count"
-            },{
               "target": "gatling.*.allRequests.ko.count"
+            },{
+              "target": "gatling.*.allRequests.ok.count"
             }
           ],
           "aliasColors": {},
@@ -249,9 +249,9 @@
           },
           "targets": [
             {
-              "target": "gatling.*.OnlyRequest.all.min"
-            },            {
               "target": "gatling.*.OnlyRequest.all.max"
+            },{
+              "target": "gatling.*.OnlyRequest.all.min"
             }
           ],
           "aliasColors": {},
