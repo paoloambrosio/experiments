@@ -4,6 +4,8 @@ grafana:
     - "80:80"
 app:
   image: dssim/spring-boot-app
+  environment:
+    JAVA_OPTS: -XX:+UseParNewGC -Dserver.tomcat.max-threads=50 -Dconfig.slowdown-strategy=constant:0.510s
   links:
    - grafana:graphite
 load-injector:

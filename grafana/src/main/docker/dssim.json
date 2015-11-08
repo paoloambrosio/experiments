@@ -45,7 +45,7 @@
           },
           "lines": true,
           "fill": 0,
-          "linewidth": 1,
+          "linewidth": 2,
           "points": false,
           "pointradius": 5,
           "bars": false,
@@ -102,7 +102,7 @@
           },
           "lines": true,
           "fill": 0,
-          "linewidth": 1,
+          "linewidth": 2,
           "points": false,
           "pointradius": 5,
           "bars": false,
@@ -190,7 +190,9 @@
           },
           "targets": [
             {
-              "target": "gatling.*.allRequests.*.count"
+              "target": "gatling.*.allRequests.ok.count"
+            },{
+              "target": "gatling.*.allRequests.ko.count"
             }
           ],
           "aliasColors": {},
@@ -223,8 +225,8 @@
             "threshold2Color": "rgba(234, 112, 112, 0.22)"
           },
           "lines": true,
-          "fill": 5,
-          "linewidth": 1,
+          "fill": 0,
+          "linewidth": 2,
           "points": false,
           "pointradius": 5,
           "bars": false,
@@ -247,6 +249,8 @@
           },
           "targets": [
             {
+              "target": "gatling.*.OnlyRequest.all.min"
+            },            {
               "target": "gatling.*.OnlyRequest.all.max"
             }
           ],

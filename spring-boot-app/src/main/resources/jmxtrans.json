@@ -3,9 +3,13 @@
   "exportIntervalInSeconds": 10,
   "queries": [
     {
+
       "objectName": "java.lang:type=Memory",
-      "resultAlias": "JVM.Memory",
-      "attributes": ["HeapMemoryUsage", "NonHeapMemoryUsage"]
+      "attribute": {
+        "name": "HeapMemoryUsage",
+        "keys": [ "used" ]
+      },
+      "resultAlias": "JVM.Memory"
     },{
       "objectName": "java.lang:type=Threading",
       "resultAlias": "JVM.Threads",
