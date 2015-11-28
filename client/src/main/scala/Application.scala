@@ -21,6 +21,8 @@ object Application extends js.JSApp {
   }
 
   private val draw: js.Array[WordTag] => Unit = words => {
+    import org.singlespaced.d3js.Ops._
+
     d3.select("body").append("svg")
         .attr("width", width)
         .attr("height", height)
@@ -29,11 +31,11 @@ object Application extends js.JSApp {
       .selectAll("text")
         .data(words)
       .enter().append("text")
-//        .style("font-size", (w: WordTag) => "${w.size}px")
+        .style("font-size", (w: WordTag) => "${w.size}px")
         .style("font-family", "Impact")
         .attr("text-anchor", "middle")
-//        .attr("transform", (w: WordTag, _: Int) => s"translate(${w.x} ${w.y})rotate(${w.rotate}")
-//        .text((w: WordTag, _: Int, _: Int) => w.text)
-    // NOTHING WORKS!!!!!!!!!
+        .attr("transform", (w: WordTag) => s"translate(${w.x} ${w.y})rotate(${w.rotate})")
+        .text((w: WordTag) => w.text)
   }
+
 }
