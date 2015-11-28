@@ -24,3 +24,12 @@ lazy val client = (project in file("client"))
     scalaVersion := scalaV,
     persistLauncher in Compile := true
   )
+  .dependsOn(d3cloud)
+
+lazy val d3cloud = (project in file("scala-js-d3-cloud"))
+  .enablePlugins(ScalaJSPlugin)
+  .settings(
+    scalaVersion := scalaV,
+    libraryDependencies += "org.singlespaced" %%% "scalajs-d3" % "0.1.1",
+    jsDependencies += "org.webjars" % "d3-cloud" % "1.2.1" / "d3.layout.cloud.js"
+  )
