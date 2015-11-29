@@ -24,4 +24,6 @@ trait CloudLayout extends js.Object {
   def on(event: String, handler: js.Function): this.type = js.native
 
   def start(): this.type = js.native
+
+  def stop(): this.type = js.native
 }

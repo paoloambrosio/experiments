@@ -2,40 +2,66 @@ import scala.scalajs.js
 import org.singlespaced.d3js.d3
 import net.paoloambrosio.d3js.cloud._
 import scala.util.Random
+import scala.concurrent.duration._
 
 object Application extends js.JSApp {
 
   private val width = 960
   private val height = 500
+  private val transitionTime = 1 second
 
-  def main(): Unit = {
-    val cloud = d3.layout.cloud()
+  private lazy val cloud = {
+    d3.layout.cloud()
       .size(js.Array(width, height))
-      .words(js.Array(new Word("A", 10), new Word("B", 20), new Word("C", 20)))
       .padding(5)
       .fontSize((w: Word) => w.size)
       .rotate((w: Word) => Random.nextInt(2) * 90)
       .font("Impact")
       .on("end", draw)
-    cloud.start()
+  }
+
+  private lazy val svg = {
+    d3.select("body").append("svg")
+      .attr("width", width)
+      .attr("height", height)
+      .append("g")
+      .attr("transform", s"translate(${width/2},${height/2})")
+  }
+
+  def main(): Unit = {
+    scala.scalajs.js.Dynamic.global.cloud = cloud // TODO for debugging, remove later
+    updateCloud(js.Array(new Word("Scala", 100), new Word("Scala.JS", 10), new Word("Akka", 50)))
+  }
+
+  def updateCloud(words: js.Array[Word]): Unit = {
+    cloud.stop().words(words).start()
   }
 
   private val draw: js.Array[WordTag] => Unit = words => {
     import org.singlespaced.d3js.Ops._
 
-    d3.select("body").append("svg")
-        .attr("width", width)
-        .attr("height", height)
-      .append("g")
-        .attr("transform", s"translate(${width/2},${height/2})")
-      .selectAll("text")
-        .data(words)
-      .enter().append("text")
-        .style("font-size", (w: WordTag) => "${w.size}px")
-        .style("font-family", "Impact")
-        .attr("text-anchor", "middle")
-        .attr("transform", (w: WordTag) => s"translate(${w.x} ${w.y})rotate(${w.rotate})")
-        .text((w: WordTag) => w.text)
+    val maxSize = words.map(w => w.size).max
+    val duration = transitionTime.toMillis.toDouble
+
+    val tags = svg.selectAll("text")
+      .data(words)
+      .text((w: WordTag) => w.text)
+
+    tags.enter()
+      .append("text")
+      .text((w: WordTag) => w.text)
+      .attr("text-anchor", "middle")
+      .style("font-family", "Impact")
+
+    tags.transition().duration(duration)
+      .style("font-size", (w: WordTag) => s"${w.size}px")
+      .style("opacity", (w: WordTag) => 0.2+(0.8*w.size/maxSize))
+      .attr("transform", (w: WordTag) => s"translate(${w.x} ${w.y})rotate(${w.rotate})")
+
+// IT DOES NOT WORK, BUT WE WILL NEVER REMOVE A TAG
+//    tags.exit().transition().duration(duration)
+//      .style("opacity", 0)
+//      .remove()
   }
 
 }
