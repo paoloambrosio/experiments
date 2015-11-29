@@ -1,6 +1,10 @@
+import org.scalajs.dom
+import org.scalajs.dom.MessageEvent
+
 import scala.scalajs.js
 import org.singlespaced.d3js.d3
 import net.paoloambrosio.d3js.cloud._
+import scala.scalajs.js.JSON
 import scala.util.Random
 import scala.concurrent.duration._
 
@@ -29,14 +33,11 @@ object Application extends js.JSApp {
   }
 
   def main(): Unit = {
-    scala.scalajs.js.Dynamic.global.cloud = cloud // TODO for debugging, remove later
-
-    val words = js.Array(
-        new shared.Word("Scala", 100),
-        new shared.Word("Scala.JS", 10),
-        new shared.Word("Akka", 50)
-      ).map(sw => new Word(sw.text, sw.count))
-    updateCloud(words)
+    val ws = new dom.WebSocket(s"ws://${dom.document.location.host}/words")
+    ws.onmessage = (me: MessageEvent) => {
+      val words = JSON.parse(me.data.asInstanceOf[String]).asInstanceOf[js.Array[Word]]
+      updateCloud(words)
+    }
   }
 
   def updateCloud(words: js.Array[Word]): Unit = {

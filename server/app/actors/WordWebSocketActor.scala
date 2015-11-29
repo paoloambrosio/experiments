@@ -1,15 +1,16 @@
 package actors
 
+import actors.WordStoreActor.RequestUpdate
 import akka.actor.{Actor, ActorRef, Props}
 import akka.contrib.pattern.DistributedPubSubExtension
 import akka.contrib.pattern.DistributedPubSubMediator.{Subscribe, SubscribeAck}
 
 object WordWebSocketActor {
 
-  def props(out: ActorRef) = Props(new WordWebSocketActor(out))
+  def props(out: ActorRef, wordStore: ActorRef) = Props(new WordWebSocketActor(out, wordStore))
 }
 
-class WordWebSocketActor(out: ActorRef) extends Actor {
+class WordWebSocketActor(out: ActorRef, wordStore: ActorRef) extends Actor {
 
   import actors.WordStoreActor.WordUpdate
 
@@ -19,10 +20,11 @@ class WordWebSocketActor(out: ActorRef) extends Actor {
 
   def receive = {
     case SubscribeAck(Subscribe("word-updates", None, `self`)) =>
+      wordStore ! RequestUpdate
       context become ready
   }
 
   def ready: Actor.Receive = {
-    case wu: WordUpdate => out ! wu.testMessage
+    case wu: WordUpdate => out ! wu
   }
 }

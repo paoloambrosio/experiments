@@ -2,6 +2,7 @@ package controllers
 
 import actors.WordStoreActor.WordUpdate
 import actors.{WordStoreActor, WordWebSocketActor}
+import play.api.libs.json._
 import play.api.mvc.WebSocket.FrameFormatter
 import play.api.mvc._
 import play.api.Play.current
@@ -19,8 +20,17 @@ class Application @Inject() (system: ActorSystem) extends Controller {
     Ok(views.html.index())
   }
 
-  def words = WebSocket.acceptWithActor[String, String] { request => out =>
-    WordWebSocketActor.props(out)
+  implicit val wordUpdateFormat = new Format[WordUpdate] {
+    override def writes(wu: WordUpdate): JsValue = Json.toJson(wu.words.map(w => Json.obj(
+      "text" -> w._1,
+      "size" -> w._2
+    )))
+    override def reads(json: JsValue): JsResult[WordUpdate] = ???
+  }
+  implicit val wordUpdateFrameFormatter = FrameFormatter.jsonFrame[WordUpdate]
+
+  def words = WebSocket.acceptWithActor[String, WordUpdate] { request => out =>
+    WordWebSocketActor.props(out, wordStore)
   }
 
   def test(word: String) = Action {
