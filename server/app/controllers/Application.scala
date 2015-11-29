@@ -1,6 +1,6 @@
 package controllers
 
-import actors.WordStoreActor.WordUpdate
+import actors.WordStoreActor.{SendUpdate, WordUpdate}
 import actors.{WordStoreActor, WordWebSocketActor}
 import play.api.libs.json._
 import play.api.mvc.WebSocket.FrameFormatter
@@ -34,7 +34,7 @@ class Application @Inject() (system: ActorSystem) extends Controller {
   }
 
   def test(word: String) = Action {
-    wordStore ! word
+    wordStore ! SendUpdate(Seq(word))
     NoContent
   }
 }

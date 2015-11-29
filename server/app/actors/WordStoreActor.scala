@@ -9,6 +9,7 @@ import scala.collection.mutable
 object WordStoreActor {
 
   case object RequestUpdate
+  case class SendUpdate(words: Seq[String])
   case class WordUpdate(words: Seq[(String, Int)])
 
   def props() = Props(new WordStoreActor())
@@ -32,8 +33,10 @@ class WordStoreActor() extends Actor {
     case RequestUpdate => {
       sender() ! WordUpdate(normalisedWords)
     }
-    case word: String => {
-      words(word) += 1
+    case SendUpdate(newWords) => {
+      newWords foreach { w =>
+        words(w) += 1
+      }
       mediator ! Publish("word-updates", WordUpdate(normalisedWords))
     }
   }
