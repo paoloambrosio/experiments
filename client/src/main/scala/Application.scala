@@ -30,7 +30,13 @@ object Application extends js.JSApp {
 
   def main(): Unit = {
     scala.scalajs.js.Dynamic.global.cloud = cloud // TODO for debugging, remove later
-    updateCloud(js.Array(new Word("Scala", 100), new Word("Scala.JS", 10), new Word("Akka", 50)))
+
+    val words = js.Array(
+        new shared.Word("Scala", 100),
+        new shared.Word("Scala.JS", 10),
+        new shared.Word("Akka", 50)
+      ).map(sw => new Word(sw.text, sw.count))
+    updateCloud(words)
   }
 
   def updateCloud(words: js.Array[Word]): Unit = {
