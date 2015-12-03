@@ -2,4 +2,7 @@ GET  /              controllers.Application.index
 GET  /words         controllers.Application.words
 GET  /test/:word    controllers.Application.test(word)
 
+POST /vote          controllers.Application.makeVote
+GET  /vote          controllers.Application.vote
+
 GET  /assets/*file  controllers.Assets.versioned(path="/public", file: Asset)
