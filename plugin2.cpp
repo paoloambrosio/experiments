@@ -2,5 +2,5 @@
 #include "plugin.hpp"
 
 std::string some_namespace::Plugin::name() const {
-  return "Plugin1";
+  return "Plugin2";
 }
