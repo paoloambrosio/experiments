@@ -1,6 +1,6 @@
 #include <iostream>
 #include "plugin.hpp"
 
-std::string some_namespace::Plugin::name() const {
+const char *some_namespace::Plugin::name() const {
   return "Plugin1";
 }

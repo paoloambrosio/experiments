@@ -5,10 +5,10 @@ DONE
 
 
 TODO
- - Try cross-compiling with msvc (different versions?) and mingw
-   They cam be built on separate machines and run on one
  - Try with different runtimes all at the same time
-   - different compilers
+   - different compilers and runtimes
+     - eventually got mingw to load msvc libs but only sharing char *
+     - msvc debug does not work even with its dlls, release works but not with mingw dlls
    - different architectures (x32/x64)
    - different variant (debug/release)
    - links
