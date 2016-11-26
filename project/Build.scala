@@ -15,7 +15,8 @@ object Dependencies {
   private val akkaHttpV = "2.4.11"
 
   val akka = Seq(
-    "com.typesafe.akka" %% "akka-actor"             % akkaV
+    "com.typesafe.akka" %% "akka-actor"             % akkaV,
+    "com.typesafe.akka" %% "akka-remote"            % akkaV
   )
   val akkaHttp = Seq(
     "com.typesafe.akka" %% "akka-http-experimental" % akkaHttpV,

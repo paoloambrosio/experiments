@@ -14,3 +14,6 @@ spec:
         image: frontend:0.1
         ports:
         - containerPort: 9000
+        env:
+        - name: BACKEND_DISCOVERY_SERVICE
+          value: backend-service
