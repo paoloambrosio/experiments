@@ -1,11 +1,11 @@
 apiVersion: v1
 kind: Service
 metadata:
-  name: backend-service
+  name: cluster-service
 spec:
   type: ClusterIP
   clusterIP: None
   selector:
-    app: backend
+    cluster: example
   ports:
   - port: 2551

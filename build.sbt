@@ -10,10 +10,6 @@ lazy val commonSettings = buildSettings ++ Seq(
 
 lazy val dockerSettings = Seq(
   dockerExposedPorts := Seq(Docker.akkaTcpPort),
-  bashScriptExtraDefines := Seq(Docker.bashExports)
-)
-
-lazy val frontendDockerSettings = dockerSettings ++ Seq(
   dockerCommands := Seq(
     Cmd("FROM", "java:latest"),
     Cmd("USER", "root"),
@@ -25,7 +21,7 @@ lazy val frontendDockerSettings = dockerSettings ++ Seq(
     case Cmd("FROM", _) => true
     case _ => false
   },
-  bashScriptExtraDefines := Seq(Docker.frontendBashExports)
+  bashScriptExtraDefines := Seq(Docker.bashExports)
 )
 
 lazy val root = (project in file("."))
@@ -41,7 +37,7 @@ lazy val frontend = project
   .settings(libraryDependencies ++= akkaHttp)
   .enablePlugins(JavaAppPackaging)
   .enablePlugins(DockerPlugin)
-  .settings(frontendDockerSettings)
+  .settings(dockerSettings)
   .dependsOn(`backend-api`, common)
 
 lazy val backend = project

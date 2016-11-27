@@ -13,3 +13,6 @@ spec:
       containers:
       - name: backend
         image: backend:0.1
+        env:
+        - name: CLUSTER_DISCOVERY_SERVICE
+          value: cluster-service

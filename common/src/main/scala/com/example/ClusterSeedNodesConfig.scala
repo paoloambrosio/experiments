@@ -1,19 +1,23 @@
 package com.example
 
-import com.typesafe.config.Config
+import com.typesafe.config.{Config, ConfigValueFactory}
 
-trait BackendPathsConfig {
+import scala.collection.JavaConversions._
+
+trait ClusterSeedNodesConfig {
 
   def actorSystemName: String
   def config: Config
 
-  def backendPaths() = remoteNodesAddress.map(node => s"$node/user/backend")
+  def configWithSeedNodes: Config = {
+    config.withValue("akka.cluster.seed-nodes", ConfigValueFactory.fromIterable(seedNodes))
+  }
 
-  private def remoteNodesAddress: List[String] = {
+  private def seedNodes: List[String] = {
     val remoteInterface = config.getString("app.remote.interface")
     val remotePort = config.getInt("app.remote.port")
-    if (config.hasPath("app.backend.nodes")) {
-      config.getString("app.backend.nodes")
+    if (config.hasPath("app.cluster.seeds")) {
+      config.getString("app.cluster.seeds")
         .split(',').toList
         .map(toAkkaNodeRef(remotePort))
         .flatten

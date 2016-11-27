@@ -16,7 +16,8 @@ object Dependencies {
 
   val akka = Seq(
     "com.typesafe.akka" %% "akka-actor"             % akkaV,
-    "com.typesafe.akka" %% "akka-remote"            % akkaV
+    "com.typesafe.akka" %% "akka-remote"            % akkaV,
+    "com.typesafe.akka" %% "akka-cluster"           % akkaV
   )
   val akkaHttp = Seq(
     "com.typesafe.akka" %% "akka-http-experimental" % akkaHttpV,

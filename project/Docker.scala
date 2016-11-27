@@ -3,30 +3,30 @@ object Docker {
   val akkaTcpPort = 2551
 
   val bashExports = """
-export REMOTE_INTERFACE=$(hostname --ip-address)
+MAX_CLUSTER_SEEDS=3
 
-# Configure the default remote port unless passed
-if [ -z "$REMOTE_PORT" ]; then
-  export REMOTE_PORT=""" + akkaTcpPort + """
-fi
-"""
-
-  val frontendBashExports = """
-# Configure backend nodes from service if passed
-# otherwise keep them as they are
-if [ ! -z "$BACKEND_DISCOVERY_SERVICE" ]; then
-  BACKEND_NODES=$(
-    host -t A $BACKEND_DISCOVERY_SERVICE | \
+# Configure cluster seeds from service if passed
+# otherwise keep the seeds as they are
+if [ ! -z "$CLUSTER_DISCOVERY_SERVICE" ]; then
+  CLUSTER_SEEDS=$(
+    host -t A $CLUSTER_DISCOVERY_SERVICE | \
     grep 'has address' |
+    head -n $MAX_CLUSTER_SEEDS |
     cut -d ' ' -f 4 |
     xargs |
     sed -e 's/ /,/g'
   )
-  if [ ! -z "$BACKEND_NODES" ]; then
-    export BACKEND_NODES
+  if [ ! -z "$CLUSTER_SEEDS" ]; then
+    export CLUSTER_SEEDS
   fi
 fi
 
-""" + bashExports
+export REMOTE_INTERFACE=$(hostname --ip-address)
+
+# Configure the default cluster port unless passed
+if [ -z "$REMOTE_PORT" ]; then
+  export REMOTE_PORT=""" + akkaTcpPort + """
+fi
+"""
 
 }

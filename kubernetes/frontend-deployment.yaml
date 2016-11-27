@@ -8,6 +8,7 @@ spec:
     metadata:
       labels:
         app: frontend
+        cluster: example
     spec:
       containers:
       - name: frontend
@@ -15,5 +16,5 @@ spec:
         ports:
         - containerPort: 9000
         env:
-        - name: BACKEND_DISCOVERY_SERVICE
-          value: backend-service
+        - name: CLUSTER_DISCOVERY_SERVICE
+          value: cluster-service
