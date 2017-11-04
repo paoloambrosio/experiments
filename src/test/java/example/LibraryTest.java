@@ -8,12 +8,11 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 
 public class LibraryTest {
 
-    private Library classUnderTest = new Library();
-
     @Test public void testSomeLibraryMethod() {
         INDArray x = Nd4j.create(new float[]{1,1,1},new int[]{1, 3});
         INDArray y = Nd4j.create(new float[]{1,1,1,-1,-1,-1},new int[]{2, 3});
+        Library library = new Library(y);
 
-        assertEquals(Nd4j.create(new float[]{1,-1},new int[]{2, 1}), classUnderTest.cosineSimilarity(x, y));
+        assertEquals(Nd4j.create(new float[]{1,-1},new int[]{2, 1}), library.cosineSimilarity(x));
     }
 }
