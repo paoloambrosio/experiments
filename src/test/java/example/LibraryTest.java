@@ -1,12 +1,19 @@
 package example;
 
-import example.Library;
 import org.junit.jupiter.api.Test;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import org.nd4j.linalg.api.ndarray.INDArray;
+import org.nd4j.linalg.factory.Nd4j;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
 
 public class LibraryTest {
+
+    private Library classUnderTest = new Library();
+
     @Test public void testSomeLibraryMethod() {
-        Library classUnderTest = new Library();
-        assertTrue(classUnderTest.someLibraryMethod(), "someLibraryMethod should return 'true'");
+        INDArray x = Nd4j.create(new float[]{1,1,1},new int[]{1, 3});
+        INDArray y = Nd4j.create(new float[]{1,1,1,-1,-1,-1},new int[]{2, 3});
+
+        assertEquals(Nd4j.create(new float[]{1,-1},new int[]{2, 1}), classUnderTest.cosineSimilarity(x, y));
     }
 }

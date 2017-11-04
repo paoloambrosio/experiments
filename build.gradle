@@ -22,8 +22,11 @@ apply plugin: 'me.champeau.gradle.jmh'
 ext.junitPlatformVersion = '1.0.0'
 ext.junitJupiterVersion  = '5.0.0'
 ext.log4jVersion         = '2.9.1'
+ext.nd4jVersion          = '0.7.2'
 
 dependencies {
+    compile("org.nd4j:nd4j-native-platform:${nd4jVersion}")
+
     testCompile("org.junit.jupiter:junit-jupiter-api:${junitJupiterVersion}")
     testRuntime("org.junit.jupiter:junit-jupiter-engine:${junitJupiterVersion}")
 
