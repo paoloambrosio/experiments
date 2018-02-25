@@ -3,9 +3,9 @@ global:
   evaluation_interval: 15s
 
 scrape_configs:
-  - job_name: 'finagle-http'
-    static_configs:
-      - targets: ['finagle-http:9000']
+#  - job_name: 'finagle-http'
+#    static_configs:
+#      - targets: ['finagle-http:9000']
   - job_name: 'jaeger-agent'
     static_configs:
       - targets: ['jaeger-agent:5778']
