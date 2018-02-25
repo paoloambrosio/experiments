@@ -1,10 +1,8 @@
 package net.paoloambrosio
 
 import com.twitter.finagle.Thrift
-import com.twitter.util.Await
+import com.twitter.util.{Await, Future}
 import net.paoloambrosio.greeting.GreetingService
-
-import scala.concurrent.Future
 
 object Server extends App {
 
@@ -14,7 +12,7 @@ object Server extends App {
 //  }
 
   val service = new GreetingService[Future] {
-    override def greet(name: String): Future[String] = Future.successful(s"Hello, $name!")
+    override def greet(name: String): Future[String] = Future(s"Hello, $name!")
   }
 
 //  val server = Http.serve(":8080", openTracing andThen service)
