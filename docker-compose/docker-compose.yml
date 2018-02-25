@@ -4,9 +4,12 @@ services:
   finagle-http:
     image: finagle-http
     environment:
-     JAEGER_SERVICE_NAME: finagle-http
-     JAEGER_AGENT_HOST: jaeger-agent
-     JAEGER_AGENT_PORT: 6832
+      JAEGER_SERVICE_NAME: finagle-http
+      JAEGER_AGENT_HOST: jaeger-agent
+      JAEGER_AGENT_PORT: 5775
+      JAEGER_SAMPLER_TYPE: const
+      JAEGER_SAMPLER_PARAM: 1
+      JAEGER_REPORTER_LOG_SPANS: "true"
     ports:
       - "8081:8080"
     restart: on-failure
@@ -18,7 +21,10 @@ services:
     environment:
       JAEGER_SERVICE_NAME: spring-boot
       JAEGER_AGENT_HOST: jaeger-agent
-      JAEGER_AGENT_PORT: 6832
+      JAEGER_AGENT_PORT: 5775
+      JAEGER_SAMPLER_TYPE: const
+      JAEGER_SAMPLER_PARAM: 1
+      JAEGER_REPORTER_LOG_SPANS: "true"
     ports:
       - "8082:8080"
     restart: on-failure
