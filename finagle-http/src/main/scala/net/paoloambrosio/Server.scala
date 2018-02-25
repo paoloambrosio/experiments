@@ -9,7 +9,7 @@ object Server extends App {
 
   val openTracing = {
     val tracer = Configuration.fromEnv.getTracer
-    new OpenTracingHttpFilter(tracer, true)
+    new OpenTracingHttpFilter(tracer, isServerFilter = true)
   }
 
   val service = new Service[http.Request, http.Response] {
