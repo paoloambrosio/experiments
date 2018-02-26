@@ -36,8 +36,16 @@ services:
 
   kafka-streams:
     image: kafka-streams
+    environment:
+      JAEGER_SERVICE_NAME: kafka-streams
+      JAEGER_AGENT_HOST: jaeger-agent
+      JAEGER_AGENT_PORT: 5775
+      JAEGER_SAMPLER_TYPE: const
+      JAEGER_SAMPLER_PARAM: 1
+      JAEGER_REPORTER_LOG_SPANS: "true"
     depends_on:
-      - zookeeper
+      - kafka
+      - jaeger-agent
 
 
   zookeeper:

@@ -1,10 +1,9 @@
 package net.paoloambrosio;
 
+import io.opentracing.Tracer;
+import io.opentracing.contrib.kafka.streams.TracingKafkaClientSupplier;
 import org.apache.kafka.common.serialization.Serdes;
-import org.apache.kafka.streams.Consumed;
-import org.apache.kafka.streams.KafkaStreams;
-import org.apache.kafka.streams.StreamsBuilder;
-import org.apache.kafka.streams.StreamsConfig;
+import org.apache.kafka.streams.*;
 import org.apache.kafka.streams.kstream.Produced;
 
 import java.util.Properties;
@@ -21,7 +20,9 @@ public class Application {
                 .mapValues(textLine -> String.valueOf(textLine.length()))
                 .to("lineslength", Produced.with(Serdes.String(), Serdes.String()));
 
-        KafkaStreams streams = new KafkaStreams(builder.build(), config);
+        Tracer tracer = com.uber.jaeger.Configuration.fromEnv().getTracer();
+        KafkaClientSupplier supplier = new TracingKafkaClientSupplier(tracer);
+        KafkaStreams streams = new KafkaStreams(builder.build(), new StreamsConfig(config), supplier);
         streams.start();
     }
 
