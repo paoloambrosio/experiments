@@ -4,19 +4,17 @@ services:
   finagle-http:
     image: finagle-http
     environment:
-      JAEGER_SERVICE_NAME: finagle-http
-      JAEGER_AGENT_HOST: jaeger-agent
-      JAEGER_AGENT_PORT: 5775
-      JAEGER_SAMPLER_TYPE: const
-      JAEGER_SAMPLER_PARAM: 1
-      JAEGER_REPORTER_LOG_SPANS: "true"
+      JAVA_OPTS: "-Dzipkin.initialSampleRate=1.0 -Dzipkin.http.host=jaeger-collector:9411"
     ports:
       - "8081:8080"
     depends_on:
-      - jaeger-agent
+      - jaeger-collector
+      - finagle-thrift
 
   finagle-thrift:
     image: finagle-thrift
+    environment:
+      JAVA_OPTS: "-Dzipkin.initialSampleRate=1.0 -Dzipkin.http.host=jaeger-collector:9411"
     ports:
       - "8080"
 
