@@ -25,17 +25,13 @@ spec:
       containers:
       - name: backend
         image: backend:0.1
-        ports:
-        - containerPort: 2551
-        - containerPort: 19999
         env:
-        - name: CLUSTER_DISCOVERY_SERVICE
+        - name: CLUSTER_SERVICE
           value: cluster-service
-        - name: REMOTE_INTERFACE
+        - name: KUBERNETES_NAMESPACE
           valueFrom:
             fieldRef:
-              apiVersion: v1
-              fieldPath: status.podIP
+              fieldPath: metadata.namespace
 ---
 apiVersion: v1
 kind: Service
@@ -66,8 +62,10 @@ spec:
         image: frontend:0.1
         ports:
         - containerPort: 9000
-        - containerPort: 2551
-        - containerPort: 19999
         env:
-        - name: CLUSTER_DISCOVERY_SERVICE
+        - name: CLUSTER_SERVICE
           value: cluster-service
+        - name: KUBERNETES_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
