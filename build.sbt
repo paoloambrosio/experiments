@@ -1,7 +1,6 @@
 import BuildSettings._
 import Dependencies._
 import Resolvers._
-import com.typesafe.sbt.packager.archetypes.JavaAppPackaging.autoImport.bashScriptExtraDefines
 import com.typesafe.sbt.packager.docker._
 
 lazy val commonSettings = buildSettings ++ Seq(
@@ -42,7 +41,6 @@ lazy val frontend = project
 
 lazy val backend = project
   .settings(commonSettings: _*)
-  .settings(libraryDependencies ++= akka)
   .enablePlugins(JavaAppPackaging)
   .enablePlugins(DockerPlugin)
   .settings(dockerSettings)
@@ -50,4 +48,4 @@ lazy val backend = project
 
 lazy val `backend-api` = project
   .settings(commonSettings: _*)
-  .settings(libraryDependencies ++= akka)
+  .settings(libraryDependencies ++= akka.map(_ % Provided))

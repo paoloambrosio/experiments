@@ -18,9 +18,7 @@ Run it on Kubernetes (Minikube):
 ```sh
 eval $(minikube docker-env)
 sbt docker:publishLocal
-kubectl create -f kubernetes/cluster-service.yaml
-kubectl create -f kubernetes/backend-deployment.yaml
-kubectl create -f kubernetes/frontend-service.yaml
-kubectl create -f kubernetes/frontend-deployment.yaml
+kubectl create -f kubernetes/backend.yaml
+kubectl create -f kubernetes/frontend.yaml
 curl $(minikube service frontend-service --url)/greet/World
 ```

@@ -1,3 +1,15 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: cluster-service
+spec:
+  type: ClusterIP
+  clusterIP: None
+  selector:
+    cluster: example
+  ports:
+  - port: 2551
+---
 apiVersion: extensions/v1beta1
 kind: Deployment
 metadata:
