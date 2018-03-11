@@ -1,0 +1,73 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: cluster-service
+spec:
+  type: ClusterIP
+  clusterIP: None
+  selector:
+    cluster: example
+  ports:
+  - port: 19999
+---
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: backend-deployment
+spec:
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: backend
+        cluster: example
+    spec:
+      containers:
+      - name: backend
+        image: backend:0.1
+        ports:
+        - containerPort: 2551
+        - containerPort: 19999
+        env:
+        - name: CLUSTER_DISCOVERY_SERVICE
+          value: cluster-service
+        - name: REMOTE_INTERFACE
+          valueFrom:
+            fieldRef:
+              apiVersion: v1
+              fieldPath: status.podIP
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: frontend-service
+spec:
+  type: LoadBalancer
+  selector:
+    app: frontend
+  ports:
+  - port: 80
+    targetPort: 9000
+---
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: frontend-deployment
+spec:
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: frontend
+        cluster: example
+    spec:
+      containers:
+      - name: frontend
+        image: frontend:0.1
+        ports:
+        - containerPort: 9000
+        - containerPort: 2551
+        - containerPort: 19999
+        env:
+        - name: CLUSTER_DISCOVERY_SERVICE
+          value: cluster-service

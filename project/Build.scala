@@ -4,7 +4,7 @@ import sbt._
 
 object BuildSettings {
   val buildSettings = Seq(
-    organization := "net.paoloambrosio.exp-akka-clbst",
+    organization := "net.paoloambrosio.exp-akka-clstr",
     version      := "0.1",
     scalaVersion := "2.12.4"
   )
@@ -13,11 +13,13 @@ object BuildSettings {
 object Dependencies {
   private val akkaV = "2.5.11"
   private val akkaHttpV = "10.1.0"
+  private val akkaManagementV = "0.10.0"
 
   val akka = Seq(
-    "com.typesafe.akka" %% "akka-actor"   % akkaV,
-    "com.typesafe.akka" %% "akka-remote"  % akkaV,
-    "com.typesafe.akka" %% "akka-cluster" % akkaV
+    "com.typesafe.akka"             %% "akka-actor"                        % akkaV,
+    "com.typesafe.akka"             %% "akka-cluster"                      % akkaV,
+    "com.lightbend.akka.management" %% "akka-management-cluster-bootstrap" % akkaManagementV,
+    "com.lightbend.akka.discovery"  %% "akka-discovery-dns"                % akkaManagementV
   )
   val akkaHttp = Seq(
     "com.typesafe.akka" %% "akka-http"         % akkaHttpV,
