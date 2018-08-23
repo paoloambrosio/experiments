@@ -1,27 +1,15 @@
 package example.myapp.helloworld
 
-import java.util.concurrent.TimeUnit
-
-import scala.concurrent.Await
-import scala.concurrent.Future
-import scala.concurrent.duration._
-import scala.util.Try
-import scala.util.control.NonFatal
-
-import akka.Done
-import akka.NotUsed
+import akka.{Done, NotUsed}
 import akka.actor.ActorSystem
 import akka.grpc.GrpcClientSettings
 import akka.stream.ActorMaterializer
 import akka.stream.scaladsl.Source
-import io.grpc.CallOptions
-import io.grpc.StatusRuntimeException
-import io.grpc.netty.shaded.io.grpc.netty.GrpcSslContexts
-import io.grpc.netty.shaded.io.grpc.netty.NegotiationType
-import io.grpc.netty.shaded.io.grpc.netty.NettyChannelBuilder
-import io.grpc.netty.shaded.io.netty.handler.ssl.SslContext
-
 import example.myapp.helloworld.grpc._
+
+import scala.concurrent.{Await, Future}
+import scala.concurrent.duration._
+import scala.util.Try
 
 object GreeterClient {
 
@@ -31,13 +19,7 @@ object GreeterClient {
     implicit val mat = ActorMaterializer()
     implicit val ec = sys.dispatcher
 
-    val client = new GreeterServiceClient(GrpcClientSettings(
-      "localhost",
-      8080,
-      None, // overrideAuthority = Some("foo.test.google.fr"),
-      None,
-      certificate = Some("certificate.pem")
-    ))
+    val client = new GreeterServiceClient(GrpcClientSettings.connectToServiceAt("localhost", 8080))
 
     def singleRequestReply(): Unit = {
       sys.log.info("Performing request")
