@@ -2,12 +2,8 @@
 
 public sealed class Settings
 {
-    public int KeyOne { get; set; }
-    public bool KeyTwo { get; set; }
-    public NestedSettings? KeyThree { get; set; }
-}
-
-public sealed class NestedSettings
-{
-    public string Message { get; set; } = null!;
+    public string A { get; set; }
+    public string B { get; set; }
+    public string C { get; set; }
+    public string D { get; set; }
 }

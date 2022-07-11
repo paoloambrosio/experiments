@@ -1,51 +1,36 @@
-﻿using System.Reactive.Linq;
-using ConfigSpike;
+﻿using ConfigSpike;
 using Microsoft.Extensions.Configuration;
 
-// Build a config object, using env vars and JSON providers.
-var config = new ConfigurationBuilder()
-    .AddJsonFile("appsettings.json", optional: false, reloadOnChange: true)
-    .AddJsonFile("usersettings.json", optional: true)
-    .AddEnvironmentVariables()
-    .AddCommandLine(args)
-    .Build();
+namespace Main;
 
-// var gameConfig = new ConfigurationBuilder()
-//     .AddConfiguration(config)
-//     .AddJsonFile("gamesettings.json")
-//     .Build();
+static class Program
+{
+    public static void Main(string[] args)
+    {
+        Console.WriteLine("Resources");
+        foreach (var manifestResourceName in typeof(Program).Assembly.GetManifestResourceNames())
+        {
+            Console.WriteLine("- " + manifestResourceName);
+        }
 
-// Get values from the config given their key and their target type.
-//var settings = config.GetValue<Settings>(nameof(Settings));
-var section = config.GetSection(nameof(Settings));
-// var settings = section.Get<Settings>();
-// var boundSettings = new Settings();
+        var config = new ConfigurationBuilder()
+            .AddJsonStream(typeof(Program).Assembly.GetManifestResourceStream("appsettings.json"))
+            .AddJsonFile("appsettings.json", optional: false, reloadOnChange: true)
+            .AddJsonFile("usersettings.json", optional: true)
+            .AddEnvironmentVariables()
+            .AddCommandLine(args)
+            .Build();
 
-// Console.WriteLine(settings.KeyOne);      // 1
-// Console.WriteLine(boundSettings.KeyOne); // 0
+        var section = config.GetSection(nameof(Settings));
 
-// Console.WriteLine($"KeyOne = {settings.KeyOne}");
-// Console.WriteLine($"KeyTwo = {settings.KeyTwo}");
-// Console.WriteLine($"KeyThree:Message = {settings.KeyThree?.Message}");
+        // var observable = ObservableConfig<Settings>.Create(section);
+        // Console.WriteLine("Print the current value and wait for a change...");
+        // observable.Take(2).ForEachAsync(settings => Console.WriteLine(settings.A)).Wait();
 
-// var promise = new TaskCompletionSource<Settings>();
-// section.Bind(boundSettings);
-// var reloadTokenDisposable = section.GetReloadToken().RegisterChangeCallback(o =>
-// {
-//     Console.WriteLine("Done!");
-//     promise.SetResult(section.Get<Settings>());
-// }, null);
-
-var observable = ObservableConfig<Settings>.Create(section);
-
-// promise.Task.Wait();
-
-// // config and section are automatically reloaded, but the bindings are not
-// Console.WriteLine(settings.KeyOne);            // 1
-// Console.WriteLine(boundSettings.KeyOne);       // 1
-// Console.WriteLine(promise.Task.Result.KeyOne); // 2 (or whatever it changed to)
-
-// reloadTokenDisposable.Dispose();
-
-Console.WriteLine("Print the current value and wait for a change...");
-observable.Take(2).ForEachAsync(settings => Console.WriteLine(settings.KeyOne)).Wait();
+        var settings = section.Get<Settings>();
+        Console.WriteLine("A: " + settings.A);
+        Console.WriteLine("B: " + settings.B);
+        Console.WriteLine("C: " + settings.C);
+        Console.WriteLine("D: " + settings.D);
+    }
+}
