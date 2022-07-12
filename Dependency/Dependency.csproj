@@ -4,7 +4,15 @@
         <TargetFramework>net6.0</TargetFramework>
         <ImplicitUsings>enable</ImplicitUsings>
         <Nullable>enable</Nullable>
-        <RootNamespace>Depdenency</RootNamespace>
+        <RootNamespace>Dependency</RootNamespace>
     </PropertyGroup>
+
+    <ItemGroup>
+        <None Remove="Resources\appsettings.json" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <EmbeddedResource Include="Resources\appsettings.json" />
+    </ItemGroup>
 
 </Project>

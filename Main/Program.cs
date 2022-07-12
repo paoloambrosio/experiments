@@ -1,4 +1,5 @@
-﻿using ConfigSpike;
+﻿using System.Reflection;
+using ConfigSpike;
 using Microsoft.Extensions.Configuration;
 
 namespace Main;
@@ -7,14 +8,21 @@ static class Program
 {
     public static void Main(string[] args)
     {
-        Console.WriteLine("Resources");
-        foreach (var manifestResourceName in typeof(Program).Assembly.GetManifestResourceNames())
+        var configBuilder = new ConfigurationBuilder();
+
+        foreach (var assembly in LoadSolutionAssemblies())
         {
-            Console.WriteLine("- " + manifestResourceName);
+            var assemblyName = assembly.GetName().Name;
+            var resourceName = $"{assemblyName}.Resources.appsettings.json";
+            var stream = assembly.GetManifestResourceStream(resourceName);
+            if (stream is not null)
+            {
+                Console.WriteLine($"Loaded {resourceName}");
+                configBuilder.AddJsonStream(stream);
+            }
         }
 
-        var config = new ConfigurationBuilder()
-            .AddJsonStream(typeof(Program).Assembly.GetManifestResourceStream("appsettings.json"))
+        var config = configBuilder
             .AddJsonFile("appsettings.json", optional: false, reloadOnChange: true)
             .AddJsonFile("usersettings.json", optional: true)
             .AddEnvironmentVariables()
@@ -32,5 +40,14 @@ static class Program
         Console.WriteLine("B: " + settings.B);
         Console.WriteLine("C: " + settings.C);
         Console.WriteLine("D: " + settings.D);
+    }
+    
+    private static Assembly[] LoadSolutionAssemblies()
+    {
+        return
+            Directory.GetFiles(AppDomain.CurrentDomain.BaseDirectory, "*.dll")
+            .Where(dll => !dll.Contains(@"\Microsoft.") && !dll.StartsWith(@"\System."))
+            .Select(dll => Assembly.Load(AssemblyName.GetAssemblyName(dll)))
+            .ToArray();
     }
 }
