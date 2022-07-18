@@ -9,14 +9,6 @@
     </PropertyGroup>
 
     <ItemGroup>
-      <None Remove="Resources\appsettings.json" />
-    </ItemGroup>
-
-    <ItemGroup>
-      <EmbeddedResource Include="Resources\appsettings.json" />
-    </ItemGroup>
-
-    <ItemGroup>
       <PackageReference Include="Microsoft.Extensions.Hosting" Version="6.0.1" />
       <PackageReference Include="System.Reactive" Version="5.0.0" />
     </ItemGroup>
@@ -31,6 +23,8 @@
     </ItemGroup>
 
     <ItemGroup>
+      <ProjectReference Include="..\AnotherDependency\AnotherDependency.csproj" />
       <ProjectReference Include="..\Dependency\Dependency.csproj" />
     </ItemGroup>
+
 </Project>
