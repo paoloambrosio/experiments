@@ -1,11 +1,8 @@
-﻿using System;
-using System.IO;
-using System.Linq;
-using System.Reflection;
-using AnotherDependency;
+﻿using AnotherDependency;
 using ConfigSpike;
 using Dependency;
 using Microsoft.Extensions.Configuration;
+using DevTrends.ConfigurationExtensions;
 
 namespace Main;
 
@@ -33,9 +30,7 @@ static class Program
             .AddCommandLine(args)
             .Build();
 
-        var section = config.GetSection(nameof(Settings));
-
-        var settings = section.Get<Settings>();
+        var settings = config.Bind<Settings>();
         Console.WriteLine("A: " + settings.A);
         Console.WriteLine("B: " + settings.B);
         Console.WriteLine("C: " + settings.C);
