@@ -2,7 +2,6 @@
 using ConfigSpike;
 using Dependency;
 using Microsoft.Extensions.Configuration;
-using DevTrends.ConfigurationExtensions;
 
 namespace Main;
 
@@ -30,10 +29,13 @@ static class Program
             .AddCommandLine(args)
             .Build();
 
-        var settings = config.Bind<Settings>();
+//        var settings = config.Bind<Settings>();
+        var settings = config.Get<Settings>();
         Console.WriteLine("A: " + settings.A);
         Console.WriteLine("B: " + settings.B);
         Console.WriteLine("C: " + settings.C);
         Console.WriteLine("D: " + settings.D);
+        // Console.WriteLine("Ip: " + settings.Ip);
+        // Console.WriteLine("TimeSpan: " + settings.TimeSpan);
     }
 }

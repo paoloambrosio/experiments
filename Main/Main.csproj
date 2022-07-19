@@ -9,7 +9,7 @@
     </PropertyGroup>
 
     <ItemGroup>
-      <PackageReference Include="DevTrends.ConfigurationExtensions" Version="1.1.0" />
+<!--      <PackageReference Include="DevTrends.ConfigurationExtensions" Version="1.1.0" />-->
       <PackageReference Include="Microsoft.Extensions.Hosting" Version="6.0.1" />
       <PackageReference Include="System.Reactive" Version="5.0.0" />
     </ItemGroup>
