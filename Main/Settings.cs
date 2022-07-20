@@ -8,6 +8,6 @@ public sealed class Settings
     public string B { get; set; } = null!;
     public string C { get; set; } = null!;
     public string D { get; set; } = null!;
-    // public IPAddress Ip { get; set; } = null!;
-    // public TimeSpan TimeSpan { get; set; } = null!;
+    public IPAddress Ip { get; set; } = null!;
+    public TimeSpan TimeSpan { get; set; }
 }

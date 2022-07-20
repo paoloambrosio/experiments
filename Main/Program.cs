@@ -1,4 +1,6 @@
-﻿using AnotherDependency;
+﻿using System.ComponentModel;
+using System.Net;
+using AnotherDependency;
 using ConfigSpike;
 using Dependency;
 using Microsoft.Extensions.Configuration;
@@ -29,13 +31,21 @@ static class Program
             .AddCommandLine(args)
             .Build();
 
+        RegisterConverter<IPAddress, IpAddressConverter>();
+        TypeDescriptor.GetConverter(typeof(IPAddress));
+
 //        var settings = config.Bind<Settings>();
         var settings = config.Get<Settings>();
         Console.WriteLine("A: " + settings.A);
         Console.WriteLine("B: " + settings.B);
         Console.WriteLine("C: " + settings.C);
         Console.WriteLine("D: " + settings.D);
-        // Console.WriteLine("Ip: " + settings.Ip);
-        // Console.WriteLine("TimeSpan: " + settings.TimeSpan);
+        Console.WriteLine("Ip: " + settings.Ip);
+        Console.WriteLine("TimeSpan: " + settings.TimeSpan);
+    }
+
+    private static void RegisterConverter<T, TC>() where TC: TypeConverter
+    {
+        TypeDescriptor.AddAttributes(typeof(T), new TypeConverterAttribute(typeof(TC)));
     }
 }
