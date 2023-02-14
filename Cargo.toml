@@ -7,5 +7,6 @@ edition = "2021"
 
 [dependencies]
 bevy = "0.9.1"
+bevy_rapier3d = "0.20.0"
 binreader = "0.2.1"
 byteorder = "1.4.3"
