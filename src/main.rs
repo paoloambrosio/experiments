@@ -7,7 +7,7 @@ mod scene_printer;
 fn main() {
     App::new()
         .add_plugins(DefaultPlugins)
-        .add_startup_system(print_scene)
+        .add_systems(Startup, print_scene)
         .run();
 
 }
