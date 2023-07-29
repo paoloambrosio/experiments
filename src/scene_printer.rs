@@ -1,4 +1,5 @@
 use crate::scene::{Scene, Node};
+use bevy::prelude::Mat4;
 
 pub fn print_scene(scene: Scene) {
   println!("{} textures:", scene.textures.len());
@@ -23,12 +24,17 @@ pub fn print_scene(scene: Scene) {
 }
 
 fn print_node(node: Node, prefix: &str) {
+  print_node_transform(node, prefix, Mat4::IDENTITY)
+}
+
+fn print_node_transform(node: Node, prefix: &str, base_transformation: Mat4) {
   match node {
     Node::DummyNode { name, transformation, children } => {
       println!("{}- dummy {}", prefix, name);
+      
       let nested_prefix = format!("{}{}", "  ", prefix);
       for c in children {
-        print_node(c, nested_prefix.as_str());
+        print_node_transform(c, nested_prefix.as_str(), base_transformation.mul_mat4(&transformation));
       }
     }
     Node::StaticMeshNode { name, vertices, indices, material_id, children } => {

@@ -6,12 +6,14 @@ pub struct Scene {
   pub root_node: Node
 }
 
+// bevy::render::texture::Image
 pub struct Texture {
   pub type_id: i32,
   pub name: String,
   pub content: Vec<u8>
 }
 
+// bevy::pbr::StandardMaterial
 pub struct Material {
   pub name: String,
   pub shader_name: String,
@@ -30,6 +32,8 @@ pub struct MaterialTexture {
   pub texture_name: String
 }
 
+// bevy::gltf::GltfNode ???
+// - bevy::render::mesh::Mesh
 pub enum Node {
   DummyNode {
     name: String,
@@ -42,6 +46,21 @@ pub enum Node {
     indices: Vec<u16>,
     material_id: i32,
     children: Vec<Node>
+  }
+}
+
+impl Node {
+
+  pub fn flatten(&self) -> Vec<Node> {
+    match self {
+      Node::DummyNode { name, transformation, children } => {
+        children.iter().flat_map(|n| n.flatten()).collect()
+      }
+      Node::StaticMeshNode { name, vertices, indices, material_id, children } => {
+        //&vec![self; 1]
+        unimplemented!()
+      }
+    }
   }
 }
 
