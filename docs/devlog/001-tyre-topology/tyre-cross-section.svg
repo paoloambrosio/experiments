@@ -1,0 +1,53 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="480" height="334" viewBox="0 0 480 334"
+     role="img" aria-labelledby="title description">
+  <title id="title">Default tyre cross-section</title>
+  <desc id="description">Five nodes form a symmetric profile from left bead through left shoulder, tread centre,
+    and right shoulder to right bead. The horizontal and radial axes use the same scale in metres.</desc>
+
+  <rect x="0.5" y="0.5" width="479" height="333" rx="14" fill="#0c1017" stroke="#293444"/>
+
+  <g stroke="#293444">
+    <path d="M90 93H390 M90 143H390 M90 193H390 M90 243H390"/>
+    <path d="M140 93V263 M240 93V263 M340 93V263"/>
+  </g>
+  <path d="M90 93V263H390 M84 93H90 M84 143H90 M84 193H90 M84 243H90
+           M140 263V269 M240 263V269 M340 263V269"
+        fill="none" stroke="#8493a6" stroke-width="1.5"/>
+
+  <g font-family="system-ui, sans-serif" font-size="18" fill="#b6c4d3">
+    <g text-anchor="end">
+      <text x="77" y="99">0.35</text>
+      <text x="77" y="149">0.30</text>
+      <text x="77" y="199">0.25</text>
+      <text x="77" y="249">0.20</text>
+    </g>
+    <g text-anchor="middle">
+      <text x="140" y="290">−0.10</text>
+      <text x="240" y="290">0</text>
+      <text x="340" y="290">+0.10</text>
+      <text x="240" y="316">Local X (m)</text>
+      <text transform="translate(25 178) rotate(-90)">Radius (m)</text>
+    </g>
+  </g>
+
+  <!-- Both axes use 1000 SVG units per metre. The origin is at (240, 443). -->
+  <polyline points="155,243 140,123 240,113 340,123 325,243"
+            fill="none" stroke="#40debf" stroke-width="3" stroke-linejoin="round"/>
+  <g fill="#eef4ff" stroke="#0c1017" stroke-width="1.5">
+    <circle cx="155" cy="243" r="5.5"/>
+    <circle cx="140" cy="123" r="5.5"/>
+    <circle cx="240" cy="113" r="5.5"/>
+    <circle cx="340" cy="123" r="5.5"/>
+    <circle cx="325" cy="243" r="5.5"/>
+  </g>
+
+  <path d="M140 81V111 M240 81V101 M340 81V111 M162 234L185 218 M318 234L295 218"
+        fill="none" stroke="#8493a6" stroke-width="1.5"/>
+  <g font-family="system-ui, sans-serif" font-size="19" fill="#eef4ff" text-anchor="middle">
+    <text x="140" y="48">Left<tspan x="140" dy="22">shoulder</tspan></text>
+    <text x="240" y="48">Tread<tspan x="240" dy="22">centre</tspan></text>
+    <text x="340" y="48">Right<tspan x="340" dy="22">shoulder</tspan></text>
+    <text x="185" y="187">Left<tspan x="185" dy="22">bead</tspan></text>
+    <text x="295" y="187">Right<tspan x="295" dy="22">bead</tspan></text>
+  </g>
+</svg>

@@ -1,0 +1,10 @@
+[workspace]
+members = ["crates/vehicle_physics", "crates/vehicle_lab"]
+resolver = "3"
+
+[workspace.package]
+edition = "2024"
+
+[workspace.dependencies]
+bevy = { version = "0.20.1", default-features = false }
+bevy_math = "0.20.1"

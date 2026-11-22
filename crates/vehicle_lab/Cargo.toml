@@ -1,0 +1,9 @@
+[package]
+name = "vehicle_lab"
+version = "0.1.0"
+edition.workspace = true
+publish = false
+
+[dependencies]
+bevy = { workspace = true, features = ["3d", "ui"] }
+vehicle_physics = { path = "../vehicle_physics" }

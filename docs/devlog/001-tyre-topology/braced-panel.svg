@@ -1,0 +1,60 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="480" height="320" viewBox="0 0 480 320"
+     role="img" aria-labelledby="title description">
+  <title id="title">One braced tyre panel</title>
+  <desc id="description">Nodes a and b sit on ring A. Nodes c and d sit on ring B.
+    Nodes a and c share segment i, and b and d share segment i plus one.
+    The six beams connect every pair of corner nodes. The two diagonals cross between the corners.</desc>
+
+  <rect x="0.5" y="0.5" width="479" height="319" rx="14" fill="#0c1017" stroke="#293444"/>
+  <path d="M24 263H456" stroke="#293444"/>
+
+  <g font-family="system-ui, sans-serif" font-size="20" fill="#b6c4d3">
+    <g text-anchor="middle">
+      <text x="154" y="45">Segment i</text>
+      <text x="366" y="45">Segment i + 1</text>
+    </g>
+    <g text-anchor="end">
+      <text x="110" y="93">Ring A</text>
+      <text x="110" y="220">Ring B</text>
+    </g>
+  </g>
+
+  <g stroke-width="3.5" stroke-linecap="round">
+    <g stroke="#40debf">
+      <line x1="154" y1="86" x2="366" y2="86"/>
+      <line x1="154" y1="213" x2="366" y2="213"/>
+      <line x1="24" y1="291" x2="53" y2="291"/>
+    </g>
+    <g stroke="#ffb552" stroke-dasharray="8 6">
+      <line x1="154" y1="86" x2="154" y2="213"/>
+      <line x1="366" y1="86" x2="366" y2="213"/>
+      <line x1="194" y1="291" x2="222" y2="291"/>
+    </g>
+    <g stroke="#9178cc" stroke-dasharray="0.5 10.25">
+      <line x1="154" y1="86" x2="366" y2="213"/>
+      <line x1="366" y1="86" x2="154" y2="213"/>
+      <line x1="349" y1="291" x2="378" y2="291"/>
+    </g>
+  </g>
+
+  <g fill="#eef4ff" stroke="#0c1017" stroke-width="1.5">
+    <circle cx="154" cy="86" r="6"/>
+    <circle cx="366" cy="86" r="6"/>
+    <circle cx="154" cy="213" r="6"/>
+    <circle cx="366" cy="213" r="6"/>
+  </g>
+
+  <g font-family="system-ui, sans-serif" font-size="19" fill="#eef4ff">
+    <g text-anchor="middle">
+      <text x="177" y="75">a</text>
+      <text x="343" y="75">b</text>
+      <text x="177" y="239">c</text>
+      <text x="343" y="239">d</text>
+    </g>
+    <g font-size="18">
+      <text x="62" y="297">Circumferential</text>
+      <text x="231" y="297">Cross-section</text>
+      <text x="387" y="297">Diagonal</text>
+    </g>
+  </g>
+</svg>
