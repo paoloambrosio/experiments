@@ -15,7 +15,7 @@ use bevy::{math::DVec3, prelude::*};
 
 use crate::{
     elastic_tyre::ElasticTyreError,
-    mounted_tyre::{MountedStep, MountedTyre, RimMotion},
+    mounted_tyre::{FlatFloor, MountedStep, MountedTyre, RimMotion},
 };
 
 /// Insert with [Self::rim_bundle] on the same entity. The rim centre is the centre of mass.
@@ -65,6 +65,11 @@ impl AvianTyre {
 
     pub fn tyre(&self) -> &MountedTyre {
         &self.tyre
+    }
+
+    /// Set or remove the floor used by subsequent substeps.
+    pub fn set_floor(&mut self, floor: Option<FlatFloor>) {
+        self.tyre.set_floor(floor);
     }
 
     pub fn last_step(&self) -> MountedStep {

@@ -4,6 +4,9 @@ mod drop_report;
 mod elastic_experiment;
 mod inflation_report;
 mod radial_report;
+mod rolling_experiment;
+mod rolling_lab;
+mod rolling_report;
 
 use std::{collections::BTreeMap, f32::consts::TAU, process::ExitCode};
 
@@ -126,6 +129,7 @@ const BEAM_STYLES: [BeamStyle; 3] = [
 
 fn main() -> ExitCode {
     let mut inflation_lab = false;
+    let mut rolling_lab = false;
     for argument in std::env::args_os().skip(1) {
         let result = if argument == "--elastic-report" {
             elastic_experiment::report()
@@ -135,8 +139,11 @@ fn main() -> ExitCode {
             radial_report::report()
         } else if argument == "--drop-report" {
             drop_report::report(std::env::args_os().any(|argument| argument == "--samples"))
+        } else if argument == "--rolling-report" {
+            rolling_report::report(std::env::args_os().any(|argument| argument == "--samples"))
         } else {
             inflation_lab |= argument == "--inflation-lab";
+            rolling_lab |= argument == "--rolling-lab";
             continue;
         };
         return match result {
@@ -148,7 +155,9 @@ fn main() -> ExitCode {
         };
     }
 
-    if inflation_lab {
+    if rolling_lab {
+        rolling_lab::run();
+    } else if inflation_lab {
         run_inflation_lab();
     } else {
         drop_lab::run();

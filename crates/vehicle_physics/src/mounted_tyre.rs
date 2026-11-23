@@ -48,6 +48,8 @@ pub struct FlatFloor {
     height_m: f64,
     stiffness_n_per_m: f64,
     damping_ns_per_m: f64,
+    friction: Option<(f64, f64)>,
+    surface_velocity: DVec3,
 }
 
 impl FlatFloor {
@@ -68,7 +70,36 @@ impl FlatFloor {
             height_m,
             stiffness_n_per_m,
             damping_ns_per_m,
+            friction: None,
+            surface_velocity: DVec3::ZERO,
         })
+    }
+
+    /// Enable regularized Coulomb friction with a dimensionless coefficient and a
+    /// positive transition speed in m/s. A zero coefficient gives normal-only contact.
+    pub fn with_friction(
+        mut self,
+        coefficient: f64,
+        transition_speed_mps: f64,
+    ) -> Result<Self, ElasticTyreError> {
+        if !coefficient.is_finite()
+            || coefficient < 0.0
+            || !transition_speed_mps.is_finite()
+            || transition_speed_mps <= 0.0
+        {
+            return Err(ElasticTyreError::InvalidFloor);
+        }
+        self.friction = (coefficient > 0.0).then_some((coefficient, transition_speed_mps));
+        Ok(self)
+    }
+
+    /// Set the world-space velocity of the surface in m/s. The Y component must be zero.
+    pub fn with_surface_velocity(mut self, velocity: DVec3) -> Result<Self, ElasticTyreError> {
+        if !velocity.is_finite() || velocity.y != 0.0 {
+            return Err(ElasticTyreError::InvalidFloor);
+        }
+        self.surface_velocity = velocity;
+        Ok(self)
     }
 
     pub fn height_m(self) -> f64 {
@@ -84,6 +115,41 @@ impl FlatFloor {
             0.0
         }
     }
+
+    fn tangential_force(
+        self,
+        normal_n: f64,
+        predicted_velocity: DVec3,
+        dt_over_mass: f64,
+    ) -> DVec3 {
+        let Some((coefficient, transition_speed)) = self.friction else {
+            return DVec3::ZERO;
+        };
+        let slip = (predicted_velocity - self.surface_velocity).with_y(0.0);
+        let speed = slip.x.hypot(slip.z);
+        if normal_n == 0.0 || speed == 0.0 {
+            return DVec3::ZERO;
+        }
+        let limit = coefficient * normal_n;
+        if !speed.is_finite() || !limit.is_finite() || !dt_over_mass.is_finite() {
+            return DVec3::splat(f64::NAN);
+        }
+
+        // Solve the local backward-Euler friction update. A force of this magnitude
+        // leaves speed - dt_over_mass * force of slip after this substep.
+        let mut low = 0.0;
+        let mut high = limit.min(speed / dt_over_mass);
+        for _ in 0..32 {
+            let force = low + 0.5 * (high - low);
+            let remaining_slip = (speed - dt_over_mass * force).max(0.0);
+            if force < limit * (remaining_slip / transition_speed).tanh() {
+                low = force;
+            } else {
+                high = force;
+            }
+        }
+        -(slip / speed) * (low + 0.5 * (high - low))
+    }
 }
 
 #[derive(Debug, Clone, Copy, Default)]
@@ -94,6 +160,8 @@ pub struct MountedStep {
     pub rim_torque: DVec3,
     /// Sum of upward normal forces at the start of the step, in newtons.
     pub floor_force_n: f64,
+    /// Sum of the tangential forces applied over the step, in world newtons with zero Y.
+    pub floor_tangential_force: DVec3,
 }
 
 #[derive(Debug, Clone)]
@@ -175,6 +243,11 @@ impl MountedTyre {
         self.tyre.chamber_reading()
     }
 
+    /// Set or remove the floor used by subsequent steps.
+    pub fn set_floor(&mut self, floor: Option<FlatFloor>) {
+        self.floor = floor;
+    }
+
     /// Total rim mass (kg) and local principal inertia (kg·m²) including both bead rings.
     /// Model the bare rim as a thin hoop at the bead radius and centred between the rings.
     pub fn rim_mass_properties(
@@ -221,7 +294,7 @@ impl MountedTyre {
         Ok(())
     }
 
-    /// Advance the free nodes with gravity (world m/s²) and normal contact.
+    /// Advance the free nodes with gravity (world m/s²) and floor contact.
     /// The caller applies the returned wrench and gravity to the rim, advances it on
     /// the same clock, then calls [Self::sync_rim] with its new motion.
     pub fn step(
@@ -230,24 +303,37 @@ impl MountedTyre {
         gravity: DVec3,
     ) -> Result<MountedStep, ElasticTyreError> {
         let mut floor_force_n = 0.0;
-        self.external_forces.fill(DVec3::ZERO);
-        for index in self.tread_nodes.clone() {
-            let normal = self.floor.map_or(0.0, |floor| {
-                floor.normal_force_n(self.tyre.positions[index], self.tyre.velocities[index])
-            });
-            floor_force_n += normal;
-            self.external_forces[index] = gravity * self.tyre.node_mass + DVec3::Y * normal;
-        }
-        if !floor_force_n.is_finite() {
-            return Err(ElasticTyreError::NonFiniteStep);
-        }
-        let (rim_force, rim_torque) =
-            self.tyre
-                .advance(dt_seconds, &self.external_forces, Some(self.rim.centre))?;
+        let mut floor_tangential_force = DVec3::ZERO;
+        self.external_forces[self.tread_nodes.clone()].fill(gravity * self.tyre.node_mass);
+        let dt_over_mass = dt_seconds / self.tyre.node_mass;
+        let floor = self.floor;
+        let tread_nodes = self.tread_nodes.clone();
+        let (rim_force, rim_torque) = self.tyre.advance_with_contact(
+            dt_seconds,
+            &self.external_forces,
+            Some(self.rim.centre),
+            |positions, velocities, forces| {
+                let Some(floor) = floor else { return Ok(()) };
+                for index in tread_nodes {
+                    let normal = floor.normal_force_n(positions[index], velocities[index]);
+                    let predicted_velocity = velocities[index] + forces[index] * dt_over_mass;
+                    let tangential =
+                        floor.tangential_force(normal, predicted_velocity, dt_over_mass);
+                    floor_force_n += normal;
+                    floor_tangential_force += tangential;
+                    forces[index] += DVec3::Y * normal + tangential;
+                }
+                if !floor_force_n.is_finite() || !floor_tangential_force.is_finite() {
+                    return Err(ElasticTyreError::NonFiniteStep);
+                }
+                Ok(())
+            },
+        )?;
         Ok(MountedStep {
             rim_force,
             rim_torque,
             floor_force_n,
+            floor_tangential_force,
         })
     }
 
@@ -402,11 +488,67 @@ mod tests {
         assert!(patch.polygons.iter().flatten().all(|point| point.y == 0.0));
         let result = mounted.step(1.0 / 3840.0, DVec3::ZERO).unwrap();
         assert!(result.floor_force_n > 0.0);
+        assert_eq!(result.floor_tangential_force, DVec3::ZERO);
         assert!(
             mounted
                 .velocities()
                 .iter()
                 .all(|v| v.x.abs() < 1.0e-12 && v.z.abs() < 1.0e-12)
         );
+    }
+
+    #[test]
+    fn moving_floor_friction_opposes_relative_slip_with_a_shared_limit() {
+        let belt_velocity = DVec3::NEG_Z * 2.0;
+        let floor = FlatFloor::new(0.0, 35_000.0, 150.0).unwrap();
+        assert!(floor.with_friction(-1.0, 0.1).is_err());
+        assert!(floor.with_friction(0.8, 0.0).is_err());
+        assert!(floor.with_surface_velocity(DVec3::Y).is_err());
+        assert!(floor.with_surface_velocity(DVec3::splat(f64::NAN)).is_err());
+        let floor = floor
+            .with_friction(0.8, 0.1)
+            .unwrap()
+            .with_surface_velocity(belt_velocity)
+            .unwrap();
+        assert_eq!(floor.tangential_force(0.0, DVec3::ZERO, 0.0), DVec3::ZERO);
+        assert_eq!(
+            floor.tangential_force(100.0, belt_velocity + DVec3::Y, 0.0),
+            DVec3::ZERO
+        );
+        let force = floor.tangential_force(100.0, belt_velocity + DVec3::X * 0.1, 0.0);
+        assert!((force.x + 80.0 * 1.0_f64.tanh()).abs() < 1.0e-8);
+        let slip = DVec3::new(3.0, 0.0, -4.0);
+        let force = floor.tangential_force(100.0, belt_velocity + slip, 0.0);
+        assert!(force.dot(slip) < 0.0);
+        assert!(force.cross(slip).length() < 1.0e-10);
+        assert!((force.length() - 80.0).abs() < 1.0e-8);
+        let force = floor.tangential_force(100.0, belt_velocity + DVec3::X * 0.01, 0.005);
+        let remaining_slip = 0.01 + force.x * 0.005;
+        assert!(remaining_slip > 0.0 && remaining_slip < 0.01);
+        assert!((force.x + 80.0 * (remaining_slip / 0.1).tanh()).abs() < 1.0e-8);
+
+        let rim = RimMotion {
+            centre: DVec3::Y * 0.325,
+            ..Default::default()
+        };
+        let mut mounted = MountedTyre::new(rest_tyre(), rim, Some(floor)).unwrap();
+        let dt = 1.0 / 3840.0;
+        let step = mounted.step(dt, DVec3::ZERO).unwrap();
+        let expected =
+            floor.tangential_force(step.floor_force_n, DVec3::ZERO, dt / mounted.tyre.node_mass);
+        assert!(expected.z < 0.0);
+        assert!((step.floor_tangential_force - expected).length() < 1.0e-10);
+        assert!(mounted.velocities().iter().any(|velocity| velocity.z < 0.0));
+
+        // The penetrated centre tread is moving up fast enough to lose support.
+        let rim = RimMotion {
+            linear_velocity: DVec3::Y * 2.0,
+            ..rim
+        };
+        let mut mounted = MountedTyre::new(rest_tyre(), rim, Some(floor)).unwrap();
+        assert!(mounted.floor_penetration_m() > 0.0);
+        let step = mounted.step(1.0 / 3840.0, DVec3::ZERO).unwrap();
+        assert_eq!(step.floor_force_n, 0.0);
+        assert_eq!(step.floor_tangential_force, DVec3::ZERO);
     }
 }

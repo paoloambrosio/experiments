@@ -12,7 +12,7 @@ use crate::elastic_experiment::{Experiment, PRESETS_PA, TICKS_PER_SECOND};
 
 pub const CLEARANCE_M: f64 = 0.10;
 pub const GRAVITY_MPS2: f32 = 9.81;
-const RIM_MASS_KG: f64 = 12.0;
+pub const RIM_MASS_KG: f64 = 12.0;
 pub const WHEEL_WEIGHT_N: f64 = 196.2;
 pub const TIMEOUT_S: u32 = 10;
 const FLOOR_STIFFNESS: f64 = 35_000.0;
@@ -43,17 +43,9 @@ pub struct DropBench {
 
 impl DropBench {
     fn new(preset: usize, rate: u32, auto_release: bool) -> Self {
-        let mut elastic_config = ElasticTyreConfig::default();
-        elastic_config.circumferential.damping *= IMPACT_BEAM_DAMPING_SCALE;
-        elastic_config.cross_section.damping *= IMPACT_BEAM_DAMPING_SCALE;
-        elastic_config.diagonal.damping *= IMPACT_BEAM_DAMPING_SCALE;
         Self {
             preset,
-            preparation: Some(Experiment::radial_with_config(
-                rate,
-                PRESETS_PA[preset],
-                elastic_config,
-            )),
+            preparation: Some(prepare_wheel(rate, PRESETS_PA[preset])),
             baseline: None,
             wheel: None,
             run: DropRun::default(),
@@ -128,8 +120,19 @@ fn update_bench(
     }
 }
 
-fn mount(preparation: Experiment) -> Result<MountedTyre, ElasticTyreError> {
-    let floor = FlatFloor::new(0.0, FLOOR_STIFFNESS, FLOOR_DAMPING)?;
+pub fn prepare_wheel(rate: u32, pressure_pa: f64) -> Experiment {
+    let mut config = ElasticTyreConfig::default();
+    config.circumferential.damping *= IMPACT_BEAM_DAMPING_SCALE;
+    config.cross_section.damping *= IMPACT_BEAM_DAMPING_SCALE;
+    config.diagonal.damping *= IMPACT_BEAM_DAMPING_SCALE;
+    Experiment::radial_with_config(rate, pressure_pa, config)
+}
+
+pub fn bench_floor() -> FlatFloor {
+    FlatFloor::new(0.0, FLOOR_STIFFNESS, FLOOR_DAMPING).expect("bench floor settings")
+}
+
+pub fn mount(preparation: Experiment) -> Result<MountedTyre, ElasticTyreError> {
     let lowest = preparation.tyre.positions()[preparation.segments..4 * preparation.segments]
         .iter()
         .map(|position| position.y)
@@ -140,7 +143,7 @@ fn mount(preparation: Experiment) -> Result<MountedTyre, ElasticTyreError> {
             centre: DVec3::Y * (CLEARANCE_M - lowest),
             ..default()
         },
-        Some(floor),
+        Some(bench_floor()),
     )
 }
 
@@ -169,7 +172,7 @@ pub struct SettledDrop {
 }
 
 impl DropRun {
-    fn record(&mut self, tyre: &MountedTyre, floor_force_n: f64, rate: u32) {
+    pub fn record(&mut self, tyre: &MountedTyre, floor_force_n: f64, rate: u32) {
         self.steps += 1;
         let time_s = f64::from(self.steps) / f64::from(rate);
         let rim = tyre.rim();

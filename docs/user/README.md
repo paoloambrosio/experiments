@@ -23,6 +23,28 @@ The default lab starts with the reinforced tyre sealed at **0 kPa gauge** and he
 | Scroll | Zoom in or out |
 | **R** | Reset the camera orientation and zoom |
 
+### Rolling and grip
+
+```sh
+cargo run -p vehicle_lab -- --rolling-lab
+```
+
+The rig seals the reinforced tyre at **30 kPa gauge**, settles the 20 kg wheel on a stationary belt, then starts the belt at **−2 m/s along Z**. The axle stays upright at a fixed Z position. It can rise, move laterally along X, and spin about X. Each replay starts from the same free-rolling state.
+
+| Control | Action |
+| --- | --- |
+| **1** | Select free rolling |
+| **2** | Select +10 N·m drive torque |
+| **3** | Select −10 N·m braking torque |
+| **4** | Select +30 N lateral axle load |
+| **Enter** | Run or replay the selected case once the baseline is ready |
+| **Backspace** | Return to the free-rolling baseline or restart preparation |
+| Left mouse button + drag | Orbit around the wheel |
+| Scroll | Zoom in or out |
+| **R** | Reset the camera orientation and zoom |
+
+The panel shows live readings during the run and the mean over two complete revolutions at the end. Blue and coral axle arrows show the tyre force transmitted along Z and X, respectively. Positive longitudinal slip means the tyre spins faster than free rolling at the same belt speed. Positive slip angle means the axle moves toward +X relative to the belt.
+
 ### Inflation and tread press
 
 ```sh
@@ -149,7 +171,31 @@ The bundle includes the bare rim mass plus the mass and inertia of both bead rin
 
 For a caller-managed rigid body, call `MountedTyre::step` with the substep duration and gravity to get force and torque about the rim centre. Apply that wrench and the rim's gravity, then call `sync_rim` with the updated pose and velocities. The rigid body should include the bead mass and inertia returned by `rim_mass_properties`.
 
+### Enable grip on a flat floor
+
+`FlatFloor::new` creates a stationary, frictionless floor. Set a dimensionless coefficient and a positive transition speed (m/s) to enable grip. A moving surface takes a world-space velocity in m/s with a zero Y component.
+
+```rust
+use bevy::math::DVec3;
+use vehicle_physics::mounted_tyre::FlatFloor;
+
+let belt = FlatFloor::new(0.0, 35_000.0, 150.0)?
+    .with_friction(0.8, 0.1)?
+    .with_surface_velocity(DVec3::NEG_Z * 2.0)?;
+// mounted is an existing MountedTyre.
+mounted.set_floor(Some(belt));
+```
+
+`AvianTyre::set_floor` also updates the surface for subsequent substeps. `MountedStep::floor_force_n` gives total upward support, `floor_tangential_force` gives the horizontal floor force on the tyre, and `rim_force` gives the bead force on the rim. All are in newtons and use world axes. At a supported node the horizontal force opposes its motion relative to the belt, with a shared longitudinal and lateral limit of the coefficient times that node's normal force.
+
 ## Run the headless comparisons
+
+```sh
+cargo run -p vehicle_lab -- --rolling-report
+cargo run -p vehicle_lab -- --rolling-report --samples
+```
+
+The rolling report measures spin, signed slip ratio, slip angle, normal support, and floor and axle forces along Z and X for all four load cases. It checks the expected slip and force directions and compares the means at 3,840 and 7,680 substeps/s. `--samples` adds tagged CSV rows at 60 Hz from the 3,840 substeps/s runs, with fractional slip ratio and slip angle in degrees.
 
 ```sh
 cargo run -p vehicle_lab -- --drop-report

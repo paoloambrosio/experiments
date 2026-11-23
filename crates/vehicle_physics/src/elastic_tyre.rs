@@ -110,7 +110,7 @@ impl fmt::Display for ElasticTyreError {
                 "tread multipliers must be at least one and effective coefficients must be finite and nonnegative",
             ),
             Self::InvalidRimMotion => f.write_str("rim motion must be finite with a unit rotation"),
-            Self::InvalidFloor => f.write_str("floor height and coefficients must be finite, with nonnegative coefficients"),
+            Self::InvalidFloor => f.write_str("floor settings must be finite, with nonnegative coefficients, a positive friction transition speed, and horizontal surface velocity"),
         }
     }
 }
@@ -373,6 +373,16 @@ impl ElasticTyre {
         external_forces: &[DVec3],
         rim_centre: Option<DVec3>,
     ) -> Result<(DVec3, DVec3), ElasticTyreError> {
+        self.advance_with_contact(dt_seconds, external_forces, rim_centre, |_, _, _| Ok(()))
+    }
+
+    pub(crate) fn advance_with_contact(
+        &mut self,
+        dt_seconds: f64,
+        external_forces: &[DVec3],
+        rim_centre: Option<DVec3>,
+        apply_contact: impl FnOnce(&[DVec3], &[DVec3], &mut [DVec3]) -> Result<(), ElasticTyreError>,
+    ) -> Result<(DVec3, DVec3), ElasticTyreError> {
         use ElasticTyreError::*;
 
         if !dt_seconds.is_finite() || dt_seconds <= 0.0 {
@@ -412,6 +422,7 @@ impl ElasticTyre {
         if let Some(chamber) = &self.chamber {
             chamber.add_forces(&self.positions, &mut self.forces);
         }
+        apply_contact(&self.positions, &self.velocities, &mut self.forces)?;
         if self.forces.iter().any(|force| !force.is_finite()) {
             return Err(NonFiniteStep);
         }

@@ -1,0 +1,47 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 840 350" role="img" aria-labelledby="title description">
+  <title id="title">Moving-belt rig and measured tyre forces</title>
+  <desc id="description">Side view of the drive case and plan view of the lateral case. The belt moves toward negative Z. Drive makes the rim spin clockwise as viewed in the side panel and produces positive Z tyre force. A positive X axle load produces negative X tyre force in the plan view.</desc>
+  <defs>
+    <marker id="axis" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="m0 0 10 5-10 5z" fill="#475569"/></marker>
+    <marker id="blue" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="m0 0 10 5-10 5z" fill="#1464a0"/></marker>
+    <marker id="orange" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="m0 0 10 5-10 5z" fill="#a23b22"/></marker>
+  </defs>
+  <rect width="840" height="350" rx="12" fill="#f8fafc"/>
+  <path d="M420 20v310" stroke="#cbd5e1"/>
+  <g font-family="system-ui, sans-serif" fill="#172939" font-size="14">
+    <text x="26" y="34" font-size="18" font-weight="600">Drive · side view</text>
+    <text x="445" y="34" font-size="18" font-weight="600">Lateral load · top view</text>
+    <g stroke="#475569" stroke-width="2" marker-end="url(#axis)">
+      <path d="M43 254v-32"/><path d="M43 254h32"/>
+      <path d="M468 254v-32"/><path d="M468 254h32"/>
+    </g>
+    <text x="30" y="213">+Y</text><text x="80" y="259">+Z</text>
+    <text x="455" y="213">+Z</text><text x="505" y="259">+X</text>
+    <path d="M53 272h322v26H53z" fill="#e2e8f0"/>
+    <path d="M53 272h322" stroke="#475569" stroke-width="2"/>
+    <path d="M199 77a100 100 0 0 1 46 188q-8 5-24 5h-44q-16 0-24-5A100 100 0 0 1 199 77z" fill="#d9ebe7" stroke="#217a6c" stroke-width="2"/>
+    <circle cx="199" cy="176" r="57" fill="#edf3f8" stroke="#7892a7" stroke-width="2"/>
+    <circle cx="199" cy="176" r="5" fill="#172939"/>
+    <path d="M155 150a51 51 0 0 1 88 0" fill="none" stroke="#a23b22" stroke-width="2.5" marker-end="url(#orange)"/>
+    <text x="199" y="107" text-anchor="middle" fill="#a23b22">+10 N·m about X</text>
+    <g fill="none" stroke="#1464a0" stroke-width="2.5" marker-end="url(#blue)">
+      <path d="M205 176h99"/><path d="M205 263h99"/>
+    </g>
+    <text x="311" y="172" fill="#1464a0">Axle force</text>
+    <text x="311" y="259" fill="#1464a0">Tread force</text>
+    <path d="M248 285h-92" stroke="#475569" stroke-width="2" marker-end="url(#axis)"/>
+    <text x="199" y="321" text-anchor="middle">Belt velocity −2 m/s along Z</text>
+    <rect x="490" y="54" width="304" height="150" rx="6" fill="#e2e8f0" stroke="#94a3b8"/>
+    <rect x="617" y="65" width="55" height="128" rx="16" fill="#d9ebe7" stroke="#217a6c" stroke-width="2"/>
+    <path d="M602 129h84" stroke="#7892a7" stroke-width="3"/>
+    <circle cx="644.5" cy="129" r="5" fill="#172939"/>
+    <path d="M650 129h101" stroke="#a23b22" stroke-width="2.5" marker-end="url(#orange)"/>
+    <text x="758" y="119" text-anchor="end" fill="#a23b22">+30 N applied</text>
+    <path d="M639 129h-101" stroke="#1464a0" stroke-width="2.5" marker-end="url(#blue)"/>
+    <text x="530" y="119" fill="#1464a0">Axle force</text>
+    <path d="M646 222h63" stroke="#475569" stroke-width="2" marker-end="url(#axis)"/>
+    <text x="675" y="247" text-anchor="middle">Lateral drift</text>
+    <path d="M757 150v40" stroke="#475569" stroke-width="2" marker-end="url(#axis)"/>
+    <text x="756" y="224" text-anchor="middle">Belt</text>
+  </g>
+</svg>
