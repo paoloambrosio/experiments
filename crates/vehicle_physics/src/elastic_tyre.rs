@@ -7,6 +7,7 @@ use bevy_math::DVec3;
 use crate::{
     beam_damage::{BeamDamage, BeamDamageConfig},
     pressure::{ChamberReading, PressureChamber, PressureConfig, PressureTriangle},
+    puncture::{Puncture, PunctureConfig, PunctureReading, TornPanel},
     tread_reinforcement::{CrownSpring, TreadReinforcementConfig},
     tyre::{BeamFamily, RingRole, TyreTopology},
 };
@@ -75,6 +76,8 @@ pub enum ElasticTyreError {
     InvalidRimMotion,
     InvalidFloor,
     InvalidKerb,
+    InvalidPuncture,
+    PunctureRequiresDamage,
 }
 
 impl fmt::Display for ElasticTyreError {
@@ -114,6 +117,8 @@ impl fmt::Display for ElasticTyreError {
             Self::InvalidRimMotion => f.write_str("rim motion must be finite with a unit rotation"),
             Self::InvalidFloor => f.write_str("floor settings must be finite, with nonnegative coefficients, a positive friction transition speed, and horizontal surface velocity"),
             Self::InvalidKerb => f.write_str("kerb dimensions must be finite, with a positive edge radius smaller than the rise"),
+            Self::InvalidPuncture => f.write_str("effective opening area must be nonnegative and finite, with opening fraction and discharge coefficient in (0, 1]"),
+            Self::PunctureRequiresDamage => f.write_str("puncture requires axial beam damage to be enabled"),
         }
     }
 }
@@ -157,6 +162,7 @@ pub struct ElasticTyre {
     pub(crate) bead_nodes: Vec<usize>,
     pub(crate) node_mass: f64,
     chamber: Option<PressureChamber>,
+    puncture: Option<Puncture>,
     forces: Vec<DVec3>,
     pub(crate) next_positions: Vec<DVec3>,
     pub(crate) next_velocities: Vec<DVec3>,
@@ -242,6 +248,7 @@ impl ElasticTyre {
             bead_nodes,
             node_mass,
             chamber: None,
+            puncture: None,
         })
     }
 
@@ -330,6 +337,39 @@ impl ElasticTyre {
         self.chamber.as_ref().map(PressureChamber::reading)
     }
 
+    /// Chamber air mass in kg, using the shared isothermal air temperature.
+    pub fn chamber_air_mass_kg(&self) -> Option<f64> {
+        self.chamber.as_ref().map(PressureChamber::air_mass_kg)
+    }
+
+    /// Enable sidewall puncture for a chamber with axial beam damage. Existing
+    /// fractures contribute to the opening when enabled or recalibrated.
+    pub fn with_puncture(mut self, config: PunctureConfig) -> Result<Self, ElasticTyreError> {
+        if self.chamber.is_none() {
+            return Err(ElasticTyreError::VentedTyre);
+        }
+        let states = self
+            .beam_damage()
+            .ok_or(ElasticTyreError::PunctureRequiresDamage)?;
+        let mut puncture = Puncture::new(config, &self.topology, &self.rest_positions);
+        let area = puncture.stage(states);
+        puncture.commit(area, 0.0);
+        self.puncture = Some(puncture);
+        Ok(self)
+    }
+
+    /// Airflow and total effective opening, when the puncture model is enabled.
+    pub fn puncture_reading(&self) -> Option<PunctureReading> {
+        self.puncture.as_ref().map(|puncture| puncture.reading)
+    }
+
+    /// Sidewall openings in side and segment order. Empty for an intact tyre.
+    pub fn torn_panels(&self) -> &[TornPanel] {
+        self.puncture
+            .as_ref()
+            .map_or(&[], |puncture| puncture.torn_panels.as_slice())
+    }
+
     /// Outward-facing pressure triangles indexed by node. Empty for a vented tyre.
     pub fn pressure_triangles(&self) -> &[PressureTriangle] {
         self.chamber
@@ -383,6 +423,9 @@ impl ElasticTyre {
         }
         if let Some(chamber) = &mut self.chamber {
             chamber.reset();
+        }
+        if let Some(puncture) = &mut self.puncture {
+            puncture.reset();
         }
     }
 
@@ -495,11 +538,15 @@ impl ElasticTyre {
             self.next_velocities[index] = velocity;
             self.next_positions[index] = position;
         }
-        self.commit_next()?;
+        self.commit_candidate(dt_seconds)?;
         Ok((force_on_rim, torque_on_rim))
     }
 
     pub(crate) fn commit_next(&mut self) -> Result<(), ElasticTyreError> {
+        self.commit_candidate(0.0)
+    }
+
+    fn commit_candidate(&mut self, dt_seconds: f64) -> Result<(), ElasticTyreError> {
         use ElasticTyreError::*;
 
         for (index, beam) in self.beams.iter().enumerate() {
@@ -524,7 +571,19 @@ impl ElasticTyre {
         }
 
         if let Some(chamber) = &mut self.chamber {
-            chamber.current = chamber.at_positions(&self.next_positions)?;
+            let candidate = chamber.at_positions(&self.next_positions)?;
+            if let Some(puncture) = &mut self.puncture {
+                let area = puncture.stage(&self.next_damage);
+                let (gas, flow) = if dt_seconds > 0.0 {
+                    chamber.after_air_exchange(candidate, dt_seconds, area, puncture.config)?
+                } else {
+                    (candidate, puncture.reading.outward_mass_flow_kg_s)
+                };
+                puncture.commit(area, flow);
+                chamber.current = gas;
+            } else {
+                chamber.current = candidate;
+            }
         }
         if let Some((_, states)) = &mut self.beam_damage {
             std::mem::swap(states, &mut self.next_damage);
@@ -590,14 +649,16 @@ mod tests {
             PressureConfig::default(),
         )
         .unwrap()
-        .with_beam_damage(BeamDamageConfig::new(0.02, 0.02, 0.06, 0.06).unwrap());
+        .with_beam_damage(BeamDamageConfig::new(0.02, 0.02, 0.06, 0.06).unwrap())
+        .with_puncture(PunctureConfig::new(0.001, 0.65).unwrap())
+        .unwrap();
         let before = tyre.clone();
         for (next, point) in tyre.next_positions.iter_mut().zip(&tyre.positions) {
             *next = point.with_x(-point.x);
         }
         tyre.next_positions[tyre.free_nodes[0]].y += 0.04;
         assert_eq!(
-            tyre.commit_next(),
+            tyre.commit_candidate(1.0 / 3840.0),
             Err(ElasticTyreError::InvalidChamberVolume)
         );
         assert!(tyre.next_damage.iter().any(|state| state.broken()));
@@ -605,6 +666,62 @@ mod tests {
         assert_eq!(tyre.positions(), before.positions());
         assert_eq!(tyre.velocities(), before.velocities());
         assert_eq!(tyre.chamber_reading(), before.chamber_reading());
+        assert_eq!(tyre.chamber_air_mass_kg(), before.chamber_air_mass_kg());
+        assert_eq!(tyre.puncture_reading(), before.puncture_reading());
+        assert_eq!(tyre.torn_panels(), before.torn_panels());
+    }
+
+    #[test]
+    fn tears_persist_through_fill_and_frame_changes_and_exchange_air_once_per_step() {
+        use crate::mounted_tyre::{MountedTyre, RimMotion};
+
+        let topology = TyreTopology::generate(&TyreConfig::default()).unwrap();
+        let mut tyre = ElasticTyre::new_inflated(
+            topology,
+            ElasticTyreConfig::default(),
+            PressureConfig {
+                initial_gauge_pressure_pa: 30_000.0,
+                ..Default::default()
+            },
+        )
+        .unwrap()
+        .with_beam_damage(BeamDamageConfig::new(0.02, 0.02, 0.06, 0.06).unwrap())
+        .with_puncture(PunctureConfig::new(0.001, 0.65).unwrap())
+        .unwrap();
+        let original_mass = tyre.chamber_air_mass_kg();
+        let node = tyre.free_nodes[0];
+        tyre.next_positions[node].y += 0.025;
+        tyre.commit_next().unwrap();
+        assert!(!tyre.torn_panels().is_empty());
+        assert_eq!(tyre.chamber_air_mass_kg(), original_mass);
+        let area = tyre.puncture_reading().unwrap().total_open_area_m2;
+
+        let clone = tyre.clone();
+        tyre.reset();
+        assert_eq!(tyre.chamber_air_mass_kg(), original_mass);
+        assert!(tyre.torn_panels().is_empty());
+        let mut tyre = clone;
+        tyre.set_gauge_pressure(35_000.0).unwrap();
+        assert_eq!(tyre.puncture_reading().unwrap().total_open_area_m2, area);
+        let filled_mass = tyre.chamber_air_mass_kg().unwrap();
+
+        let mut mounted = MountedTyre::new(tyre, RimMotion::default(), None).unwrap();
+        assert_eq!(mounted.chamber_air_mass_kg(), Some(filled_mass));
+        let dt = 1.0 / 3840.0;
+        mounted.step(dt, DVec3::ZERO).unwrap();
+        let mass = mounted.chamber_air_mass_kg().unwrap();
+        let reading = mounted.puncture_reading().unwrap();
+        assert!(mass < filled_mass);
+        assert!((filled_mass - mass - reading.outward_mass_flow_kg_s * dt).abs() < 1e-14);
+        let rim = RimMotion {
+            centre: DVec3::Y * 0.0001,
+            ..Default::default()
+        };
+        mounted.sync_rim(rim).unwrap();
+        assert_eq!(mounted.chamber_air_mass_kg(), Some(mass));
+        let fixed = mounted.into_fixed_bead_tyre().unwrap();
+        assert_eq!(fixed.chamber_air_mass_kg(), Some(mass));
+        assert!(fixed.puncture_reading().unwrap().total_open_area_m2 >= area);
     }
 
     #[test]

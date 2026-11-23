@@ -6,6 +6,8 @@ mod impact_experiment;
 mod impact_lab;
 mod impact_report;
 mod inflation_report;
+mod puncture_experiment;
+mod puncture_report;
 mod radial_report;
 mod rolling_experiment;
 mod rolling_lab;
@@ -134,6 +136,7 @@ fn main() -> ExitCode {
     let mut inflation_lab = false;
     let mut rolling_lab = false;
     let mut impact_lab = false;
+    let mut puncture_lab = false;
     for argument in std::env::args_os().skip(1) {
         let result = if argument == "--elastic-report" {
             elastic_experiment::report()
@@ -147,10 +150,13 @@ fn main() -> ExitCode {
             rolling_report::report(std::env::args_os().any(|argument| argument == "--samples"))
         } else if argument == "--impact-report" {
             impact_report::report(std::env::args_os().any(|argument| argument == "--samples"))
+        } else if argument == "--puncture-report" {
+            puncture_report::report(std::env::args_os().any(|argument| argument == "--samples"))
         } else {
             inflation_lab |= argument == "--inflation-lab";
             rolling_lab |= argument == "--rolling-lab";
             impact_lab |= argument == "--impact-lab";
+            puncture_lab |= argument == "--puncture-lab";
             continue;
         };
         return match result {
@@ -162,7 +168,9 @@ fn main() -> ExitCode {
         };
     }
 
-    if impact_lab {
+    if puncture_lab {
+        impact_lab::run_puncture();
+    } else if impact_lab {
         impact_lab::run();
     } else if rolling_lab {
         rolling_lab::run();

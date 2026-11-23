@@ -2,7 +2,11 @@
 
 use bevy_math::DVec3;
 
-use crate::{elastic_tyre::ElasticTyreError, tyre::TyreTopology};
+use crate::{
+    elastic_tyre::ElasticTyreError,
+    puncture::{AIR_RT, PunctureConfig},
+    tyre::TyreTopology,
+};
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct PressureConfig {
@@ -41,6 +45,57 @@ pub struct ChamberReading {
 pub(crate) struct GasState {
     reading: ChamberReading,
     charge: f64,
+}
+
+impl GasState {
+    fn exchange_air(
+        self,
+        dt: f64,
+        ambient_pa: f64,
+        opening_m2: f64,
+        config: PunctureConfig,
+    ) -> Result<(Self, f64), ElasticTyreError> {
+        if opening_m2 == 0.0 {
+            return Ok((self, 0.0));
+        }
+        let volume_m3 = self.reading.volume_m3;
+        let flow =
+            config.outward_mass_flow_kg_s(opening_m2, self.charge / volume_m3, ambient_pa)?;
+        let ambient_charge = ambient_pa * volume_m3;
+        let charge = if flow > 0.0 {
+            (self.charge - flow * dt * AIR_RT).max(ambient_charge)
+        } else if flow < 0.0 {
+            (self.charge - flow * dt * AIR_RT).min(ambient_charge)
+        } else {
+            self.charge
+        };
+        if charge == self.charge {
+            return Ok((self, 0.0));
+        }
+        let absolute = charge / volume_m3;
+        let actual_flow = ((self.charge - charge) / AIR_RT) / dt;
+        if !charge.is_finite()
+            || !(absolute.is_finite() && absolute > 0.0)
+            || !actual_flow.is_finite()
+        {
+            return Err(ElasticTyreError::InvalidPressure);
+        }
+        let gauge_pressure_pa = if charge == ambient_charge {
+            0.0
+        } else {
+            absolute - ambient_pa
+        };
+        Ok((
+            Self {
+                reading: ChamberReading {
+                    volume_m3,
+                    gauge_pressure_pa,
+                },
+                charge,
+            },
+            actual_flow,
+        ))
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -93,6 +148,20 @@ impl PressureChamber {
 
     pub(crate) fn reading(&self) -> ChamberReading {
         self.current.reading
+    }
+
+    pub(crate) fn air_mass_kg(&self) -> f64 {
+        self.current.charge / AIR_RT
+    }
+
+    pub(crate) fn after_air_exchange(
+        &self,
+        candidate: GasState,
+        dt: f64,
+        opening_m2: f64,
+        config: PunctureConfig,
+    ) -> Result<(GasState, f64), ElasticTyreError> {
+        candidate.exchange_air(dt, self.ambient_pressure_pa, opening_m2, config)
     }
 
     pub(crate) fn set_gauge_pressure(
@@ -208,6 +277,26 @@ mod tests {
 
     use super::*;
     use crate::tyre::TyreConfig;
+
+    #[test]
+    fn fixed_volume_air_exchange_limits_inflow_and_outflow_at_ambient() {
+        let ambient = 101_325.0;
+        let volume = 0.025;
+        let config = PunctureConfig::new(0.001, 0.65).unwrap();
+        for initial_gauge in [-30_000.0, 30_000.0] {
+            let initial = PressureChamber::charge_at(volume, ambient, initial_gauge).unwrap();
+            let (partial, flow) = initial.exchange_air(0.01, ambient, 1e-5, config).unwrap();
+            assert!(partial.reading.gauge_pressure_pa.abs() < initial_gauge.abs());
+            assert_eq!(flow.signum(), initial_gauge.signum());
+            assert_eq!(partial.reading.volume_m3, volume);
+            let (equalized, _) = partial.exchange_air(100.0, ambient, 1e-3, config).unwrap();
+            assert_eq!(equalized.reading.gauge_pressure_pa, 0.0);
+            assert_eq!(equalized.charge, ambient * volume);
+            let (next, flow) = equalized.exchange_air(0.01, ambient, 1e-3, config).unwrap();
+            assert_eq!(next.charge, equalized.charge);
+            assert_eq!(flow, 0.0);
+        }
+    }
 
     #[test]
     fn surface_is_closed_and_consistently_wound_at_seam_and_rim() {

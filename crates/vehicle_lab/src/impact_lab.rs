@@ -11,6 +11,7 @@ use crate::{
         damage_counts, launch_height_m,
     },
     orbit_camera,
+    puncture_experiment::PunctureCase,
 };
 
 const INTACT: Color = Color::srgb(0.30, 0.66, 0.65);
@@ -18,6 +19,13 @@ const YIELDED: Color = Color::srgb(1.0, 0.71, 0.26);
 const BROKEN: Color = Color::srgb(1.0, 0.32, 0.35);
 const ORIGINAL: Color = Color::srgb(0.78, 0.84, 0.94);
 const ROAD: Color = Color::srgb(0.26, 0.38, 0.51);
+const TEAR: Color = Color::srgb(1.0, 0.48, 0.95);
+
+#[derive(Resource, Clone, Copy, PartialEq, Eq)]
+enum LabMode {
+    Impact,
+    Puncture,
+}
 
 #[derive(Component)]
 struct RimMesh;
@@ -29,12 +37,21 @@ struct ImpactReadout;
 struct SelectedSpeed(usize);
 
 pub fn run() {
+    run_lab(LabMode::Impact, "Vehicle Lab | Kerb Impact");
+}
+
+pub fn run_puncture() {
+    run_lab(LabMode::Puncture, "Vehicle Lab | Puncture");
+}
+
+fn run_lab(mode: LabMode, title: &str) {
     let mut app = App::new();
     app.insert_resource(ClearColor(Color::srgb(0.047, 0.063, 0.091)))
+        .insert_resource(mode)
         .init_resource::<SelectedSpeed>()
         .add_plugins(DefaultPlugins.set(WindowPlugin {
             primary_window: Some(Window {
-                title: "Vehicle Lab | Kerb Impact".into(),
+                title: title.into(),
                 resolution: WindowResolution::new(1120, 720),
                 ..default()
             }),
@@ -52,6 +69,7 @@ fn setup(
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
     mut gizmos: ResMut<Assets<GizmoAsset>>,
+    mode: Res<LabMode>,
 ) {
     let orbit = OrbitCamera {
         focus: Vec3::new(0.0, 0.27, -0.45),
@@ -93,19 +111,26 @@ fn setup(
             BackgroundColor(Color::srgb(0.085, 0.112, 0.155)),
         ))
         .with_children(|panel| {
-            panel.spawn((Text::new("Kerb impact"), TextFont::from_font_size(23.0)));
+            let puncture = *mode == LabMode::Puncture;
+            let heading = if puncture { "Sidewall puncture" } else { "Kerb impact" };
+            panel.spawn((Text::new(heading), TextFont::from_font_size(23.0)));
             panel.spawn((ImpactReadout, Text::default(), TextFont::from_font_size(16.0)));
             for (label, colour) in [
                 ("Gold   Yielded beam", YIELDED),
                 ("Red    Broken beam", BROKEN),
-                ("White  Original tread", ORIGINAL),
+                if puncture { ("Pink   Torn panel", TEAR) } else { ("White  Original tread", ORIGINAL) },
             ] {
                 panel.spawn((Text::new(label), TextFont::from_font_size(14.0), TextColor(colour)));
             }
             let [slow, medium, fast] = SPEEDS_MPS;
+            let cases = if puncture {
+                PunctureCase::ALL.iter().enumerate().map(|(i, case)| format!("{}  {}", i + 1, case.name())).collect::<Vec<_>>().join("\n")
+            } else {
+                format!("1  {slow}   2  {medium}   3  {fast} m/s")
+            };
             panel.spawn((
                 Text::new(format!(
-                    "1  {slow}   2  {medium}   3  {fast} m/s\nEnter   Strike / replay\nBackspace   Reset\nLeft drag   Orbit\nScroll   Zoom\nR   Reset view"
+                    "{cases}\nEnter   Strike / replay\nBackspace   Reset\nLeft drag   Orbit\nScroll   Zoom\nR   Reset view"
                 )),
                 TextFont::from_font_size(14.0),
                 TextColor(Color::srgb(0.77, 0.83, 0.91)),
@@ -117,6 +142,7 @@ fn input(
     keys: Res<ButtonInput<KeyCode>>,
     mut selected: ResMut<SelectedSpeed>,
     mut bench: ResMut<ImpactBench>,
+    mode: Res<LabMode>,
 ) {
     for (index, key) in [KeyCode::Digit1, KeyCode::Digit2, KeyCode::Digit3]
         .into_iter()
@@ -129,7 +155,10 @@ fn input(
     if keys.just_pressed(KeyCode::Backspace) {
         bench.reset();
     } else if keys.just_pressed(KeyCode::Enter) {
-        bench.launch(SPEEDS_MPS[selected.0], false);
+        match *mode {
+            LabMode::Impact => bench.launch(SPEEDS_MPS[selected.0], false),
+            LabMode::Puncture => bench.launch_puncture(PunctureCase::ALL[selected.0]),
+        }
     }
 }
 
@@ -142,17 +171,21 @@ fn draw(
     mut camera: Single<&mut OrbitCamera>,
     mut rim: Single<&mut Transform, With<RimMesh>>,
     mut readout: Single<&mut Text, With<ImpactReadout>>,
+    mode: Res<LabMode>,
 ) {
     if !bench.is_changed() && !selected.is_changed() {
         return;
     }
     let mut lines = assets.get_mut(&gizmo.handle).expect("impact gizmo");
     lines.clear();
-    draw_road(&mut lines);
-    let wheel = bench
+    let live_wheel = bench
         .wheel
         .and_then(|wheel| wheels.get(wheel).ok())
         .map(AvianTyre::tyre);
+    let puncture_run = bench.puncture.as_ref();
+    let wheel = puncture_run
+        .and_then(|run| run.final_tyre.as_ref())
+        .or(live_wheel);
     let local_tyre = bench
         .unloaded
         .as_ref()
@@ -190,6 +223,7 @@ fn draw(
     rim.translation = centre;
     rim.rotation = rotation * Quat::from_rotation_z(-FRAC_PI_2);
     camera.focus = Vec3::new(0.0, 0.33, centre.z + 0.26);
+    draw_road(&mut lines, centre.z);
 
     if let Some((topology, positions, states)) = mesh {
         for (index, beam) in topology.beams().iter().enumerate() {
@@ -210,6 +244,33 @@ fn draw(
             }
         }
     }
+    if let Some(wheel) = wheel {
+        for panel in wheel.torn_panels() {
+            let offset = (wheel.rim().rotation * bevy::math::DVec3::X).as_vec3()
+                * (wheel.topology().nodes()[panel.nodes[0]]
+                    .rest_position
+                    .x
+                    .signum()
+                    * 0.004);
+            let points = panel
+                .nodes
+                .map(|node| wheel.positions()[node].as_vec3() + offset);
+            for index in 0..points.len() {
+                lines.line(points[index], points[(index + 1) % points.len()], TEAR);
+            }
+            let centre: Vec3 = points.iter().sum::<Vec3>() * 0.25;
+            lines.line(
+                centre.lerp(points[0], 0.3),
+                centre.lerp(points[2], 0.3),
+                TEAR,
+            );
+            lines.line(
+                centre.lerp(points[1], 0.3),
+                centre.lerp(points[3], 0.3),
+                TEAR,
+            );
+        }
+    }
     if bench.unloaded.is_some()
         && let Some(baseline) = &bench.baseline
     {
@@ -228,17 +289,39 @@ fn draw(
     let phase = match bench.phase {
         Phase::Inflating => "Inflating to 30 kPa",
         Phase::Ready => "Ready",
+        Phase::Coasting if puncture_run.is_some_and(|run| run.last.over_top) => {
+            "Coasting on kerb top"
+        }
+        Phase::Coasting if puncture_run.is_some_and(|run| run.contact.is_some()) => "Kerb strike",
         Phase::Coasting if bench.run.contact.is_none() => "Approaching kerb",
         Phase::Coasting => "Kerb strike",
         Phase::Unloading => "Relaxing on fixed rim",
+        Phase::Complete if *mode == LabMode::Puncture => "Final loaded state",
         Phase::Complete => "Unloaded comparison",
         Phase::Failed => "Simulation stopped",
     };
-    let mut text = format!("{phase}\nSelected  {:.1} m/s", SPEEDS_MPS[selected.0]);
+    let selection = match *mode {
+        LabMode::Impact => format!("{:.1} m/s", SPEEDS_MPS[selected.0]),
+        LabMode::Puncture => PunctureCase::ALL[selected.0].name().to_owned(),
+    };
+    let mut text = format!("{phase}\nSelected  {selection}");
     if let Some(error) = &bench.error {
         text.push_str(&format!("\n{error}"));
     }
-    if matches!(
+    if let Some(run) = puncture_run {
+        let reading = run.last;
+        text.push_str(&format!(
+            "\nRun  {}\nTime  {:.2} s\nPressure  {:.2} kPa\nOpening  {:.2} mm^2\nAir lost  {:.3} g",
+            run.case.name(),
+            reading.time_s,
+            reading.gauge_pa / 1000.0,
+            reading.opening_m2 * 1.0e6,
+            (run.initial_mass_kg - reading.mass_kg) * 1000.0,
+        ));
+        if let Some(height) = reading.loaded_height_m() {
+            text.push_str(&format!("\nLoaded height  {:.1} mm", height * 1000.0));
+        }
+    } else if matches!(
         bench.phase,
         Phase::Coasting | Phase::Unloading | Phase::Complete
     ) {
@@ -263,34 +346,44 @@ fn draw(
     readout.0 = text;
 }
 
-fn draw_road(lines: &mut GizmoAsset) {
+fn draw_road(lines: &mut GizmoAsset, wheel_z: f32) {
     let height = KERB_RISE_M as f32;
     let radius = KERB_RADIUS_M as f32;
+    let start = (-1.6_f32).max(wheel_z - 1.6);
+    let end = 2.5_f32.max(wheel_z + 1.3);
     for index in -4..=4 {
         let x = index as f32 * 0.14;
-        let mut previous = Vec3::new(x, height - radius, 0.0);
-        lines.line(Vec3::new(x, 0.0, -1.6), Vec3::new(x, 0.0, 0.0), ROAD);
-        lines.line(Vec3::new(x, 0.0, 0.0), previous, ROAD);
-        for arc in 1..=8 {
-            let theta = (arc as f32) * TAU / 32.0;
-            let point = Vec3::new(
-                x,
-                height - radius + radius * theta.sin(),
-                radius * (1.0 - theta.cos()),
-            );
-            lines.line(previous, point, ROAD);
-            previous = point;
+        if start <= 0.0 {
+            let mut previous = Vec3::new(x, height - radius, 0.0);
+            lines.line(Vec3::new(x, 0.0, start), Vec3::new(x, 0.0, 0.0), ROAD);
+            lines.line(Vec3::new(x, 0.0, 0.0), previous, ROAD);
+            for arc in 1..=8 {
+                let theta = (arc as f32) * TAU / 32.0;
+                let point = Vec3::new(
+                    x,
+                    height - radius + radius * theta.sin(),
+                    radius * (1.0 - theta.cos()),
+                );
+                lines.line(previous, point, ROAD);
+                previous = point;
+            }
         }
-        lines.line(previous, Vec3::new(x, height, 2.5), ROAD);
+        lines.line(
+            Vec3::new(x, height, radius.max(start)),
+            Vec3::new(x, height, end),
+            ROAD,
+        );
     }
-    for index in -8..=12 {
+    for index in (start / 0.20).ceil() as i32..=(end / 0.20).floor() as i32 {
         let z = index as f32 * 0.20;
         let y = if z > 0.0 { height } else { 0.0 };
         lines.line(Vec3::new(-0.56, y, z), Vec3::new(0.56, y, z), ROAD);
     }
-    lines.line(
-        Vec3::new(-0.56, height, radius),
-        Vec3::new(0.56, height, radius),
-        ROAD,
-    );
+    if start <= 0.0 {
+        lines.line(
+            Vec3::new(-0.56, height, radius),
+            Vec3::new(0.56, height, radius),
+            ROAD,
+        );
+    }
 }

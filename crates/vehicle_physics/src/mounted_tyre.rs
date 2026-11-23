@@ -7,6 +7,7 @@ use crate::{
     elastic_tyre::{ElasticTyre, ElasticTyreError},
     kerb::Kerb,
     pressure::{ChamberReading, triangulate},
+    puncture::{PunctureReading, TornPanel},
     tyre::TyreTopology,
 };
 
@@ -260,6 +261,21 @@ impl MountedTyre {
 
     pub fn chamber_reading(&self) -> Option<ChamberReading> {
         self.tyre.chamber_reading()
+    }
+
+    /// Chamber air mass in kg, using the shared isothermal air temperature.
+    pub fn chamber_air_mass_kg(&self) -> Option<f64> {
+        self.tyre.chamber_air_mass_kg()
+    }
+
+    /// Airflow and total effective opening, when the puncture model is enabled.
+    pub fn puncture_reading(&self) -> Option<PunctureReading> {
+        self.tyre.puncture_reading()
+    }
+
+    /// Sidewall openings in side and segment order, with corners in topology node order.
+    pub fn torn_panels(&self) -> &[TornPanel] {
+        self.tyre.torn_panels()
     }
 
     /// Axial material state in topology beam order, when damage is enabled.

@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 780 358" role="img" aria-labelledby="title description">
+  <title id="title">Sidewall beam contributions to a panel opening</title>
+  <desc id="description">Three consecutive panels span the bead and shoulder rings. Each broken blue boundary beam contributes one sixth of the cap to each bordering panel. Each dashed orange diagonal allocates one third of the cap to its own panel.</desc>
+  <rect width="780" height="358" rx="12" fill="#f8fafc"/>
+  <g font-family="system-ui, sans-serif" font-size="15" fill="#25364a">
+    <text x="28" y="39" font-size="21" font-weight="600">Fractures that open a sidewall panel</text>
+    <text x="28" y="108">Bead ring</text>
+    <text x="28" y="250">Shoulder ring</text>
+    <path d="M147 103H687L727 245H107Z" fill="#e5edf5" stroke="#9aabba" stroke-width="2"/>
+    <path d="M327 103H507L521 245H313Z" fill="#fff3e2" stroke="#9aabba" stroke-width="2"/>
+    <path d="M327 103 313 245M507 103 521 245" stroke="#1464a0" stroke-width="4"/>
+    <path d="M327 103 521 245M507 103 313 245" stroke="#a14a1b" stroke-width="3" stroke-dasharray="8 5"/>
+    <g fill="#25364a">
+      <circle cx="147" cy="103" r="4"/><circle cx="687" cy="103" r="4"/>
+      <circle cx="107" cy="245" r="4"/><circle cx="727" cy="245" r="4"/>
+      <circle cx="327" cy="103" r="4"/><circle cx="507" cy="103" r="4"/>
+      <circle cx="313" cy="245" r="4"/><circle cx="521" cy="245" r="4"/>
+    </g>
+    <text x="226" y="176" text-anchor="middle">Previous panel</text>
+    <text x="417" y="89" text-anchor="middle">Selected panel</text>
+    <text x="614" y="176" text-anchor="middle">Next panel</text>
+    <path d="M29 285h28" stroke="#1464a0" stroke-width="4"/><text x="69" y="290">Each shared boundary adds 1/6 of the cap to each adjacent panel</text>
+    <path d="M29 314h28" stroke="#a14a1b" stroke-width="3" stroke-dasharray="8 5"/><text x="69" y="319">Each diagonal adds 1/3 of the cap to its own panel</text>
+    <text x="69" y="344" fill="#475569">Panel cap = 0.1% of original panel area in the lab</text>
+  </g>
+</svg>

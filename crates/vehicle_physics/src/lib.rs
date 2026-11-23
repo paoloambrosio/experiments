@@ -7,5 +7,6 @@ pub mod elastic_tyre;
 pub mod kerb;
 pub mod mounted_tyre;
 pub mod pressure;
+pub mod puncture;
 pub mod tread_reinforcement;
 pub mod tyre;

@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 780 502" role="img" aria-labelledby="title description">
+  <title id="title">Tread profiles at the end of the 6 m/s kerb runs</title>
+  <desc id="description">Two side profiles aligned by the road and the longitudinal axle position. The leaking tyre has a lower axle. An enlarged graph shows how the tread meets the road in the final sample.</desc>
+  <defs><clipPath id="detail"><rect x="463" y="138" width="253" height="253"/></clipPath></defs>
+  <rect width="780" height="502" rx="12" fill="#f8fafc"/>
+  <g font-family="system-ui, sans-serif" fill="#25364a" font-size="13">
+    <text x="27" y="36" font-size="21" font-weight="600">Loaded tread five seconds after contact</text>
+    <path d="M67 64h25" stroke="#ac431e" stroke-width="2.4"/><text x="99" y="68">6 m/s tear</text>
+    <path d="M274 64h25" stroke="#18609b" stroke-width="2.4"/><text x="306" y="68">6 m/s sealed</text>
+    <text x="53" y="103" font-size="14" font-weight="600">Tread centre in side view</text>
+    <text x="463" y="103" font-size="14" font-weight="600">Enlarged contact area</text>
+    <text x="463" y="127">Y above kerb (mm)</text>
+    <path d="M51 426H383M213 109V426" stroke="#8ea1b5"/>
+    <rect x="139" y="397" width="148" height="34" fill="#e7eff6" stroke="#9aabba" stroke-dasharray="4 4"/>
+    <path d="M311.28 397.12 L285.26 414.11 L256.79 426.50 L225.72 427.73 L194.61 427.74 L163.87 422.83 L135.20 410.62 L109.63 392.81 L88.06 370.29 L71.29 344.02 L59.95 314.97 L54.51 284.27 L55.17 253.09 L61.89 222.64 L74.42 194.09 L92.29 168.53 L114.80 146.95 L141.09 130.17 L170.16 118.85 L200.88 113.43 L232.06 114.10 L262.52 120.86 L291.06 133.44 L316.60 151.34 L338.15 173.89 L354.89 200.21 L366.15 229.29 L371.53 260.00 L370.82 291.14 L364.06 321.54 L351.52 350.04 L333.69 375.55Z" fill="none" stroke="#ac431e" stroke-width="2.4" stroke-linejoin="round"/>
+    <path d="M351.31 352.03 L333.42 377.95 L312.54 401.53 L284.12 415.15 L254.23 424.98 L222.89 427.65 L191.45 427.49 L160.58 421.57 L131.90 408.60 L106.40 390.13 L85.00 367.02 L68.52 340.16 L57.62 310.60 L52.69 279.48 L53.95 248.00 L61.32 217.36 L74.54 188.76 L93.09 163.28 L116.26 141.92 L143.15 125.50 L172.74 114.65 L203.87 109.78 L235.36 111.09 L265.99 118.52 L294.57 131.79 L320.01 150.39 L341.33 173.61 L357.70 200.54 L368.49 230.16 L373.29 261.31 L371.92 292.79 L364.45 323.41Z" fill="none" stroke="#18609b" stroke-width="2.4" stroke-dasharray="5 3" stroke-linejoin="round"/>
+    <path d="M213.00 271.91L177 319H99" fill="none" stroke="#ac431e"/><text x="99" y="312" text-anchor="start" fill="#ac431e">Axle 323.03 mm</text>
+    <path d="M213.00 270.06L244 237H326" fill="none" stroke="#18609b"/><text x="326" y="230" text-anchor="end" fill="#18609b">Axle 326.92 mm</text>
+    <text x="51" y="450">Kerb top</text>
+    <path d="M463 391.00H716" stroke="#dce6ef"/><text x="453" y="395.00" text-anchor="end">-10</text>
+    <path d="M463 354.86H716" stroke="#8ea1b5"/><text x="453" y="358.86" text-anchor="end">0</text>
+    <path d="M463 318.71H716" stroke="#dce6ef"/><text x="453" y="322.71" text-anchor="end">10</text>
+    <path d="M463 246.43H716" stroke="#dce6ef"/><text x="453" y="250.43" text-anchor="end">30</text>
+    <path d="M463 174.14H716" stroke="#dce6ef"/><text x="453" y="178.14" text-anchor="end">50</text>
+    <path d="M463.00 138V391" stroke="#dce6ef"/><text x="463.00" y="412" text-anchor="middle">-150</text>
+    <path d="M589.50 138V391" stroke="#dce6ef"/><text x="589.50" y="412" text-anchor="middle">0</text>
+    <path d="M716.00 138V391" stroke="#dce6ef"/><text x="716.00" y="412" text-anchor="middle">150</text>
+    <g clip-path="url(#detail)">
+    <path d="M763.26 136.01 L717.25 264.78 L666.92 358.65 L612.00 367.96 L556.99 368.01 L502.63 330.87 L451.96 238.31 L406.74 103.34 L368.61 -67.23" fill="none" stroke="#ac431e" stroke-width="2.4" stroke-linejoin="round"/>
+    <path d="M802.41 -9.19 L765.49 169.46 L715.25 272.65 L662.39 347.10 L606.98 367.37 L551.40 366.18 L496.82 321.30 L446.12 223.04 L401.04 83.05" fill="none" stroke="#18609b" stroke-width="2.4" stroke-dasharray="5 3" stroke-linejoin="round"/>
+    </g>
+    <text x="590" y="437" text-anchor="middle">Z relative to axle (mm)</text>
+    <text x="27" y="478" fill="#475569">The leaking axle averaged 3.86 mm lower over the final second.</text>
+  </g>
+</svg>

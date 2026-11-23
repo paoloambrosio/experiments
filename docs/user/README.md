@@ -64,6 +64,25 @@ The lab launches the reinforced tyre at 30 kPa initial gauge along +Z toward a 6
 
 Gold marks yielded beams. Red segments with a visible gap mark broken beams. The white overlay shows the original tread-centre profile against the recovered tyre. The panel reports the actual strike speed, peak inward displacement, residual displacement after unloading, and damage counts.
 
+### Sidewall puncture
+
+```sh
+cargo run -p vehicle_lab -- --puncture-lab
+```
+
+Watch the wheel strike the kerb and coast on top for five seconds. The panel shows live gauge pressure, opening area, net air lost, and loaded axle height above the kerb top. Pink outlines mark panels with an effective opening. Gold and red still indicate yielded and broken beams.
+
+| Control | Action |
+| --- | --- |
+| **1** | Select the 6 m/s strike with sidewall tearing enabled |
+| **2** | Select the sealed 6 m/s comparison |
+| **3** | Select the 4 m/s yielding comparison |
+| **Enter** | Launch or replay the selected case |
+| **Backspace** | Restore the prepared tyre or restart inflation |
+| Left mouse button + drag | Orbit around the wheel |
+| Scroll | Zoom in or out |
+| **R** | Reset the camera orientation and zoom |
+
 ### Inflation and tread press
 
 ```sh
@@ -226,7 +245,27 @@ The material arguments are tensile yield, compressive yield, tensile fracture, a
 
 `Kerb::new` takes the leading face's world Z, the rise above the floor, and the edge radius, all in metres. The top extends along +Z and the cross-section spans world X. Kerb contact uses the floor's stiffness, damping, and friction coefficients. `MountedStep::kerb_force` gives the world-space reaction on the tyre and `kerb_normal_force_n` gives the sum of normal force magnitudes, both in newtons. `into_fixed_bead_tyre()` returns the tyre in the rim's local frame for unloaded measurements, preserving its deformation, damage history, and gas charge.
 
+### Enable sidewall punctures
+
+Enable axial damage on an inflated `ElasticTyre` first, then configure sidewall openings before mounting.
+
+```rust
+use vehicle_physics::puncture::PunctureConfig;
+
+// tyre is an inflated ElasticTyre with axial damage enabled.
+let tyre = tyre.with_puncture(PunctureConfig::new(0.001, 0.65)?)?;
+```
+
+The arguments are the maximum opening as a fraction of a panel's original area and the orifice discharge coefficient. Both are dimensionless. `torn_panels()` identifies the open panels by side and segment and returns their topology node indices and opening areas in m². `puncture_reading()` reports the total area and mass flow in kg/s, with positive flow leaving the tyre. `chamber_air_mass_kg()` also works with a sealed chamber. These readings are available on fixed-bead and mounted tyres. Reinflating changes the air mass and preserves the openings. Resetting the fixed-bead tyre restores the intact sidewalls and initial air charge.
+
 ## Run the headless comparisons
+
+```sh
+cargo run -p vehicle_lab -- --puncture-report
+cargo run -p vehicle_lab -- --puncture-report --samples
+```
+
+The puncture report compares all three coasting cases at 3,840 and 7,680 substeps/s. It reports each increase in total opening, final pressure and air loss, and mean loaded axle height and vertical road support over the final second. The fixed-volume check compares the initial flow through one opening with the flow through two equal openings. `--samples` adds tagged CSV for tear events, 60 Hz traces with contact flags, and final profiles at both rates. Profile coordinates use world axes, with X and Z relative to the axle and Y relative to the kerb top.
 
 ```sh
 cargo run -p vehicle_lab -- --impact-report

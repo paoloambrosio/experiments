@@ -11,6 +11,7 @@ use vehicle_physics::{
 use crate::{
     drop_experiment::{self, GRAVITY_MPS2, RIM_MASS_KG},
     elastic_experiment::{Experiment, TICKS_PER_SECOND},
+    puncture_experiment::{self, PunctureCase, PunctureRun},
     rolling_experiment::{FRICTION, PRESSURE_PA},
 };
 
@@ -65,6 +66,7 @@ pub struct ImpactBench {
     pub wheel: Option<Entity>,
     pub unloaded: Option<ElasticTyre>,
     pub run: ImpactRun,
+    pub puncture: Option<PunctureRun>,
     pub error: Option<String>,
     pending: Option<Action>,
     rate: u32,
@@ -74,7 +76,11 @@ pub struct ImpactBench {
 }
 
 enum Action {
-    Launch { speed_mps: f64, control: bool },
+    Launch {
+        speed_mps: f64,
+        control: bool,
+        puncture: Option<PunctureCase>,
+    },
     Reset,
 }
 
@@ -87,6 +93,7 @@ impl ImpactBench {
             wheel: None,
             unloaded: None,
             run: ImpactRun::default(),
+            puncture: None,
             error: None,
             pending: None,
             rate,
@@ -98,7 +105,21 @@ impl ImpactBench {
 
     pub fn launch(&mut self, speed_mps: f64, control: bool) {
         if self.baseline.is_some() {
-            self.pending = Some(Action::Launch { speed_mps, control });
+            self.pending = Some(Action::Launch {
+                speed_mps,
+                control,
+                puncture: None,
+            });
+        }
+    }
+
+    pub fn launch_puncture(&mut self, case: PunctureCase) {
+        if self.baseline.is_some() {
+            self.pending = Some(Action::Launch {
+                speed_mps: case.speed_mps(),
+                control: false,
+                puncture: Some(case),
+            });
         }
     }
 
@@ -121,8 +142,16 @@ impl ImpactBench {
         self.phase = Phase::Failed;
     }
 
-    fn mount(&self, speed_mps: f64, control: bool) -> Result<MountedTyre, ElasticTyreError> {
-        let tyre = self.baseline.as_ref().expect("prepared tyre").clone();
+    fn mount(
+        &self,
+        speed_mps: f64,
+        control: bool,
+        can_tear: bool,
+    ) -> Result<MountedTyre, ElasticTyreError> {
+        let mut tyre = self.baseline.as_ref().expect("prepared tyre").clone();
+        if can_tear {
+            tyre = tyre.with_puncture(puncture_experiment::material())?;
+        }
         let floor = drop_experiment::bench_floor().with_friction(FRICTION, GRIP_TRANSITION_MPS)?;
         let rim = RimMotion {
             centre: DVec3::new(0.0, launch_height_m(&tyre), LAUNCH_Z_M),
@@ -173,11 +202,24 @@ fn update_bench(mut commands: Commands, mut bench: ResMut<ImpactBench>) {
         bench.slow_steps = 0;
         bench.error = None;
         bench.run = ImpactRun::default();
+        bench.puncture = None;
         bench.phase = Phase::Ready;
-        if let Action::Launch { speed_mps, control } = action {
+        if let Action::Launch {
+            speed_mps,
+            control,
+            puncture,
+        } = action
+        {
             let bundle = bench
-                .mount(speed_mps, control)
-                .and_then(|tyre| AvianTyre::rim_bundle(tyre, RIM_MASS_KG));
+                .mount(
+                    speed_mps,
+                    control,
+                    puncture.is_some_and(|case| case != PunctureCase::Sealed),
+                )
+                .and_then(|tyre| {
+                    bench.puncture = puncture.map(|case| PunctureRun::new(case, &tyre));
+                    AvianTyre::rim_bundle(tyre, RIM_MASS_KG)
+                });
             match bundle {
                 Ok(bundle) => {
                     bench.wheel = Some(
@@ -229,6 +271,7 @@ fn update_bench(mut commands: Commands, mut bench: ResMut<ImpactBench>) {
                 bench.fail(error);
             }
         }
+        Phase::Complete if bench.puncture.is_some() => bench.despawn_wheel(&mut commands),
         Phase::Failed => bench.despawn_wheel(&mut commands),
         _ => {}
     }
@@ -249,6 +292,15 @@ fn record_coast(mut bench: ResMut<ImpactBench>, wheels: Query<&AvianTyre>) {
     let tyre = wheel.tyre();
     let rim = tyre.rim();
     let step = wheel.last_step();
+    let rate = bench.rate;
+    if let Some(run) = &mut bench.puncture {
+        match run.record(tyre, step, rate) {
+            Ok(true) => bench.phase = Phase::Complete,
+            Ok(false) => {}
+            Err(error) => bench.fail(error),
+        }
+        return;
+    }
     let dt = 1.0 / f64::from(bench.rate);
     let time_s = f64::from(bench.run.steps) * dt;
     if bench.run.contact.is_none() && step.kerb_normal_force_n > 0.0 {
