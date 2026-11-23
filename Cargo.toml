@@ -6,5 +6,6 @@ resolver = "3"
 edition = "2024"
 
 [workspace.dependencies]
+avian3d = { version = "0.8.0", default-features = false, features = ["3d", "parry-f32"] }
 bevy = { version = "0.20.1", default-features = false }
 bevy_math = "0.20.1"

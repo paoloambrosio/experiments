@@ -71,6 +71,8 @@ pub enum ElasticTyreError {
     InvalidPressureTriangle(usize),
     InvalidChamberVolume,
     InvalidTreadReinforcement,
+    InvalidRimMotion,
+    InvalidFloor,
 }
 
 impl fmt::Display for ElasticTyreError {
@@ -107,6 +109,8 @@ impl fmt::Display for ElasticTyreError {
             Self::InvalidTreadReinforcement => f.write_str(
                 "tread multipliers must be at least one and effective coefficients must be finite and nonnegative",
             ),
+            Self::InvalidRimMotion => f.write_str("rim motion must be finite with a unit rotation"),
+            Self::InvalidFloor => f.write_str("floor height and coefficients must be finite, with nonnegative coefficients"),
         }
     }
 }
@@ -138,18 +142,19 @@ impl ElasticBeam {
 #[derive(Debug, Clone)]
 pub struct ElasticTyre {
     topology: TyreTopology,
-    rest_positions: Vec<DVec3>,
-    positions: Vec<DVec3>,
-    velocities: Vec<DVec3>,
+    pub(crate) rest_positions: Vec<DVec3>,
+    pub(crate) positions: Vec<DVec3>,
+    pub(crate) velocities: Vec<DVec3>,
     beams: Vec<ElasticBeam>,
     crown_springs: Vec<CrownSpring>,
     crown_coefficients: BeamCoefficients,
     free_nodes: Vec<usize>,
-    node_mass: f64,
+    pub(crate) bead_nodes: Vec<usize>,
+    pub(crate) node_mass: f64,
     chamber: Option<PressureChamber>,
     forces: Vec<DVec3>,
-    next_positions: Vec<DVec3>,
-    next_velocities: Vec<DVec3>,
+    pub(crate) next_positions: Vec<DVec3>,
+    pub(crate) next_velocities: Vec<DVec3>,
 }
 
 impl ElasticTyre {
@@ -204,6 +209,13 @@ impl ElasticTyre {
             .filter(|(_, node)| !matches!(node.ring, RingRole::LeftBead | RingRole::RightBead))
             .map(|(index, _)| index)
             .collect();
+        let bead_nodes = topology
+            .nodes()
+            .iter()
+            .enumerate()
+            .filter(|(_, node)| matches!(node.ring, RingRole::LeftBead | RingRole::RightBead))
+            .map(|(index, _)| index)
+            .collect();
 
         Ok(Self {
             topology,
@@ -220,6 +232,7 @@ impl ElasticTyre {
                 damping: 0.0,
             },
             free_nodes,
+            bead_nodes,
             node_mass,
             chamber: None,
         })
@@ -351,6 +364,15 @@ impl ElasticTyre {
         dt_seconds: f64,
         external_forces: &[DVec3],
     ) -> Result<(), ElasticTyreError> {
+        self.advance(dt_seconds, external_forces, None).map(|_| ())
+    }
+
+    pub(crate) fn advance(
+        &mut self,
+        dt_seconds: f64,
+        external_forces: &[DVec3],
+        rim_centre: Option<DVec3>,
+    ) -> Result<(DVec3, DVec3), ElasticTyreError> {
         use ElasticTyreError::*;
 
         if !dt_seconds.is_finite() || dt_seconds <= 0.0 {
@@ -393,7 +415,23 @@ impl ElasticTyre {
         if self.forces.iter().any(|force| !force.is_finite()) {
             return Err(NonFiniteStep);
         }
-        // Only free nodes are updated in either buffer. The bead slots retain rest state.
+        let mut force_on_rim = DVec3::ZERO;
+        let mut torque_on_rim = DVec3::ZERO;
+        if let Some(centre) = rim_centre {
+            for &index in &self.bead_nodes {
+                let force = self.forces[index];
+                force_on_rim += force;
+                torque_on_rim += (self.positions[index] - centre).cross(force);
+            }
+            if !force_on_rim.is_finite() || !torque_on_rim.is_finite() {
+                return Err(NonFiniteStep);
+            }
+        }
+        // Carry the prescribed rigid-body state into the next integration buffer.
+        for &index in &self.bead_nodes {
+            self.next_positions[index] = self.positions[index];
+            self.next_velocities[index] = self.velocities[index];
+        }
         for &index in &self.free_nodes {
             let velocity =
                 self.velocities[index] + (self.forces[index] / self.node_mass) * dt_seconds;
@@ -404,6 +442,13 @@ impl ElasticTyre {
             self.next_velocities[index] = velocity;
             self.next_positions[index] = position;
         }
+        self.commit_next()?;
+        Ok((force_on_rim, torque_on_rim))
+    }
+
+    pub(crate) fn commit_next(&mut self) -> Result<(), ElasticTyreError> {
+        use ElasticTyreError::*;
+
         for (index, beam) in self.beams.iter().enumerate() {
             let [start, end] = beam.endpoints;
             let length_squared =

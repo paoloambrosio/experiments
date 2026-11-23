@@ -28,18 +28,41 @@ pub struct Experiment {
 
 impl Experiment {
     pub fn new(substeps_per_second: u32) -> Self {
-        Self::build(substeps_per_second, None, false)
+        Self::build(
+            substeps_per_second,
+            None,
+            false,
+            ElasticTyreConfig::default(),
+        )
     }
 
     pub fn inflated(substeps_per_second: u32, target_pa: f64) -> Self {
-        Self::build(substeps_per_second, Some(target_pa), false)
+        Self::build(
+            substeps_per_second,
+            Some(target_pa),
+            false,
+            ElasticTyreConfig::default(),
+        )
     }
 
     pub fn radial(substeps_per_second: u32, target_pa: f64) -> Self {
-        Self::build(substeps_per_second, Some(target_pa), true)
+        Self::radial_with_config(substeps_per_second, target_pa, ElasticTyreConfig::default())
     }
 
-    fn build(substeps_per_second: u32, target_pressure_pa: Option<f64>, reinforced: bool) -> Self {
+    pub fn radial_with_config(
+        substeps_per_second: u32,
+        target_pa: f64,
+        elastic_config: ElasticTyreConfig,
+    ) -> Self {
+        Self::build(substeps_per_second, Some(target_pa), true, elastic_config)
+    }
+
+    fn build(
+        substeps_per_second: u32,
+        target_pressure_pa: Option<f64>,
+        reinforced: bool,
+        elastic_config: ElasticTyreConfig,
+    ) -> Self {
         let config = TyreConfig::default();
         let topology = TyreTopology::generate(&config).expect("default tyre geometry");
         let tread_start = topology
@@ -53,11 +76,10 @@ impl Experiment {
             tread_start + 1,
         ];
         let external_forces = vec![DVec3::ZERO; topology.nodes().len()];
-        let config_elastic = ElasticTyreConfig::default();
         let tyre = if target_pressure_pa.is_some() {
-            ElasticTyre::new_inflated(topology, config_elastic, PressureConfig::default())
+            ElasticTyre::new_inflated(topology, elastic_config, PressureConfig::default())
         } else {
-            ElasticTyre::new(topology, config_elastic)
+            ElasticTyre::new(topology, elastic_config)
         }
         .expect("default elastic tyre");
         let tyre = if reinforced {

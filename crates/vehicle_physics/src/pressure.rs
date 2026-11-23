@@ -137,7 +137,7 @@ impl PressureChamber {
     }
 }
 
-fn triangulate(topology: &TyreTopology) -> Vec<PressureTriangle> {
+pub(crate) fn triangulate(topology: &TyreTopology) -> Vec<PressureTriangle> {
     // The tyre stores five equal-length rings from left bead to right bead.
     let segments = topology.nodes().len() / 5;
     let mut triangles = Vec::with_capacity(10 * segments);

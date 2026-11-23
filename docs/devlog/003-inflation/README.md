@@ -70,6 +70,6 @@ The stiffer springs require a smaller timestep with the semi-implicit Euler solv
 2. Run `cargo run -p vehicle_lab -- --inflation-report` for the original carcass measurements and `cargo run -p vehicle_lab -- --elastic-report` to reproduce milestone 002.
 3. Run `cargo test -p vehicle_lab fill_ramps_then_seals_at_target -- --nocapture` to print the 30 Hz fill trace and the final seal sample. Each `TRACE` row gives time in seconds, gauge pressure in kPa, and volume in litres.
 4. Run `cargo run -p vehicle_lab -- --radial-report` for the comparison, including the segment-zero coordinates used in the SVG.
-5. Run `cargo run -p vehicle_lab` and press **P** until the target is 60 kPa. Press **P** during a fill to start the next preset from zero. After the tyre seals, press **Enter** and read **Peak press** after the replay, or hold **Space** to press the tread manually. Press **4** to show the pressure surface and **Backspace** to restore the sealed baseline.
+5. Run `cargo run -p vehicle_lab -- --inflation-lab` and press **P** until the target is 60 kPa. Press **P** during a fill to start the next preset from zero. After the tyre seals, press **Enter** and read **Peak press** after the replay, or hold **Space** to press the tread manually. Press **4** to show the pressure surface and **Backspace** to restore the sealed baseline.
 
-The next milestone couples the reinforced tyre to a rigid rim and introduces ground contact. [Roadmap](../README.md#planned)
+The next milestone couples the reinforced tyre to a rigid rim and introduces ground contact. [004 — Rim and ground contact](../004-rim-and-ground-contact/README.md)

@@ -2,12 +2,31 @@
 
 ## Run the lab
 
-Install a Rust toolchain and the native build and graphics prerequisites for Bevy. This workspace uses Bevy 0.20.1 and targets Avian 0.8.0 for later rigid-body integration. [Bevy setup guide](https://bevy.org/learn/quick-start/getting-started/setup/)
+Install a Rust toolchain and the native build and graphics prerequisites for Bevy. This workspace uses Bevy 0.20.1 and Avian 0.8.0. [Bevy setup guide](https://bevy.org/learn/quick-start/getting-started/setup/)
 
 Run this command from the workspace root.
 
 ```sh
 cargo run -p vehicle_lab
+```
+
+### Wheel drop
+
+The default lab starts with the reinforced tyre sealed at **0 kPa gauge** and held 100 mm above the floor. The rim and tyre have a combined mass of 20 kg and fall under their own weight. The panel retains the first rebound rise, settled axle height, projected contact patch, and mean floor force. Pink markers show where nodes are pushing against the floor. The pink outline shows the projection of tread triangles that intersect the floor.
+
+| Control | Action |
+| --- | --- |
+| **Enter** | Drop the prepared wheel or replay the same drop |
+| **P** | Cycle through 0, 10, 30, and 60 kPa gauge and prepare a fresh wheel |
+| **Backspace** | Restore the selected wheel to release height or restart pressure preparation |
+| Left mouse button + drag | Orbit around the wheel |
+| Scroll | Zoom in or out |
+| **R** | Reset the camera orientation and zoom |
+
+### Inflation and tread press
+
+```sh
+cargo run -p vehicle_lab -- --inflation-lab
 ```
 
 The default tyre starts sealed at 0 kPa gauge with 160 nodes, 544 beams, and a reinforced tread band. Gauge pressure measures the difference from ambient pressure. Press **P** to choose a higher target and watch the tyre inflate from zero. The lab holds the target while the tyre settles, then seals the chamber. Once it is ready, the grey crosses mark the unloaded positions of the three pink tread nodes. The panel shows target and live gauge pressure, volume, load, and deflection from that baseline. Positive deflection means the tread moved inward. **Peak press** records the largest inward deflection under load until the next run or reset. The solver runs at 3,840 substeps per second for the stiffer tread band.
@@ -109,7 +128,34 @@ let mut tyre = tyre.with_tread_reinforcement(TreadReinforcementConfig::default()
 
 The defaults multiply tread and shoulder hoop stiffness by 20 and multiply the tread-to-shoulder beam stiffness by 2. A 30,000 N/m spring with 5 N·s/m damping at each segment controls the tread centre's distance from the shoulder midpoint. The lab uses these values on the default 32-segment mesh. Choose a timestep appropriate for your mesh, mass, and stiffness.
 
+## Mount a tyre on a rigid rim
+
+`MountedTyre::new` takes an elastic tyre, a `RimMotion` and an optional `FlatFloor`. Mounting transforms the tyre's current deformation and velocities into world space and preserves the sealed gas charge. World +Y is up. The axle is along the rim's local +X. The drop bench uses `FlatFloor::new(0.0, 35_000.0, 150.0)`. Stiffness is in N/m and damping is in N·s/m per tread node. The bench uses three times the default axial beam damping to settle the wheel after impact.
+
+With the `vehicle_physics` feature `avian`, install the adapter after Avian's physics plugins and spawn the rim on the same entity as its mounted tyre. For the default reinforced tyre, the drop lab runs physics at 60 ticks/s with 64 substeps per tick.
+
+```rust
+use avian3d::prelude::{PhysicsPlugins, SubstepCount};
+use bevy::prelude::{Fixed, Time};
+use vehicle_physics::avian_tyre::{AvianTyre, AvianTyrePlugin};
+
+app.add_plugins((PhysicsPlugins::default(), AvianTyrePlugin))
+    .insert_resource(Time::<Fixed>::from_hz(60.0))
+    .insert_resource(SubstepCount(64));
+app.world_mut().spawn(AvianTyre::rim_bundle(mounted, 12.0)?);
+```
+
+The bundle includes the bare rim mass plus the mass and inertia of both bead rings. The adapter advances the free tyre nodes using Avian's gravity and substep duration, applies the bead wrench to the rigid body, then moves the beads to the updated pose. Read world positions and velocities through `AvianTyre::tyre()` and check `AvianTyre::error()` for a failed step. `MountedTyre::footprint()` returns the clipped polygons and their world Z and X spans in metres.
+
+For a caller-managed rigid body, call `MountedTyre::step` with the substep duration and gravity to get force and torque about the rim centre. Apply that wrench and the rim's gravity, then call `sync_rim` with the updated pose and velocities. The rigid body should include the bead mass and inertia returned by `rim_mass_properties`.
+
 ## Run the headless comparisons
+
+```sh
+cargo run -p vehicle_lab -- --drop-report
+```
+
+The drop report compares release-to-contact time, first rebound rise, settled axle height, footprint length and width, mean floor force, and maximum tread penetration at 3,840 and 7,680 substeps/s. Add `--samples` after `--drop-report` for tagged CSV rows with axle height over time, the settled bottom cross-section, and the projected footprint polygons at the lab rate.
 
 ```sh
 cargo run -p vehicle_lab -- --radial-report

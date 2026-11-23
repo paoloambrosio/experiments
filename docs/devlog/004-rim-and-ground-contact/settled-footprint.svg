@@ -1,0 +1,38 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="716" height="316" viewBox="0 0 716 316" role="img" aria-labelledby="patch-title patch-desc">
+  <title id="patch-title">Settled tyre profile and footprint at 0 kPa gauge</title>
+  <desc id="patch-desc">Cross-section across the bottom of the tyre and clipped tread polygons on the floor. The two shoulder bands carry contact with a raised tread centre.</desc>
+  <rect x="0.5" y="0.5" width="715" height="315" rx="14" fill="#0c1017" stroke="#293444"/>
+  <g font-family="system-ui, sans-serif" font-size="13" fill="#b6c4d3">
+    <text x="23" y="35" fill="#eef4ff" font-size="19">Settled tyre at 0 kPa gauge</text>
+    <text x="23" y="65" >Section through the bottom of the wheel</text>
+    <text x="365" y="65" >Projected footprint on the floor</text>
+    <path d="M346 54V268" fill="none" stroke="#293444" stroke-width="1"/>
+    <path d="M40 221H327" fill="none" stroke="#8493a6" stroke-width="1"/>
+    <text x="43" y="242" >Floor plane</text>
+    <text x="184" y="124" text-anchor="middle">Tread section</text>
+    <path d="M184 135V197" fill="none" stroke="#8493a6" stroke-width="1" stroke-dasharray="4 4"/>
+    <polyline points="79.45,77.31 61.14,222.68 184.00,211.53 306.86,222.68 288.55,77.31" fill="none" stroke="#59ddc8" stroke-width="2.5" stroke-linejoin="round"/>
+    <circle cx="79.45" cy="77.31" r="3.1" fill="#59ddc8"/>
+    <circle cx="61.14" cy="222.68" r="3.1" fill="#59ddc8"/>
+    <circle cx="184.00" cy="211.53" r="3.1" fill="#59ddc8"/>
+    <circle cx="306.86" cy="222.68" r="3.1" fill="#59ddc8"/>
+    <circle cx="288.55" cy="77.31" r="3.1" fill="#59ddc8"/>
+    <path d="M389 163H669 M529 90V242" fill="none" stroke="#293444" stroke-width="1"/>
+    <text x="670" y="157" text-anchor="middle">+X</text>
+    <text x="538" y="95" >+Z</text>
+    <polygon points="397.13,111.86 397.15,121.82 417.01,122.00" fill="#ff8982" fill-opacity="0.33" stroke="#ff8982" stroke-width="1.1"/>
+    <polygon points="397.15,121.82 396.78,204.89 412.78,205.24 415.09,133.51" fill="#ff8982" fill-opacity="0.33" stroke="#ff8982" stroke-width="1.1"/>
+    <polygon points="397.15,121.82 415.09,133.51 417.01,122.00" fill="#ff8982" fill-opacity="0.33" stroke="#ff8982" stroke-width="1.1"/>
+    <polygon points="396.78,204.89 396.74,214.03 523.31,291.69 529.00,291.92" fill="#ff8982" fill-opacity="0.33" stroke="#ff8982" stroke-width="1.1"/>
+    <polygon points="396.78,204.89 529.00,291.92 529.00,287.98 412.78,205.24" fill="#ff8982" fill-opacity="0.33" stroke="#ff8982" stroke-width="1.1"/>
+    <polygon points="529.00,293.22 529.00,291.92 523.31,291.69" fill="#ff8982" fill-opacity="0.33" stroke="#ff8982" stroke-width="1.1"/>
+    <polygon points="640.99,122.00 660.85,121.82 660.87,111.86" fill="#ff8982" fill-opacity="0.33" stroke="#ff8982" stroke-width="1.1"/>
+    <polygon points="642.91,133.51 660.85,121.82 640.99,122.00" fill="#ff8982" fill-opacity="0.33" stroke="#ff8982" stroke-width="1.1"/>
+    <polygon points="645.22,205.24 661.22,204.89 660.85,121.82 642.91,133.51" fill="#ff8982" fill-opacity="0.33" stroke="#ff8982" stroke-width="1.1"/>
+    <polygon points="529.00,287.98 529.00,291.92 661.22,204.89 645.22,205.24" fill="#ff8982" fill-opacity="0.33" stroke="#ff8982" stroke-width="1.1"/>
+    <polygon points="529.00,291.92 534.69,291.69 661.26,214.03 661.22,204.89" fill="#ff8982" fill-opacity="0.33" stroke="#ff8982" stroke-width="1.1"/>
+    <polygon points="529.00,291.92 529.00,293.22 534.69,291.69" fill="#ff8982" fill-opacity="0.33" stroke="#ff8982" stroke-width="1.1"/>
+    <text x="529" y="267" text-anchor="middle">Shoulder patches separated by a lifted centre</text>
+    <text x="23" y="295" >Measured at 3,840 substeps/s · World X along the axle, world Z along the floor</text>
+  </g>
+</svg>

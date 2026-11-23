@@ -32,7 +32,7 @@ Around the full tyre, each of the five rings contributes one circumferential bea
 
 ## Inspect the result
 
-1. Run `cargo run -p vehicle_lab` from the workspace root.
+1. Run `cargo run -p vehicle_lab -- --inflation-lab` from the workspace root.
 2. Press **3** to hide diagonals. Hold the left mouse button and drag to see the four bands of panels between the five rings.
 3. Press **2** to isolate the circumferential beams. Zoom in and find the two larger dots on each ring. They mark the seam from segment 31 to segment 0. Follow the beam between those dots, then restore **2** and **3** to see how the other beam families continue around the seam.
 4. Run `cargo test -p vehicle_physics`. The tests check the counts, the specific seam connections, rest lengths, left/right symmetry, and invalid configurations. The three-segment case checks the smallest closed rings.

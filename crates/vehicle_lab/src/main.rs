@@ -1,3 +1,6 @@
+mod drop_experiment;
+mod drop_lab;
+mod drop_report;
 mod elastic_experiment;
 mod inflation_report;
 mod radial_report;
@@ -63,6 +66,7 @@ struct OrbitCamera {
     yaw: f32,
     pitch: f32,
     distance: f32,
+    focus: Vec3,
 }
 
 impl Default for OrbitCamera {
@@ -71,6 +75,7 @@ impl Default for OrbitCamera {
             yaw: 0.85,
             pitch: 0.33,
             distance: 1.35,
+            focus: Vec3::ZERO,
         }
     }
 }
@@ -78,7 +83,8 @@ impl Default for OrbitCamera {
 impl OrbitCamera {
     fn transform(&self) -> Transform {
         let rotation = Quat::from_rotation_y(self.yaw) * Quat::from_rotation_x(-self.pitch);
-        Transform::from_translation(rotation * Vec3::Z * self.distance).with_rotation(rotation)
+        Transform::from_translation(self.focus + rotation * Vec3::Z * self.distance)
+            .with_rotation(rotation)
     }
 }
 
@@ -119,6 +125,7 @@ const BEAM_STYLES: [BeamStyle; 3] = [
 ];
 
 fn main() -> ExitCode {
+    let mut inflation_lab = false;
     for argument in std::env::args_os().skip(1) {
         let result = if argument == "--elastic-report" {
             elastic_experiment::report()
@@ -126,7 +133,10 @@ fn main() -> ExitCode {
             inflation_report::report()
         } else if argument == "--radial-report" {
             radial_report::report()
+        } else if argument == "--drop-report" {
+            drop_report::report(std::env::args_os().any(|argument| argument == "--samples"))
         } else {
+            inflation_lab |= argument == "--inflation-lab";
             continue;
         };
         return match result {
@@ -138,6 +148,15 @@ fn main() -> ExitCode {
         };
     }
 
+    if inflation_lab {
+        run_inflation_lab();
+    } else {
+        drop_lab::run();
+    }
+    ExitCode::SUCCESS
+}
+
+fn run_inflation_lab() {
     App::new()
         .insert_resource(LabTyre {
             experiment: Experiment::radial(RADIAL_SUBSTEPS_PER_SECOND, PRESETS_PA[0]),
@@ -160,7 +179,6 @@ fn main() -> ExitCode {
         .add_systems(FixedUpdate, advance_experiment)
         .add_systems(Update, (orbit_camera, toggle_beams, draw_experiment))
         .run();
-    ExitCode::SUCCESS
 }
 
 fn setup_scene(
@@ -467,7 +485,10 @@ fn orbit_camera(
 ) {
     let (mut orbit, mut transform) = camera.into_inner();
     if keys.just_pressed(KeyCode::KeyR) {
-        *orbit = OrbitCamera::default();
+        *orbit = OrbitCamera {
+            focus: orbit.focus,
+            ..default()
+        };
     } else {
         if mouse.pressed(MouseButton::Left) {
             orbit.yaw = (orbit.yaw - motion.delta.x * 0.006).rem_euclid(TAU);
