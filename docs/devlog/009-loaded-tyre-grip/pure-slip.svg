@@ -1,0 +1,211 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 870 565" role="img" aria-labelledby="title desc">
+<title id="title">Pure-slip road forces</title>
+<desc id="desc">Longitudinal and lateral road force divided by measured support. Curves at 2 and 8 metres per second show three vertical loads from half to one and a half times nominal.</desc>
+<rect width="870" height="565" rx="14" fill="#f3f7fb"/>
+<g font-family="system-ui, sans-serif" font-size="12" fill="#20364d">
+<text x="32" y="33" font-size="22" font-weight="650">Pure-slip road forces</text>
+<text x="32" y="55" fill="#52677b">Light-car tyre · 3,840 substeps/s · force divided by mean vertical support</text>
+<circle cx="547.00" cy="31.00" r="5.5" fill="none" stroke="#2765a0" stroke-width="1.6"/>
+<text x="559" y="35" >50% load</text>
+<rect x="635.50" y="27.50" width="7" height="7" rx="0.5" fill="none" stroke="#ab4c13" stroke-width="1.5"/>
+<text x="651" y="35" >100% load</text>
+<circle cx="731.00" cy="31.00" r="2.2" fill="#007e6c"/>
+<text x="743" y="35" >150% load</text>
+<text x="85" y="92" font-size="15" font-weight="650">2 m/s · longitudinal force</text>
+<path d="M85.00 263.00L413.00 263.00" stroke="#d5e0eb" fill="none" />
+<text x="77" y="267.00" text-anchor="end">-0.8</text>
+<path d="M85.00 224.00L413.00 224.00" stroke="#d5e0eb" fill="none" />
+<text x="77" y="228.00" text-anchor="end">-0.4</text>
+<path d="M85.00 185.00L413.00 185.00" stroke="#9aafc2" fill="none" />
+<text x="77" y="189.00" text-anchor="end">0</text>
+<path d="M85.00 146.00L413.00 146.00" stroke="#d5e0eb" fill="none" />
+<text x="77" y="150.00" text-anchor="end">0.4</text>
+<path d="M85.00 107.00L413.00 107.00" stroke="#d5e0eb" fill="none" />
+<text x="77" y="111.00" text-anchor="end">0.8</text>
+<path d="M85.00 107.00L85.00 263.00" stroke="#e1e9f1" fill="none" />
+<text x="85.00" y="281" text-anchor="middle">-20</text>
+<path d="M167.00 107.00L167.00 263.00" stroke="#e1e9f1" fill="none" />
+<text x="167.00" y="281" text-anchor="middle">-10</text>
+<path d="M249.00 107.00L249.00 263.00" stroke="#9aafc2" fill="none" />
+<text x="249.00" y="281" text-anchor="middle">0</text>
+<path d="M331.00 107.00L331.00 263.00" stroke="#e1e9f1" fill="none" />
+<text x="331.00" y="281" text-anchor="middle">10</text>
+<path d="M413.00 107.00L413.00 263.00" stroke="#e1e9f1" fill="none" />
+<text x="413.00" y="281" text-anchor="middle">20</text>
+<text x="249" y="300" text-anchor="middle">Longitudinal slip (%)</text>
+<polyline points="85.00,262.74 167.00,257.74 208.00,242.74 232.60,213.44 249.00,184.73 265.40,174.68 290.00,146.29 331.00,112.33 413.00,107.54" stroke="#2765a0" stroke-width="1.8"  fill="none"/>
+<circle cx="85.00" cy="262.74" r="5.5" fill="none" stroke="#2765a0" stroke-width="1.6"/>
+<circle cx="167.00" cy="257.74" r="5.5" fill="none" stroke="#2765a0" stroke-width="1.6"/>
+<circle cx="208.00" cy="242.74" r="5.5" fill="none" stroke="#2765a0" stroke-width="1.6"/>
+<circle cx="232.60" cy="213.44" r="5.5" fill="none" stroke="#2765a0" stroke-width="1.6"/>
+<circle cx="249.00" cy="184.73" r="5.5" fill="none" stroke="#2765a0" stroke-width="1.6"/>
+<circle cx="265.40" cy="174.68" r="5.5" fill="none" stroke="#2765a0" stroke-width="1.6"/>
+<circle cx="290.00" cy="146.29" r="5.5" fill="none" stroke="#2765a0" stroke-width="1.6"/>
+<circle cx="331.00" cy="112.33" r="5.5" fill="none" stroke="#2765a0" stroke-width="1.6"/>
+<circle cx="413.00" cy="107.54" r="5.5" fill="none" stroke="#2765a0" stroke-width="1.6"/>
+<polyline points="85.00,262.37 167.00,255.74 208.00,241.96 232.60,212.96 249.00,185.64 265.40,158.76 290.00,129.94 331.00,112.90 413.00,108.28" stroke="#ab4c13" stroke-width="1.8" stroke-dasharray="6 3" fill="none"/>
+<rect x="81.50" y="258.87" width="7" height="7" rx="0.5" fill="none" stroke="#ab4c13" stroke-width="1.5"/>
+<rect x="163.50" y="252.24" width="7" height="7" rx="0.5" fill="none" stroke="#ab4c13" stroke-width="1.5"/>
+<rect x="204.50" y="238.46" width="7" height="7" rx="0.5" fill="none" stroke="#ab4c13" stroke-width="1.5"/>
+<rect x="229.10" y="209.46" width="7" height="7" rx="0.5" fill="none" stroke="#ab4c13" stroke-width="1.5"/>
+<rect x="245.50" y="182.14" width="7" height="7" rx="0.5" fill="none" stroke="#ab4c13" stroke-width="1.5"/>
+<rect x="261.90" y="155.26" width="7" height="7" rx="0.5" fill="none" stroke="#ab4c13" stroke-width="1.5"/>
+<rect x="286.50" y="126.44" width="7" height="7" rx="0.5" fill="none" stroke="#ab4c13" stroke-width="1.5"/>
+<rect x="327.50" y="109.40" width="7" height="7" rx="0.5" fill="none" stroke="#ab4c13" stroke-width="1.5"/>
+<rect x="409.50" y="104.78" width="7" height="7" rx="0.5" fill="none" stroke="#ab4c13" stroke-width="1.5"/>
+<polyline points="85.00,260.67 167.00,252.86 208.00,239.83 232.60,209.14 249.00,184.89 265.40,164.75 290.00,137.57 331.00,114.39 413.00,108.18" stroke="#007e6c" stroke-width="1.8" stroke-dasharray="2 3" fill="none"/>
+<circle cx="85.00" cy="260.67" r="2.2" fill="#007e6c"/>
+<circle cx="167.00" cy="252.86" r="2.2" fill="#007e6c"/>
+<circle cx="208.00" cy="239.83" r="2.2" fill="#007e6c"/>
+<circle cx="232.60" cy="209.14" r="2.2" fill="#007e6c"/>
+<circle cx="249.00" cy="184.89" r="2.2" fill="#007e6c"/>
+<circle cx="265.40" cy="164.75" r="2.2" fill="#007e6c"/>
+<circle cx="290.00" cy="137.57" r="2.2" fill="#007e6c"/>
+<circle cx="331.00" cy="114.39" r="2.2" fill="#007e6c"/>
+<circle cx="413.00" cy="108.18" r="2.2" fill="#007e6c"/>
+<text x="496" y="92" font-size="15" font-weight="650">2 m/s · lateral force</text>
+<path d="M496.00 263.00L824.00 263.00" stroke="#d5e0eb" fill="none" />
+<text x="488" y="267.00" text-anchor="end">-0.8</text>
+<path d="M496.00 224.00L824.00 224.00" stroke="#d5e0eb" fill="none" />
+<text x="488" y="228.00" text-anchor="end">-0.4</text>
+<path d="M496.00 185.00L824.00 185.00" stroke="#9aafc2" fill="none" />
+<text x="488" y="189.00" text-anchor="end">0</text>
+<path d="M496.00 146.00L824.00 146.00" stroke="#d5e0eb" fill="none" />
+<text x="488" y="150.00" text-anchor="end">0.4</text>
+<path d="M496.00 107.00L824.00 107.00" stroke="#d5e0eb" fill="none" />
+<text x="488" y="111.00" text-anchor="end">0.8</text>
+<path d="M496.00 107.00L496.00 263.00" stroke="#e1e9f1" fill="none" />
+<text x="496.00" y="281" text-anchor="middle">-10</text>
+<path d="M578.00 107.00L578.00 263.00" stroke="#e1e9f1" fill="none" />
+<text x="578.00" y="281" text-anchor="middle">-5</text>
+<path d="M660.00 107.00L660.00 263.00" stroke="#9aafc2" fill="none" />
+<text x="660.00" y="281" text-anchor="middle">0</text>
+<path d="M742.00 107.00L742.00 263.00" stroke="#e1e9f1" fill="none" />
+<text x="742.00" y="281" text-anchor="middle">5</text>
+<path d="M824.00 107.00L824.00 263.00" stroke="#e1e9f1" fill="none" />
+<text x="824.00" y="281" text-anchor="middle">10</text>
+<text x="660" y="300" text-anchor="middle">Slip angle (°)</text>
+<polyline points="496.00,110.42 578.00,118.47 627.20,148.50 660.00,185.00 692.80,221.50 742.00,251.53 824.00,259.58" stroke="#2765a0" stroke-width="1.8"  fill="none"/>
+<circle cx="496.00" cy="110.42" r="5.5" fill="none" stroke="#2765a0" stroke-width="1.6"/>
+<circle cx="578.00" cy="118.47" r="5.5" fill="none" stroke="#2765a0" stroke-width="1.6"/>
+<circle cx="627.20" cy="148.50" r="5.5" fill="none" stroke="#2765a0" stroke-width="1.6"/>
+<circle cx="660.00" cy="185.00" r="5.5" fill="none" stroke="#2765a0" stroke-width="1.6"/>
+<circle cx="692.80" cy="221.50" r="5.5" fill="none" stroke="#2765a0" stroke-width="1.6"/>
+<circle cx="742.00" cy="251.53" r="5.5" fill="none" stroke="#2765a0" stroke-width="1.6"/>
+<circle cx="824.00" cy="259.58" r="5.5" fill="none" stroke="#2765a0" stroke-width="1.6"/>
+<polyline points="496.00,113.12 578.00,126.32 627.20,157.12 660.00,185.00 692.80,212.88 742.00,243.68 824.00,256.88" stroke="#ab4c13" stroke-width="1.8" stroke-dasharray="6 3" fill="none"/>
+<rect x="492.50" y="109.62" width="7" height="7" rx="0.5" fill="none" stroke="#ab4c13" stroke-width="1.5"/>
+<rect x="574.50" y="122.82" width="7" height="7" rx="0.5" fill="none" stroke="#ab4c13" stroke-width="1.5"/>
+<rect x="623.70" y="153.62" width="7" height="7" rx="0.5" fill="none" stroke="#ab4c13" stroke-width="1.5"/>
+<rect x="656.50" y="181.50" width="7" height="7" rx="0.5" fill="none" stroke="#ab4c13" stroke-width="1.5"/>
+<rect x="689.30" y="209.38" width="7" height="7" rx="0.5" fill="none" stroke="#ab4c13" stroke-width="1.5"/>
+<rect x="738.50" y="240.18" width="7" height="7" rx="0.5" fill="none" stroke="#ab4c13" stroke-width="1.5"/>
+<rect x="820.50" y="253.38" width="7" height="7" rx="0.5" fill="none" stroke="#ab4c13" stroke-width="1.5"/>
+<polyline points="496.00,112.49 578.00,138.03 627.20,165.02 660.00,185.00 692.80,204.98 742.00,231.97 824.00,257.51" stroke="#007e6c" stroke-width="1.8" stroke-dasharray="2 3" fill="none"/>
+<circle cx="496.00" cy="112.49" r="2.2" fill="#007e6c"/>
+<circle cx="578.00" cy="138.03" r="2.2" fill="#007e6c"/>
+<circle cx="627.20" cy="165.02" r="2.2" fill="#007e6c"/>
+<circle cx="660.00" cy="185.00" r="2.2" fill="#007e6c"/>
+<circle cx="692.80" cy="204.98" r="2.2" fill="#007e6c"/>
+<circle cx="742.00" cy="231.97" r="2.2" fill="#007e6c"/>
+<circle cx="824.00" cy="257.51" r="2.2" fill="#007e6c"/>
+<text x="85" y="328" font-size="15" font-weight="650">8 m/s · longitudinal force</text>
+<path d="M85.00 499.00L413.00 499.00" stroke="#d5e0eb" fill="none" />
+<text x="77" y="503.00" text-anchor="end">-0.8</text>
+<path d="M85.00 460.00L413.00 460.00" stroke="#d5e0eb" fill="none" />
+<text x="77" y="464.00" text-anchor="end">-0.4</text>
+<path d="M85.00 421.00L413.00 421.00" stroke="#9aafc2" fill="none" />
+<text x="77" y="425.00" text-anchor="end">0</text>
+<path d="M85.00 382.00L413.00 382.00" stroke="#d5e0eb" fill="none" />
+<text x="77" y="386.00" text-anchor="end">0.4</text>
+<path d="M85.00 343.00L413.00 343.00" stroke="#d5e0eb" fill="none" />
+<text x="77" y="347.00" text-anchor="end">0.8</text>
+<path d="M85.00 343.00L85.00 499.00" stroke="#e1e9f1" fill="none" />
+<text x="85.00" y="517" text-anchor="middle">-20</text>
+<path d="M167.00 343.00L167.00 499.00" stroke="#e1e9f1" fill="none" />
+<text x="167.00" y="517" text-anchor="middle">-10</text>
+<path d="M249.00 343.00L249.00 499.00" stroke="#9aafc2" fill="none" />
+<text x="249.00" y="517" text-anchor="middle">0</text>
+<path d="M331.00 343.00L331.00 499.00" stroke="#e1e9f1" fill="none" />
+<text x="331.00" y="517" text-anchor="middle">10</text>
+<path d="M413.00 343.00L413.00 499.00" stroke="#e1e9f1" fill="none" />
+<text x="413.00" y="517" text-anchor="middle">20</text>
+<text x="249" y="536" text-anchor="middle">Longitudinal slip (%)</text>
+<polyline points="85.00,499.00 167.00,498.70 208.00,497.89 232.60,486.02 249.00,421.47 265.40,359.01 290.00,344.03 331.00,343.47 413.00,343.15" stroke="#2765a0" stroke-width="1.8"  fill="none"/>
+<circle cx="85.00" cy="499.00" r="5.5" fill="none" stroke="#2765a0" stroke-width="1.6"/>
+<circle cx="167.00" cy="498.70" r="5.5" fill="none" stroke="#2765a0" stroke-width="1.6"/>
+<circle cx="208.00" cy="497.89" r="5.5" fill="none" stroke="#2765a0" stroke-width="1.6"/>
+<circle cx="232.60" cy="486.02" r="5.5" fill="none" stroke="#2765a0" stroke-width="1.6"/>
+<circle cx="249.00" cy="421.47" r="5.5" fill="none" stroke="#2765a0" stroke-width="1.6"/>
+<circle cx="265.40" cy="359.01" r="5.5" fill="none" stroke="#2765a0" stroke-width="1.6"/>
+<circle cx="290.00" cy="344.03" r="5.5" fill="none" stroke="#2765a0" stroke-width="1.6"/>
+<circle cx="331.00" cy="343.47" r="5.5" fill="none" stroke="#2765a0" stroke-width="1.6"/>
+<circle cx="413.00" cy="343.15" r="5.5" fill="none" stroke="#2765a0" stroke-width="1.6"/>
+<polyline points="85.00,498.99 167.00,498.81 208.00,496.07 232.60,474.36 249.00,421.38 265.40,371.04 290.00,344.87 331.00,343.46 413.00,343.32" stroke="#ab4c13" stroke-width="1.8" stroke-dasharray="6 3" fill="none"/>
+<rect x="81.50" y="495.49" width="7" height="7" rx="0.5" fill="none" stroke="#ab4c13" stroke-width="1.5"/>
+<rect x="163.50" y="495.31" width="7" height="7" rx="0.5" fill="none" stroke="#ab4c13" stroke-width="1.5"/>
+<rect x="204.50" y="492.57" width="7" height="7" rx="0.5" fill="none" stroke="#ab4c13" stroke-width="1.5"/>
+<rect x="229.10" y="470.86" width="7" height="7" rx="0.5" fill="none" stroke="#ab4c13" stroke-width="1.5"/>
+<rect x="245.50" y="417.88" width="7" height="7" rx="0.5" fill="none" stroke="#ab4c13" stroke-width="1.5"/>
+<rect x="261.90" y="367.54" width="7" height="7" rx="0.5" fill="none" stroke="#ab4c13" stroke-width="1.5"/>
+<rect x="286.50" y="341.37" width="7" height="7" rx="0.5" fill="none" stroke="#ab4c13" stroke-width="1.5"/>
+<rect x="327.50" y="339.96" width="7" height="7" rx="0.5" fill="none" stroke="#ab4c13" stroke-width="1.5"/>
+<rect x="409.50" y="339.82" width="7" height="7" rx="0.5" fill="none" stroke="#ab4c13" stroke-width="1.5"/>
+<polyline points="85.00,499.00 167.00,498.72 208.00,494.12 232.60,459.10 249.00,421.36 265.40,395.19 290.00,351.52 331.00,343.57 413.00,343.32" stroke="#007e6c" stroke-width="1.8" stroke-dasharray="2 3" fill="none"/>
+<circle cx="85.00" cy="499.00" r="2.2" fill="#007e6c"/>
+<circle cx="167.00" cy="498.72" r="2.2" fill="#007e6c"/>
+<circle cx="208.00" cy="494.12" r="2.2" fill="#007e6c"/>
+<circle cx="232.60" cy="459.10" r="2.2" fill="#007e6c"/>
+<circle cx="249.00" cy="421.36" r="2.2" fill="#007e6c"/>
+<circle cx="265.40" cy="395.19" r="2.2" fill="#007e6c"/>
+<circle cx="290.00" cy="351.52" r="2.2" fill="#007e6c"/>
+<circle cx="331.00" cy="343.57" r="2.2" fill="#007e6c"/>
+<circle cx="413.00" cy="343.32" r="2.2" fill="#007e6c"/>
+<text x="496" y="328" font-size="15" font-weight="650">8 m/s · lateral force</text>
+<path d="M496.00 499.00L824.00 499.00" stroke="#d5e0eb" fill="none" />
+<text x="488" y="503.00" text-anchor="end">-0.8</text>
+<path d="M496.00 460.00L824.00 460.00" stroke="#d5e0eb" fill="none" />
+<text x="488" y="464.00" text-anchor="end">-0.4</text>
+<path d="M496.00 421.00L824.00 421.00" stroke="#9aafc2" fill="none" />
+<text x="488" y="425.00" text-anchor="end">0</text>
+<path d="M496.00 382.00L824.00 382.00" stroke="#d5e0eb" fill="none" />
+<text x="488" y="386.00" text-anchor="end">0.4</text>
+<path d="M496.00 343.00L824.00 343.00" stroke="#d5e0eb" fill="none" />
+<text x="488" y="347.00" text-anchor="end">0.8</text>
+<path d="M496.00 343.00L496.00 499.00" stroke="#e1e9f1" fill="none" />
+<text x="496.00" y="517" text-anchor="middle">-10</text>
+<path d="M578.00 343.00L578.00 499.00" stroke="#e1e9f1" fill="none" />
+<text x="578.00" y="517" text-anchor="middle">-5</text>
+<path d="M660.00 343.00L660.00 499.00" stroke="#9aafc2" fill="none" />
+<text x="660.00" y="517" text-anchor="middle">0</text>
+<path d="M742.00 343.00L742.00 499.00" stroke="#e1e9f1" fill="none" />
+<text x="742.00" y="517" text-anchor="middle">5</text>
+<path d="M824.00 343.00L824.00 499.00" stroke="#e1e9f1" fill="none" />
+<text x="824.00" y="517" text-anchor="middle">10</text>
+<text x="660" y="536" text-anchor="middle">Slip angle (°)</text>
+<polyline points="496.00,343.17 578.00,343.81 627.20,368.04 660.00,421.00 692.80,473.96 742.00,498.19 824.00,498.83" stroke="#2765a0" stroke-width="1.8"  fill="none"/>
+<circle cx="496.00" cy="343.17" r="5.5" fill="none" stroke="#2765a0" stroke-width="1.6"/>
+<circle cx="578.00" cy="343.81" r="5.5" fill="none" stroke="#2765a0" stroke-width="1.6"/>
+<circle cx="627.20" cy="368.04" r="5.5" fill="none" stroke="#2765a0" stroke-width="1.6"/>
+<circle cx="660.00" cy="421.00" r="5.5" fill="none" stroke="#2765a0" stroke-width="1.6"/>
+<circle cx="692.80" cy="473.96" r="5.5" fill="none" stroke="#2765a0" stroke-width="1.6"/>
+<circle cx="742.00" cy="498.19" r="5.5" fill="none" stroke="#2765a0" stroke-width="1.6"/>
+<circle cx="824.00" cy="498.83" r="5.5" fill="none" stroke="#2765a0" stroke-width="1.6"/>
+<polyline points="496.00,343.49 578.00,354.16 627.20,385.75 660.00,421.00 692.80,456.25 742.00,487.84 824.00,498.51" stroke="#ab4c13" stroke-width="1.8" stroke-dasharray="6 3" fill="none"/>
+<rect x="492.50" y="339.99" width="7" height="7" rx="0.5" fill="none" stroke="#ab4c13" stroke-width="1.5"/>
+<rect x="574.50" y="350.66" width="7" height="7" rx="0.5" fill="none" stroke="#ab4c13" stroke-width="1.5"/>
+<rect x="623.70" y="382.25" width="7" height="7" rx="0.5" fill="none" stroke="#ab4c13" stroke-width="1.5"/>
+<rect x="656.50" y="417.50" width="7" height="7" rx="0.5" fill="none" stroke="#ab4c13" stroke-width="1.5"/>
+<rect x="689.30" y="452.75" width="7" height="7" rx="0.5" fill="none" stroke="#ab4c13" stroke-width="1.5"/>
+<rect x="738.50" y="484.34" width="7" height="7" rx="0.5" fill="none" stroke="#ab4c13" stroke-width="1.5"/>
+<rect x="820.50" y="495.01" width="7" height="7" rx="0.5" fill="none" stroke="#ab4c13" stroke-width="1.5"/>
+<polyline points="496.00,345.38 578.00,369.45 627.20,402.72 660.00,421.00 692.80,439.28 742.00,472.55 824.00,496.62" stroke="#007e6c" stroke-width="1.8" stroke-dasharray="2 3" fill="none"/>
+<circle cx="496.00" cy="345.38" r="2.2" fill="#007e6c"/>
+<circle cx="578.00" cy="369.45" r="2.2" fill="#007e6c"/>
+<circle cx="627.20" cy="402.72" r="2.2" fill="#007e6c"/>
+<circle cx="660.00" cy="421.00" r="2.2" fill="#007e6c"/>
+<circle cx="692.80" cy="439.28" r="2.2" fill="#007e6c"/>
+<circle cx="742.00" cy="472.55" r="2.2" fill="#007e6c"/>
+<circle cx="824.00" cy="496.62" r="2.2" fill="#007e6c"/>
+</g>
+</svg>

@@ -4,6 +4,9 @@ mod drop_experiment;
 mod drop_lab;
 mod drop_report;
 mod elastic_experiment;
+mod grip_experiment;
+mod grip_lab;
+mod grip_report;
 mod impact_experiment;
 mod impact_lab;
 mod impact_report;
@@ -142,9 +145,12 @@ fn main() -> AppExit {
     let mut impact_lab = false;
     let mut puncture_lab = false;
     let mut corner_lab = false;
+    let mut grip_lab = false;
     let mut window = WindowOptions::default();
     for argument in std::env::args_os().skip(1) {
-        let result = if argument == "--corner-report" {
+        let result = if argument == "--grip-report" {
+            grip_report::report(std::env::args_os().any(|argument| argument == "--samples"))
+        } else if argument == "--corner-report" {
             corner_experiment::report(std::env::args_os().any(|argument| argument == "--samples"))
         } else if argument == "--elastic-report" {
             elastic_experiment::report()
@@ -166,6 +172,7 @@ fn main() -> AppExit {
             impact_lab |= argument == "--impact-lab";
             puncture_lab |= argument == "--puncture-lab";
             corner_lab |= argument == "--corner-lab";
+            grip_lab |= argument == "--grip-lab";
             window.no_vsync |= argument == "--no-vsync";
             window.benchmark |= argument == "--benchmark";
             continue;
@@ -179,7 +186,9 @@ fn main() -> AppExit {
         };
     }
 
-    if corner_lab {
+    if grip_lab {
+        grip_lab::run(window)
+    } else if corner_lab {
         corner_lab::run(window)
     } else if puncture_lab {
         impact_lab::run_puncture(window)

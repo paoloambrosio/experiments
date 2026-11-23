@@ -1,0 +1,108 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 870 473" role="img" aria-labelledby="title desc">
+<title id="title">Combined-slip road force vectors</title>
+<desc id="desc">Road force vectors divided by mean support at three loads, two speeds, and all four sign combinations. A dashed circle indicates the 0.8 friction bound.</desc>
+<rect width="870" height="473" rx="14" fill="#f3f7fb"/>
+<g font-family="system-ui, sans-serif" font-size="12" fill="#20364d">
+<text x="32" y="33" font-size="22" font-weight="650">Combined-slip road force vectors</text>
+<text x="32" y="55" fill="#52677b">±10% longitudinal slip and ±5° slip angle · 3,840 substeps/s</text>
+<circle cx="547.00" cy="31.00" r="5.5" fill="none" stroke="#2765a0" stroke-width="1.6"/>
+<text x="559" y="35" >50% load</text>
+<rect x="635.50" y="27.50" width="7" height="7" rx="0.5" fill="none" stroke="#ab4c13" stroke-width="1.5"/>
+<text x="651" y="35" >100% load</text>
+<circle cx="731.00" cy="31.00" r="2.2" fill="#007e6c"/>
+<text x="743" y="35" >150% load</text>
+<text x="231" y="88" text-anchor="middle" font-size="16" font-weight="650">2 m/s</text>
+<circle cx="231" cy="250" r="140" fill="#e8f0f8" stroke="#6e8194" stroke-dasharray="5 4"/>
+<path d="M78.75 250.00L383.25 250.00" stroke="#94a7ba" fill="none" />
+<path d="M231.00 402.25L231.00 97.75" stroke="#94a7ba" fill="none" />
+<path d="M91.00 246.00L91.00 254.00" stroke="#94a7ba" fill="none" />
+<text x="91.00" y="268" text-anchor="middle">-0.8</text>
+<path d="M227.00 390.00L235.00 390.00" stroke="#94a7ba" fill="none" />
+<text x="223" y="394.00" text-anchor="end">-0.8</text>
+<path d="M161.00 246.00L161.00 254.00" stroke="#94a7ba" fill="none" />
+<text x="161.00" y="268" text-anchor="middle">-0.4</text>
+<path d="M227.00 320.00L235.00 320.00" stroke="#94a7ba" fill="none" />
+<text x="223" y="324.00" text-anchor="end">-0.4</text>
+<path d="M301.00 246.00L301.00 254.00" stroke="#94a7ba" fill="none" />
+<text x="301.00" y="268" text-anchor="middle">0.4</text>
+<path d="M227.00 180.00L235.00 180.00" stroke="#94a7ba" fill="none" />
+<text x="223" y="184.00" text-anchor="end">0.4</text>
+<path d="M371.00 246.00L371.00 254.00" stroke="#94a7ba" fill="none" />
+<text x="371.00" y="268" text-anchor="middle">0.8</text>
+<path d="M227.00 110.00L235.00 110.00" stroke="#94a7ba" fill="none" />
+<text x="223" y="114.00" text-anchor="end">0.8</text>
+<path d="M231.00 250.00L334.27 332.94" stroke="#2765a0" fill="none" stroke-width="1.4" opacity="0.8"/>
+<circle cx="334.27" cy="332.94" r="5.5" fill="none" stroke="#2765a0" stroke-width="1.6"/>
+<path d="M231.00 250.00L334.27 167.06" stroke="#2765a0" fill="none" stroke-width="1.4" opacity="0.8"/>
+<circle cx="334.27" cy="167.06" r="5.5" fill="none" stroke="#2765a0" stroke-width="1.6"/>
+<path d="M231.00 250.00L128.27 335.54" stroke="#2765a0" fill="none" stroke-width="1.4" opacity="0.8"/>
+<circle cx="128.27" cy="335.54" r="5.5" fill="none" stroke="#2765a0" stroke-width="1.6"/>
+<path d="M231.00 250.00L128.27 164.46" stroke="#2765a0" fill="none" stroke-width="1.4" opacity="0.8"/>
+<circle cx="128.27" cy="164.46" r="5.5" fill="none" stroke="#2765a0" stroke-width="1.6"/>
+<path d="M231.00 250.00L336.81 325.38" stroke="#ab4c13" fill="none" stroke-width="1.4" opacity="0.8"/>
+<rect x="333.31" y="321.88" width="7" height="7" rx="0.5" fill="none" stroke="#ab4c13" stroke-width="1.5"/>
+<path d="M231.00 250.00L336.81 174.62" stroke="#ab4c13" fill="none" stroke-width="1.4" opacity="0.8"/>
+<rect x="333.31" y="171.12" width="7" height="7" rx="0.5" fill="none" stroke="#ab4c13" stroke-width="1.5"/>
+<path d="M231.00 250.00L129.53 328.05" stroke="#ab4c13" fill="none" stroke-width="1.4" opacity="0.8"/>
+<rect x="126.03" y="324.55" width="7" height="7" rx="0.5" fill="none" stroke="#ab4c13" stroke-width="1.5"/>
+<path d="M231.00 250.00L129.53 171.95" stroke="#ab4c13" fill="none" stroke-width="1.4" opacity="0.8"/>
+<rect x="126.03" y="168.45" width="7" height="7" rx="0.5" fill="none" stroke="#ab4c13" stroke-width="1.5"/>
+<path d="M231.00 250.00L338.47 318.52" stroke="#007e6c" fill="none" stroke-width="1.4" opacity="0.8"/>
+<circle cx="338.47" cy="318.52" r="2.2" fill="#007e6c"/>
+<path d="M231.00 250.00L338.47 181.48" stroke="#007e6c" fill="none" stroke-width="1.4" opacity="0.8"/>
+<circle cx="338.47" cy="181.48" r="2.2" fill="#007e6c"/>
+<path d="M231.00 250.00L120.76 324.70" stroke="#007e6c" fill="none" stroke-width="1.4" opacity="0.8"/>
+<circle cx="120.76" cy="324.70" r="2.2" fill="#007e6c"/>
+<path d="M231.00 250.00L120.76 175.30" stroke="#007e6c" fill="none" stroke-width="1.4" opacity="0.8"/>
+<circle cx="120.76" cy="175.30" r="2.2" fill="#007e6c"/>
+<text x="231" y="427" text-anchor="middle">Longitudinal force / support</text>
+<text x="58" y="250" text-anchor="middle" transform="rotate(-90 58 250)">Lateral force / support</text>
+<text x="648" y="88" text-anchor="middle" font-size="16" font-weight="650">8 m/s</text>
+<circle cx="648" cy="250" r="140" fill="#e8f0f8" stroke="#6e8194" stroke-dasharray="5 4"/>
+<path d="M495.75 250.00L800.25 250.00" stroke="#94a7ba" fill="none" />
+<path d="M648.00 402.25L648.00 97.75" stroke="#94a7ba" fill="none" />
+<path d="M508.00 246.00L508.00 254.00" stroke="#94a7ba" fill="none" />
+<text x="508.00" y="268" text-anchor="middle">-0.8</text>
+<path d="M644.00 390.00L652.00 390.00" stroke="#94a7ba" fill="none" />
+<text x="640" y="394.00" text-anchor="end">-0.8</text>
+<path d="M578.00 246.00L578.00 254.00" stroke="#94a7ba" fill="none" />
+<text x="578.00" y="268" text-anchor="middle">-0.4</text>
+<path d="M644.00 320.00L652.00 320.00" stroke="#94a7ba" fill="none" />
+<text x="640" y="324.00" text-anchor="end">-0.4</text>
+<path d="M718.00 246.00L718.00 254.00" stroke="#94a7ba" fill="none" />
+<text x="718.00" y="268" text-anchor="middle">0.4</text>
+<path d="M644.00 180.00L652.00 180.00" stroke="#94a7ba" fill="none" />
+<text x="640" y="184.00" text-anchor="end">0.4</text>
+<path d="M788.00 246.00L788.00 254.00" stroke="#94a7ba" fill="none" />
+<text x="788.00" y="268" text-anchor="middle">0.8</text>
+<path d="M644.00 110.00L652.00 110.00" stroke="#94a7ba" fill="none" />
+<text x="640" y="114.00" text-anchor="end">0.8</text>
+<path d="M648.00 250.00L754.69 338.75" stroke="#2765a0" fill="none" stroke-width="1.4" opacity="0.8"/>
+<circle cx="754.69" cy="338.75" r="5.5" fill="none" stroke="#2765a0" stroke-width="1.6"/>
+<path d="M648.00 250.00L754.69 161.25" stroke="#2765a0" fill="none" stroke-width="1.4" opacity="0.8"/>
+<circle cx="754.69" cy="161.25" r="5.5" fill="none" stroke="#2765a0" stroke-width="1.6"/>
+<path d="M648.00 250.00L540.98 338.57" stroke="#2765a0" fill="none" stroke-width="1.4" opacity="0.8"/>
+<circle cx="540.98" cy="338.57" r="5.5" fill="none" stroke="#2765a0" stroke-width="1.6"/>
+<path d="M648.00 250.00L540.98 161.43" stroke="#2765a0" fill="none" stroke-width="1.4" opacity="0.8"/>
+<circle cx="540.98" cy="161.43" r="5.5" fill="none" stroke="#2765a0" stroke-width="1.6"/>
+<path d="M648.00 250.00L761.00 327.93" stroke="#ab4c13" fill="none" stroke-width="1.4" opacity="0.8"/>
+<rect x="757.50" y="324.43" width="7" height="7" rx="0.5" fill="none" stroke="#ab4c13" stroke-width="1.5"/>
+<path d="M648.00 250.00L761.00 172.07" stroke="#ab4c13" fill="none" stroke-width="1.4" opacity="0.8"/>
+<rect x="757.50" y="168.57" width="7" height="7" rx="0.5" fill="none" stroke="#ab4c13" stroke-width="1.5"/>
+<path d="M648.00 250.00L540.17 337.15" stroke="#ab4c13" fill="none" stroke-width="1.4" opacity="0.8"/>
+<rect x="536.67" y="333.65" width="7" height="7" rx="0.5" fill="none" stroke="#ab4c13" stroke-width="1.5"/>
+<path d="M648.00 250.00L540.17 162.85" stroke="#ab4c13" fill="none" stroke-width="1.4" opacity="0.8"/>
+<rect x="536.67" y="159.35" width="7" height="7" rx="0.5" fill="none" stroke="#ab4c13" stroke-width="1.5"/>
+<path d="M648.00 250.00L762.11 321.93" stroke="#007e6c" fill="none" stroke-width="1.4" opacity="0.8"/>
+<circle cx="762.11" cy="321.93" r="2.2" fill="#007e6c"/>
+<path d="M648.00 250.00L762.11 178.07" stroke="#007e6c" fill="none" stroke-width="1.4" opacity="0.8"/>
+<circle cx="762.11" cy="178.07" r="2.2" fill="#007e6c"/>
+<path d="M648.00 250.00L534.43 325.84" stroke="#007e6c" fill="none" stroke-width="1.4" opacity="0.8"/>
+<circle cx="534.43" cy="325.84" r="2.2" fill="#007e6c"/>
+<path d="M648.00 250.00L534.43 174.16" stroke="#007e6c" fill="none" stroke-width="1.4" opacity="0.8"/>
+<circle cx="534.43" cy="174.16" r="2.2" fill="#007e6c"/>
+<text x="648" y="427" text-anchor="middle">Longitudinal force / support</text>
+<text x="475" y="250" text-anchor="middle" transform="rotate(-90 475 250)">Lateral force / support</text>
+<text x="440" y="455" text-anchor="middle" fill="#52677b">Dashed circle shows the 0.8 friction bound.</text>
+</g>
+</svg>

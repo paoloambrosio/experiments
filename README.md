@@ -1,9 +1,11 @@
 # Bevy Vehicle Physics
 
-A Rust workspace for soft-body vehicle physics in Bevy and Avian. Drop a reinforced node-and-beam tyre, measure grip on a moving belt, watch a sidewall tear let air escape, or tow a loaded suspension corner over a step.
+A Rust workspace for soft-body vehicle physics in Bevy and Avian. Drop a reinforced node-and-beam tyre, measure loaded tyre grip on a moving belt, watch a sidewall tear let air escape, or tow a loaded suspension corner over a step.
 
 ```sh
 cargo run -p vehicle_lab
+cargo run -p vehicle_lab -- --grip-lab
+cargo run -p vehicle_lab -- --grip-report
 cargo run -p vehicle_lab -- --corner-lab
 cargo run -p vehicle_lab -- --corner-report
 cargo run -p vehicle_lab -- --puncture-lab

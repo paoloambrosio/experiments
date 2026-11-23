@@ -45,6 +45,27 @@ The rig seals the reinforced tyre at **30 kPa gauge**, settles the 20 kg wheel o
 
 The panel shows live readings during the run and the mean over two complete revolutions at the end. Blue and coral axle arrows show the tyre force transmitted along Z and X, respectively. Positive longitudinal slip means the tyre spins faster than free rolling at the same belt speed. Positive slip angle means the axle moves toward +X relative to the belt.
 
+### Loaded tyre grip
+
+```sh
+cargo run -p vehicle_lab -- --grip-lab
+```
+
+The lab measures drive, braking, lateral, and combined forces on the sealed 150 kPa light-car tyre. The axle moves vertically as the tread deforms. For each load and speed the lab first lets the wheel spin freely to measure its effective rolling radius, then uses that state to start each replay. Road and axle arrows show horizontal force in world coordinates. A positive slip angle means the belt has a velocity component toward −X and the tyre develops a force toward −X.
+
+| Control | Action |
+| --- | --- |
+| **1**, **2**, **3** | Select 50%, 100%, or 150% of the nominal 2,452.5 N load |
+| **V** | Toggle the belt between 2 and 8 m/s |
+| **Left**, **Right** | Cycle through the 19 slip cases |
+| **Enter** | Replay the selected case from the saved calibration |
+| **Backspace** | Restore the calibration or restart preparation |
+| Left mouse button + drag | Orbit around the tyre |
+| Scroll | Zoom in or out |
+| **R** | Reset the camera orientation and zoom |
+
+The default case is straight rolling at nominal load and 2 m/s. The readout shows live forces during the replay and the final mean over two revolutions. The benchmark uses nominal load, 8 m/s, +10% longitudinal slip, and +5° slip angle.
+
 ### Loaded wheel and suspension
 
 ```sh
@@ -135,6 +156,7 @@ Use `--benchmark` for an automated windowed run. It requests no VSync, warms the
 
 ```sh
 cargo run -p vehicle_lab -- --benchmark
+cargo run -p vehicle_lab -- --grip-lab --benchmark
 cargo run -p vehicle_lab -- --corner-lab --benchmark
 cargo run -p vehicle_lab -- --rolling-lab --benchmark
 cargo run -p vehicle_lab -- --impact-lab --benchmark
@@ -323,6 +345,13 @@ let tyre = tyre.with_puncture(PunctureConfig::new(0.001, 0.65)?)?;
 The arguments are the maximum opening as a fraction of a panel's original area and the orifice discharge coefficient. Both are dimensionless. `torn_panels()` identifies the open panels by side and segment and returns their topology node indices and opening areas in m². `puncture_reading()` reports the total area and mass flow in kg/s, with positive flow leaving the tyre. `chamber_air_mass_kg()` also works with a sealed chamber. These readings are available on fixed-bead and mounted tyres. Reinflating changes the air mass and preserves the openings. Resetting the fixed-bead tyre restores the intact sidewalls and initial air charge.
 
 ## Run the headless comparisons
+
+```sh
+cargo run -p vehicle_lab -- --grip-report
+cargo run -p vehicle_lab -- --grip-report --samples
+```
+
+The grip report sweeps 19 slip cases at three vertical loads and two belt speeds. It repeats the sweep at 3,840 and 7,680 substeps/s. Filter rows by their first CSV field. `calibration` gives effective radius and free-rolling drag as a positive magnitude. `grip` gives the commanded and measured slip, spin, and belt velocity, along with support and signed forces. `--samples` adds `grip_trace` rows sampled at 60 Hz through the target ramp and settling period. Longitudinal force follows +Z and lateral force follows +X. [Fixture and measured curves](../devlog/009-loaded-tyre-grip/README.md)
 
 ```sh
 cargo run -p vehicle_lab -- --corner-report

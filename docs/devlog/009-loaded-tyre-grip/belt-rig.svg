@@ -1,0 +1,51 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 820 365" role="img" aria-labelledby="title desc">
+  <title id="title">Loaded tyre on a moving belt</title>
+  <desc id="desc">In the side view the axle can move vertically, the rim spins about X, and the belt moves towards negative Z. In the top view the belt also moves towards negative X, which defines a positive slip angle.</desc>
+  <defs>
+    <marker id="dark" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto-start-reverse">
+      <path d="M0 0 7 3.5 0 7Z" fill="#52677b"/>
+    </marker>
+    <marker id="blue" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto">
+      <path d="M0 0 7 3.5 0 7Z" fill="#23669d"/>
+    </marker>
+    <marker id="orange" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto">
+      <path d="M0 0 7 3.5 0 7Z" fill="#9b491a"/>
+    </marker>
+  </defs>
+  <rect width="820" height="365" rx="14" fill="#f3f7fb"/>
+  <path d="M410 20V345" stroke="#c4d2df"/>
+  <g font-family="system-ui, sans-serif" fill="#20364d" font-size="14">
+    <text x="28" y="34" font-size="19" font-weight="650">Side view</text>
+    <text x="438" y="34" font-size="19" font-weight="650">Top view · positive slip angle</text>
+    <rect x="38" y="283" width="334" height="20" rx="4" fill="#dce6ef" stroke="#8195a8"/>
+    <circle cx="200" cy="198" r="87" fill="#dae8f5" stroke="#224e77" stroke-width="4"/>
+    <circle cx="200" cy="198" r="49" fill="#f3f7fb" stroke="#52677b" stroke-width="2"/>
+    <path d="M184 109v158m32-158v158" stroke="#879caf" stroke-width="2" stroke-dasharray="4 5"/>
+    <circle cx="200" cy="198" r="7" fill="#224e77"/>
+    <path d="M200 62V103" stroke="#9b491a" stroke-width="3" marker-end="url(#orange)"/>
+    <text x="212" y="81">Applied load</text>
+    <path d="M137 188a64 64 0 0 1 69-54" fill="none" stroke="#23669d" stroke-width="3" marker-end="url(#blue)"/>
+    <text x="76" y="153" fill="#23669d">+X spin</text>
+    <path d="M322 166v63" stroke="#52677b" stroke-width="2" marker-start="url(#dark)" marker-end="url(#dark)"/>
+    <text x="330" y="193">+Y</text>
+    <text x="330" y="212">travel</text>
+    <path d="M177 320H81" stroke="#52677b" stroke-width="2" marker-end="url(#dark)"/>
+    <text x="78" y="342">Belt along −Z</text>
+    <path d="M292 320h66" stroke="#52677b" stroke-width="2" marker-end="url(#dark)"/>
+    <text x="295" y="342">Forward +Z</text>
+    <rect x="444" y="75" width="340" height="238" rx="7" fill="#dce6ef" stroke="#9bafc0"/>
+    <rect x="533" y="155" width="177" height="60" rx="12" fill="#dae8f5" stroke="#224e77" stroke-width="3"/>
+    <path d="M621 140v90" stroke="#224e77" stroke-width="2" stroke-dasharray="5 3"/>
+    <text x="635" y="118">Wheel axle</text>
+    <path d="m644 124-17 20" stroke="#52677b"/>
+    <path d="M620 250H484" stroke="#52677b" stroke-width="1.5" stroke-dasharray="5 3"/>
+    <path d="m620 250-116 36" stroke="#23669d" stroke-width="3" marker-end="url(#blue)"/>
+    <path d="M552 250q0 11 5 19" fill="none" stroke="#52677b" stroke-width="1.5"/>
+    <text x="531" y="268">α</text>
+    <text x="545" y="298" fill="#23669d">Belt velocity</text>
+    <path d="M726 274v-37m0 37h37" stroke="#52677b" stroke-width="1.5" marker-end="url(#dark)"/>
+    <text x="712" y="231">+X</text>
+    <text x="752" y="294">+Z</text>
+    <text x="447" y="342" font-size="13">Angle exaggerated for clarity</text>
+  </g>
+</svg>

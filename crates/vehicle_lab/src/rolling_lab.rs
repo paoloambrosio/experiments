@@ -242,7 +242,7 @@ fn draw_belt(lines: &mut GizmoAsset, distance: f32) {
     draw_arrow(lines, Vec3::new(0.7, 0.0, 0.4), Vec3::NEG_Z * 0.32, BELT);
 }
 
-fn draw_arrow(lines: &mut GizmoAsset, origin: Vec3, vector: Vec3, colour: Color) {
+pub(crate) fn draw_arrow(lines: &mut GizmoAsset, origin: Vec3, vector: Vec3, colour: Color) {
     let length = vector.length();
     if length < 0.005 {
         return;

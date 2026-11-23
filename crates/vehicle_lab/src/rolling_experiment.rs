@@ -305,7 +305,9 @@ fn record_substep(mut bench: ResMut<RollingBench>, wheels: Query<&AvianTyre>) {
         bench.trace.push((time_s, sample));
     }
     if time_s > 1.0
-        && let Some(mean) = bench.turns.record(sample, 1.0 / f64::from(rate))
+        && let Some(mean) = bench
+            .turns
+            .record(sample, 1.0 / f64::from(rate), steady_rolling)
     {
         if running_case {
             bench.mean = Some(mean);
@@ -377,14 +379,19 @@ impl TurnIntegral {
 }
 
 #[derive(Default)]
-struct RollingTurns {
+pub(crate) struct RollingTurns {
     angle_rad: f64,
     turn: TurnIntegral,
     previous: Option<TurnIntegral>,
 }
 
 impl RollingTurns {
-    fn record(&mut self, sample: Sample, dt: f64) -> Option<Sample> {
+    pub(crate) fn record(
+        &mut self,
+        sample: Sample,
+        dt: f64,
+        steady: impl FnOnce(Sample, Sample) -> bool,
+    ) -> Option<Sample> {
         let speed = sample.spin_rad_s;
         if speed <= 0.0 {
             *self = Self::default();
@@ -403,17 +410,7 @@ impl RollingTurns {
         self.angle_rad = speed * (dt - remaining_s);
         let mean = current.mean();
         let previous = self.previous.replace(current)?;
-        let prior_mean = previous.mean();
-        if [mean, prior_mean]
-            .iter()
-            .all(|sample| (sample.floor_force_n.y - WHEEL_WEIGHT_N).abs() <= 0.02 * WHEEL_WEIGHT_N)
-            && (mean.spin_rad_s - prior_mean.spin_rad_s).abs() <= 0.005 * mean.spin_rad_s
-            && (mean.slip_angle_rad - prior_mean.slip_angle_rad)
-                .abs()
-                .to_degrees()
-                <= 0.10
-            && (mean.axle_force_n - prior_mean.axle_force_n).length() <= 1.5
-        {
+        if steady(mean, previous.mean()) {
             let mut combined = previous;
             let current = self.previous.as_ref().expect("current turn");
             combined.add(mean, current.seconds);
@@ -422,4 +419,16 @@ impl RollingTurns {
             None
         }
     }
+}
+
+fn steady_rolling(mean: Sample, prior_mean: Sample) -> bool {
+    [mean, prior_mean]
+        .iter()
+        .all(|sample| (sample.floor_force_n.y - WHEEL_WEIGHT_N).abs() <= 0.02 * WHEEL_WEIGHT_N)
+        && (mean.spin_rad_s - prior_mean.spin_rad_s).abs() <= 0.005 * mean.spin_rad_s
+        && (mean.slip_angle_rad - prior_mean.slip_angle_rad)
+            .abs()
+            .to_degrees()
+            <= 0.10
+        && (mean.axle_force_n - prior_mean.axle_force_n).length() <= 1.5
 }
