@@ -45,6 +45,24 @@ The rig seals the reinforced tyre at **30 kPa gauge**, settles the 20 kg wheel o
 
 The panel shows live readings during the run and the mean over two complete revolutions at the end. Blue and coral axle arrows show the tyre force transmitted along Z and X, respectively. Positive longitudinal slip means the tyre spins faster than free rolling at the same belt speed. Positive slip angle means the axle moves toward +X relative to the belt.
 
+### Loaded wheel and suspension
+
+```sh
+cargo run -p vehicle_lab -- --corner-lab
+```
+
+The rig prepares and seals the light-car tyre at **150 kPa initial gauge**. The **230 kg** sled and **20 kg** unsprung assembly represent one corner of an evenly loaded 1,000 kg car. Both replays spend four seconds settling under gravity, then ramp to 2 m/s. The step case crosses a 20 mm rise with an 8 mm rounded edge. The panel shows axle height and body centre height above the original floor, spring compression from its free length, and the vertical road reaction.
+
+| Control | Action |
+| --- | --- |
+| **1** | Select the flat-road control |
+| **2** | Select the rounded step |
+| **Enter** | Start a fresh replay of the selected case once inflation finishes |
+| **Backspace** | Reset the replay or restart inflation |
+| Left mouse button + drag | Orbit around the corner |
+| Scroll | Zoom in or out |
+| **R** | Reset the camera orientation and zoom |
+
 ### Kerb impact and damage
 
 ```sh
@@ -117,6 +135,7 @@ Use `--benchmark` for an automated windowed run. It requests no VSync, warms the
 
 ```sh
 cargo run -p vehicle_lab -- --benchmark
+cargo run -p vehicle_lab -- --corner-lab --benchmark
 cargo run -p vehicle_lab -- --rolling-lab --benchmark
 cargo run -p vehicle_lab -- --impact-lab --benchmark
 cargo run -p vehicle_lab -- --puncture-lab --benchmark
@@ -229,6 +248,31 @@ The bundle includes the bare rim mass plus the mass and inertia of both bead rin
 
 For a caller-managed rigid body, call `MountedTyre::step` with the substep duration and gravity to get force and torque about the rim centre. Apply that wrench and the rim's gravity, then call `sync_rim` with the updated pose and velocities. The rigid body should include the bead mass and inertia returned by `rim_mass_properties`.
 
+### Attach a suspension corner
+
+Enable the same `avian` feature and install `AvianSuspensionPlugin` alongside `AvianTyrePlugin` after Avian's physics plugins. Create a chassis rigid body and prepare a `MountedTyre` with its centre below the mount, at a distance within the suspension travel limits. Align the rim with the chassis at spawn. Chassis-local +Y points up and +Z points forward. The wheel spins about its local +X.
+
+```rust
+use bevy::prelude::Vec3;
+use vehicle_physics::avian_suspension::{CornerConfig, Suspension, WheelCorner};
+
+// chassis is an existing Avian rigid body. mounted is the tyre and rim pose.
+let corner = WheelCorner::spawn(app.world_mut(), chassis, mounted, CornerConfig {
+    mount: Vec3::new(0.0, -0.28, 0.0),
+    suspension: Suspension {
+        stiffness_n_per_m: 30_000.0,
+        damping_ns_per_m: 2_000.0,
+        free_length_m: 0.25,
+        min_length_m: 0.06,
+        max_length_m: 0.29,
+    },
+    upright_mass_kg: 3.0,
+    bare_rim_mass_kg: 9.0,
+})?;
+```
+
+The adapter creates a hub, a rim entity carrying `AvianTyre`, a travel-limited prismatic joint, and a spin hinge. The spring and damper exchange force between the chassis mount and hub at each substep. In this example the 3 kg hub, 9 kg bare rim, and 8 kg tyre add up to 20 kg. Read the tyre and contact forces from `AvianTyre` on `corner.rim`. The caller owns the returned entities and both joints.
+
 ### Enable grip on a flat floor
 
 `FlatFloor::new` creates a stationary, frictionless floor. Set a dimensionless coefficient and a positive transition speed (m/s) to enable grip. A moving surface takes a world-space velocity in m/s with a zero Y component.
@@ -279,6 +323,13 @@ let tyre = tyre.with_puncture(PunctureConfig::new(0.001, 0.65)?)?;
 The arguments are the maximum opening as a fraction of a panel's original area and the orifice discharge coefficient. Both are dimensionless. `torn_panels()` identifies the open panels by side and segment and returns their topology node indices and opening areas in m². `puncture_reading()` reports the total area and mass flow in kg/s, with positive flow leaving the tyre. `chamber_air_mass_kg()` also works with a sealed chamber. These readings are available on fixed-bead and mounted tyres. Reinflating changes the air mass and preserves the openings. Resetting the fixed-bead tyre restores the intact sidewalls and initial air charge.
 
 ## Run the headless comparisons
+
+```sh
+cargo run -p vehicle_lab -- --corner-report
+cargo run -p vehicle_lab -- --corner-report --samples
+```
+
+The corner report applies increasing static axle loads to the original tyre and compares the new light-car preset at 2,452.5 N. It checks static support and sag, clearance through the step, and recovery to the raised surface. It repeats the two tow runs at 3,840 and 7,680 substeps/s. The `--samples` flag adds tagged 60 Hz traces with positions and compression in metres and forces in newtons. [Measured results and configuration](../devlog/008-loaded-wheel-and-suspension/README.md)
 
 ```sh
 cargo run -p vehicle_lab -- --puncture-report

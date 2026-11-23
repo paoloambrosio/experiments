@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 760 355" role="img" aria-labelledby="title desc">
+  <title id="title">Loaded corner and step, viewed along the axle</title>
+  <desc id="desc">A 230 kilogram sled presses on a spring and damper above a 20 kilogram wheel assembly. The sled tows the wheel towards a rounded step. A dimension arrow shows the 20 millimetre step rise.</desc>
+  <defs>
+    <marker id="arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto-start-reverse">
+      <path d="M0 0 8 4 0 8Z" fill="#52677b"/>
+    </marker>
+  </defs>
+  <rect width="760" height="355" rx="14" fill="#f3f7fb"/>
+  <path d="M38 292H521V283Q521 272 532 272H723V337H38Z" fill="#dce6ef"/>
+  <path d="M38 292H521V283Q521 272 532 272H723" fill="none" stroke="#52677b" stroke-width="2"/>
+  <g font-family="system-ui, sans-serif" fill="#1b3146">
+    <rect x="170" y="33" width="210" height="47" rx="5" fill="#224e77"/>
+    <text x="275" y="62" text-anchor="middle" fill="white" font-size="17">230 kg sprung mass</text>
+    <circle cx="275" cy="219" r="73" fill="#dde9f6" stroke="#224e77" stroke-width="6"/>
+    <circle cx="275" cy="219" r="43" fill="#f3f7fb" stroke="#52677b" stroke-width="2"/>
+    <circle cx="275" cy="219" r="7" fill="#224e77"/>
+    <path d="M240 80V100l-11 6 22 10-22 10 22 10-22 10 22 10-11 6V219H275" fill="none" stroke="#a35619" stroke-width="2.5"/>
+    <path d="M310 80v50m-10-5h20v28h-20zm0 15h20m-10 13v66h-35" fill="none" stroke="#a35619" stroke-width="2.5"/>
+    <path d="M388 108H316M385 211H324" stroke="#52677b" stroke-width="1.3"/>
+    <text x="397" y="113" font-size="15">30 kN/m spring</text>
+    <text x="397" y="134" font-size="15">2 kN·s/m damper</text>
+    <text x="397" y="216" font-size="15">20 kg unsprung mass</text>
+    <path d="M593 292h44m-44-20h44" stroke="#52677b" stroke-width="1"/>
+    <path d="M619 292v-20" stroke="#52677b" marker-start="url(#arrow)" marker-end="url(#arrow)"/>
+    <text x="644" y="287" font-size="14">20 mm</text>
+    <text x="70" y="324" font-size="14">2 m/s along +Z</text>
+    <path d="M194 319h56" stroke="#52677b" stroke-width="1.5" marker-end="url(#arrow)"/>
+    <path d="M68 270v-46" stroke="#52677b" stroke-width="1.5" marker-end="url(#arrow)"/>
+    <text x="54" y="212" font-size="14">+Y</text>
+    <text x="709" y="29" font-size="13" text-anchor="end">Side view · step exaggerated</text>
+  </g>
+</svg>

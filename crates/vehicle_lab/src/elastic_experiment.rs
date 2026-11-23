@@ -31,7 +31,7 @@ impl Experiment {
         Self::build(
             substeps_per_second,
             None,
-            false,
+            None,
             ElasticTyreConfig::default(),
         )
     }
@@ -40,7 +40,7 @@ impl Experiment {
         Self::build(
             substeps_per_second,
             Some(target_pa),
-            false,
+            None,
             ElasticTyreConfig::default(),
         )
     }
@@ -54,13 +54,32 @@ impl Experiment {
         target_pa: f64,
         elastic_config: ElasticTyreConfig,
     ) -> Self {
-        Self::build(substeps_per_second, Some(target_pa), true, elastic_config)
+        Self::reinforced(
+            substeps_per_second,
+            target_pa,
+            elastic_config,
+            TreadReinforcementConfig::default(),
+        )
+    }
+
+    pub fn reinforced(
+        substeps_per_second: u32,
+        target_pa: f64,
+        elastic_config: ElasticTyreConfig,
+        reinforcement: TreadReinforcementConfig,
+    ) -> Self {
+        Self::build(
+            substeps_per_second,
+            Some(target_pa),
+            Some(reinforcement),
+            elastic_config,
+        )
     }
 
     fn build(
         substeps_per_second: u32,
         target_pressure_pa: Option<f64>,
-        reinforced: bool,
+        reinforcement: Option<TreadReinforcementConfig>,
         elastic_config: ElasticTyreConfig,
     ) -> Self {
         let config = TyreConfig::default();
@@ -82,8 +101,8 @@ impl Experiment {
             ElasticTyre::new(topology, elastic_config)
         }
         .expect("default elastic tyre");
-        let tyre = if reinforced {
-            tyre.with_tread_reinforcement(TreadReinforcementConfig::default())
+        let tyre = if let Some(reinforcement) = reinforcement {
+            tyre.with_tread_reinforcement(reinforcement)
                 .expect("default tread reinforcement")
         } else {
             tyre

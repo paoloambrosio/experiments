@@ -1,3 +1,5 @@
+mod corner_experiment;
+mod corner_lab;
 mod drop_experiment;
 mod drop_lab;
 mod drop_report;
@@ -6,6 +8,7 @@ mod impact_experiment;
 mod impact_lab;
 mod impact_report;
 mod inflation_report;
+mod loaded_tyre;
 mod performance;
 mod puncture_experiment;
 mod puncture_report;
@@ -138,9 +141,12 @@ fn main() -> AppExit {
     let mut rolling_lab = false;
     let mut impact_lab = false;
     let mut puncture_lab = false;
+    let mut corner_lab = false;
     let mut window = WindowOptions::default();
     for argument in std::env::args_os().skip(1) {
-        let result = if argument == "--elastic-report" {
+        let result = if argument == "--corner-report" {
+            corner_experiment::report(std::env::args_os().any(|argument| argument == "--samples"))
+        } else if argument == "--elastic-report" {
             elastic_experiment::report()
         } else if argument == "--inflation-report" {
             inflation_report::report()
@@ -159,6 +165,7 @@ fn main() -> AppExit {
             rolling_lab |= argument == "--rolling-lab";
             impact_lab |= argument == "--impact-lab";
             puncture_lab |= argument == "--puncture-lab";
+            corner_lab |= argument == "--corner-lab";
             window.no_vsync |= argument == "--no-vsync";
             window.benchmark |= argument == "--benchmark";
             continue;
@@ -172,7 +179,9 @@ fn main() -> AppExit {
         };
     }
 
-    if puncture_lab {
+    if corner_lab {
+        corner_lab::run(window)
+    } else if puncture_lab {
         impact_lab::run_puncture(window)
     } else if impact_lab {
         impact_lab::run(window)

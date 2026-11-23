@@ -85,6 +85,10 @@ impl AvianTyre {
 #[derive(SystemSet, Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct TyreSubstepComplete;
 
+/// The tyre has applied the bead wrench for this substep.
+#[derive(SystemSet, Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub(crate) struct TyreWrenchApplied;
+
 /// Install after Avian's physics plugins. Share Avian's gravity and substep size with the tyre.
 pub struct AvianTyrePlugin;
 
@@ -93,7 +97,9 @@ impl Plugin for AvianTyrePlugin {
         app.add_systems(
             SubstepSchedule,
             (
-                apply_tyre_wrench.before(IntegrationSystems::Velocity),
+                apply_tyre_wrench
+                    .in_set(TyreWrenchApplied)
+                    .before(IntegrationSystems::Velocity),
                 sync_beads
                     .after(SubstepSolverSystems::Damping)
                     .in_set(TyreSubstepComplete),

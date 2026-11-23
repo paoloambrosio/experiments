@@ -1,6 +1,8 @@
 //! Building blocks for deformable vehicles in Bevy.
 
 #[cfg(feature = "avian")]
+pub mod avian_suspension;
+#[cfg(feature = "avian")]
 pub mod avian_tyre;
 pub mod beam_damage;
 pub mod elastic_tyre;
