@@ -1,0 +1,53 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 780 475" role="img" aria-labelledby="title description">
+  <title id="title">Original and recovered left shoulder profiles</title>
+  <desc id="description">Side view of the tyre with a zoomed comparison of the affected shoulder. The original and 2 metre per second profiles overlap. The shoulder takes a small inward set after the 4 metre per second strike. It bulges outward after the 6 metre per second strike breaks six beams.</desc>
+  <rect width="780" height="475" rx="12" fill="#f8fafc"/>
+  <g font-family="system-ui, sans-serif" font-size="13" fill="#25364a">
+    <text x="26" y="35" font-weight="600" font-size="20">Unloaded left shoulder after the kerb strike</text>
+    <path d="M28 65h24" stroke="#5a6f84" stroke-width="2.6" stroke-dasharray="5 4"/><text x="60" y="69">Original and 2 m/s recovery</text>
+    <path d="M315 65h24" stroke="#a15216" stroke-width="2.6"/><text x="347" y="69">4 m/s</text>
+    <path d="M428 65h24" stroke="#1464a0" stroke-width="2.6"/><text x="460" y="69">6 m/s</text>
+    <text x="51" y="104" font-weight="600" font-size="15">Full shoulder · equal axis scale</text>
+    <text x="458" y="104" font-weight="600" font-size="15">Affected area · enlarged</text>
+    <path d="M66 263h290M211 118v290" stroke="#d4dfe9"/>
+    <rect x="178" y="118" width="145" height="62" fill="#e9f1f8" stroke="#8da9c3" stroke-dasharray="4 3"/>
+    <path d="M211.80 119.82 L239.84 122.27 L267.71 126.29 L290.24 143.18 L311.78 161.30 L329.67 183.01 L343.02 207.77 L351.27 234.65 L354.11 262.62 L351.43 290.61 L343.33 317.52 L330.13 342.33 L312.33 364.08 L290.63 381.94 L265.85 395.20 L238.97 403.38 L211.01 406.14 L183.04 403.38 L156.16 395.21 L131.38 381.95 L109.68 364.10 L91.88 342.36 L78.67 317.56 L70.57 290.65 L67.87 262.68 L70.70 234.72 L78.93 207.84 L92.26 183.10 L110.18 161.43 L131.98 143.69 L156.84 130.54 L183.79 122.50Z" fill="none" stroke="#1464a0" stroke-width="2.6" />
+    <path d="M211.07 119.80 L239.01 122.56 L265.87 130.72 L290.62 143.97 L312.31 161.79 L330.11 183.50 L343.33 208.27 L351.47 235.13 L354.20 263.07 L351.44 291.01 L343.28 317.87 L330.03 342.62 L312.21 364.31 L290.50 382.11 L265.73 395.33 L238.87 403.47 L210.93 406.20 L182.99 403.44 L156.13 395.28 L131.38 382.03 L109.69 364.21 L91.89 342.50 L78.67 317.73 L70.53 290.87 L67.80 262.93 L70.56 234.99 L78.72 208.13 L91.97 183.38 L109.79 161.69 L131.50 143.89 L156.27 130.67 L183.13 122.53Z" fill="none" stroke="#5a6f84" stroke-width="2.6" stroke-dasharray="5 4"/>
+    <text x="355" y="281">+Z</text><text x="188" y="128">+Y</text>
+    <path d="M474.80 178V402" stroke="#e1e9f0"/>
+    <text x="474.80" y="422" text-anchor="middle">-50</text>
+    <path d="M516.80 178V402" stroke="#e1e9f0"/>
+    <text x="516.80" y="422" text-anchor="middle">0</text>
+    <path d="M558.80 178V402" stroke="#e1e9f0"/>
+    <text x="558.80" y="422" text-anchor="middle">50</text>
+    <path d="M600.80 178V402" stroke="#e1e9f0"/>
+    <text x="600.80" y="422" text-anchor="middle">100</text>
+    <path d="M642.80 178V402" stroke="#e1e9f0"/>
+    <text x="642.80" y="422" text-anchor="middle">150</text>
+    <path d="M684.80 178V402" stroke="#e1e9f0"/>
+    <text x="684.80" y="422" text-anchor="middle">200</text>
+    <path d="M726.80 178V402" stroke="#e1e9f0"/>
+    <text x="726.80" y="422" text-anchor="middle">250</text>
+    <path d="M458 381.60H727" stroke="#e1e9f0"/>
+    <text x="450" y="385.60" text-anchor="end">200</text>
+    <path d="M458 347.60H727" stroke="#e1e9f0"/>
+    <text x="450" y="351.60" text-anchor="end">225</text>
+    <path d="M458 313.60H727" stroke="#e1e9f0"/>
+    <text x="450" y="317.60" text-anchor="end">250</text>
+    <path d="M458 279.60H727" stroke="#e1e9f0"/>
+    <text x="450" y="283.60" text-anchor="end">275</text>
+    <path d="M458 245.60H727" stroke="#e1e9f0"/>
+    <text x="450" y="249.60" text-anchor="end">300</text>
+    <path d="M458 211.60H727" stroke="#e1e9f0"/>
+    <text x="450" y="215.60" text-anchor="end">325</text>
+    <text x="458" y="148">Local Y (mm)</text>
+    <path d="M463.96 222.37 L516.94 213.97 L569.91 222.46 L620.84 247.52 L667.77 288.18 L708.90 342.89" fill="none" stroke="#5a6f84" stroke-width="2.6" stroke-dasharray="5 4"/>
+    <path d="M463.87 222.38 L516.84 213.97 L569.80 222.60 L620.39 249.37 L667.82 288.44 L709.00 343.04" fill="none" stroke="#a15216" stroke-width="2.6" />
+    <path d="M465.21 222.27 L518.32 214.06 L571.49 221.57 L624.34 233.92 L667.06 285.77 L707.90 341.38" fill="none" stroke="#1464a0" stroke-width="2.6" />
+    <path d="M624.34 233.92L620.84 247.52" stroke="#1464a0" stroke-width="1.4"/>
+    <circle cx="624.34" cy="233.92" r="3.5" fill="#1464a0"/>
+    <path d="M624.34 228.92l16-44h30" stroke="#1464a0" stroke-width="1.2" fill="none"/>
+    <text x="752" y="178" text-anchor="end" fill="#1464a0">10.85 mm residual</text>
+    <text x="590" y="450" text-anchor="middle">Local Z (mm)</text>
+  </g>
+</svg>

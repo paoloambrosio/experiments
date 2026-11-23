@@ -1,9 +1,11 @@
-//! World-space tyre dynamics with a prescribed rigid rim and optional flat floor.
+//! World-space tyre dynamics with a prescribed rigid rim and optional road contact.
 
 use bevy_math::{DQuat, DVec3};
 
 use crate::{
+    beam_damage::BeamDamage,
     elastic_tyre::{ElasticTyre, ElasticTyreError},
+    kerb::Kerb,
     pressure::{ChamberReading, triangulate},
     tyre::TyreTopology,
 };
@@ -109,8 +111,12 @@ impl FlatFloor {
     /// Upward force magnitude in newtons. A rising node can lose support while still below the plane.
     pub fn normal_force_n(self, position: DVec3, velocity: DVec3) -> f64 {
         let depth = self.height_m - position.y;
+        self.normal_force_at_depth(depth, velocity.y)
+    }
+
+    fn normal_force_at_depth(self, depth: f64, normal_velocity: f64) -> f64 {
         if depth > 0.0 {
-            (self.stiffness_n_per_m * depth - self.damping_ns_per_m * velocity.y).max(0.0)
+            (self.stiffness_n_per_m * depth - self.damping_ns_per_m * normal_velocity).max(0.0)
         } else {
             0.0
         }
@@ -122,11 +128,18 @@ impl FlatFloor {
         predicted_velocity: DVec3,
         dt_over_mass: f64,
     ) -> DVec3 {
+        self.friction_force(
+            normal_n,
+            (predicted_velocity - self.surface_velocity).with_y(0.0),
+            dt_over_mass,
+        )
+    }
+
+    fn friction_force(self, normal_n: f64, slip: DVec3, dt_over_mass: f64) -> DVec3 {
         let Some((coefficient, transition_speed)) = self.friction else {
             return DVec3::ZERO;
         };
-        let slip = (predicted_velocity - self.surface_velocity).with_y(0.0);
-        let speed = slip.x.hypot(slip.z);
+        let speed = slip.x.hypot(slip.y).hypot(slip.z);
         if normal_n == 0.0 || speed == 0.0 {
             return DVec3::ZERO;
         }
@@ -158,10 +171,14 @@ pub struct MountedStep {
     pub rim_force: DVec3,
     /// Torque in world N·m about the rim centre.
     pub rim_torque: DVec3,
-    /// Sum of upward normal forces at the start of the step, in newtons.
+    /// Sum of upward normal forces from the flat approach at the start of the step, in newtons.
     pub floor_force_n: f64,
-    /// Sum of the tangential forces applied over the step, in world newtons with zero Y.
+    /// Tangential force from the flat approach, in world newtons with zero Y.
     pub floor_tangential_force: DVec3,
+    /// Normal and friction reaction from the kerb on the tyre, in world newtons.
+    pub kerb_force: DVec3,
+    /// Sum of kerb normal force magnitudes in newtons. Positive during supported contact.
+    pub kerb_normal_force_n: f64,
 }
 
 #[derive(Debug, Clone)]
@@ -180,6 +197,7 @@ pub struct MountedTyre {
     tyre: ElasticTyre,
     rim: RimMotion,
     floor: Option<FlatFloor>,
+    kerb: Option<Kerb>,
     tread_nodes: std::ops::Range<usize>,
     tread_triangles: Vec<[usize; 3]>,
     external_forces: Vec<DVec3>,
@@ -215,6 +233,7 @@ impl MountedTyre {
             tyre,
             rim,
             floor,
+            kerb: None,
             tread_nodes,
             tread_triangles,
             external_forces: vec![DVec3::ZERO; node_count],
@@ -241,6 +260,45 @@ impl MountedTyre {
 
     pub fn chamber_reading(&self) -> Option<ChamberReading> {
         self.tyre.chamber_reading()
+    }
+
+    /// Axial material state in topology beam order, when damage is enabled.
+    pub fn beam_damage(&self) -> Option<&[BeamDamage]> {
+        self.tyre.beam_damage()
+    }
+
+    /// Add a stationary kerb using the floor's stiffness, damping, and friction settings.
+    /// The kerb participates in contact whenever a floor is installed.
+    pub fn with_kerb(mut self, kerb: Kerb) -> Self {
+        self.kerb = Some(kerb);
+        self
+    }
+
+    /// Hold the beads in a fixed local frame, preserving deformation, gas charge, and
+    /// beam damage. Node velocities are expressed relative to the rim's rigid motion.
+    pub fn into_fixed_bead_tyre(mut self) -> Result<ElasticTyre, ElasticTyreError> {
+        let rim = self.rim;
+        let inverse_rotation = rim.rotation.inverse();
+        let tyre = &mut self.tyre;
+        for index in 0..tyre.positions.len() {
+            let offset = tyre.positions[index] - rim.centre;
+            let position = inverse_rotation * offset;
+            let velocity = inverse_rotation
+                * (tyre.velocities[index]
+                    - rim.linear_velocity
+                    - rim.angular_velocity.cross(offset));
+            if !position.is_finite() || !velocity.is_finite() {
+                return Err(ElasticTyreError::NonFiniteStep);
+            }
+            tyre.next_positions[index] = position;
+            tyre.next_velocities[index] = velocity;
+        }
+        for &index in &tyre.bead_nodes {
+            tyre.next_positions[index] = tyre.rest_positions[index];
+            tyre.next_velocities[index] = DVec3::ZERO;
+        }
+        tyre.commit_next()?;
+        Ok(self.tyre)
     }
 
     /// Set or remove the floor used by subsequent steps.
@@ -304,9 +362,12 @@ impl MountedTyre {
     ) -> Result<MountedStep, ElasticTyreError> {
         let mut floor_force_n = 0.0;
         let mut floor_tangential_force = DVec3::ZERO;
+        let mut kerb_force = DVec3::ZERO;
+        let mut kerb_normal_force_n = 0.0;
         self.external_forces[self.tread_nodes.clone()].fill(gravity * self.tyre.node_mass);
         let dt_over_mass = dt_seconds / self.tyre.node_mass;
         let floor = self.floor;
+        let kerb = self.kerb;
         let tread_nodes = self.tread_nodes.clone();
         let (rim_force, rim_torque) = self.tyre.advance_with_contact(
             dt_seconds,
@@ -315,15 +376,32 @@ impl MountedTyre {
             |positions, velocities, forces| {
                 let Some(floor) = floor else { return Ok(()) };
                 for index in tread_nodes {
-                    let normal = floor.normal_force_n(positions[index], velocities[index]);
                     let predicted_velocity = velocities[index] + forces[index] * dt_over_mass;
+                    if let Some((depth, axis)) =
+                        kerb.and_then(|kerb| kerb.contact(floor.height_m(), positions[index]))
+                    {
+                        let normal =
+                            floor.normal_force_at_depth(depth, velocities[index].dot(axis));
+                        let slip = predicted_velocity - axis * predicted_velocity.dot(axis);
+                        let reaction =
+                            axis * normal + floor.friction_force(normal, slip, dt_over_mass);
+                        forces[index] += reaction;
+                        kerb_normal_force_n += normal;
+                        kerb_force += reaction;
+                        continue;
+                    }
+                    let normal = floor.normal_force_n(positions[index], velocities[index]);
                     let tangential =
                         floor.tangential_force(normal, predicted_velocity, dt_over_mass);
                     floor_force_n += normal;
                     floor_tangential_force += tangential;
                     forces[index] += DVec3::Y * normal + tangential;
                 }
-                if !floor_force_n.is_finite() || !floor_tangential_force.is_finite() {
+                if !floor_force_n.is_finite()
+                    || !floor_tangential_force.is_finite()
+                    || !kerb_force.is_finite()
+                    || !kerb_normal_force_n.is_finite()
+                {
                     return Err(ElasticTyreError::NonFiniteStep);
                 }
                 Ok(())
@@ -334,13 +412,24 @@ impl MountedTyre {
             rim_torque,
             floor_force_n,
             floor_tangential_force,
+            kerb_force,
+            kerb_normal_force_n,
         })
     }
 
     pub fn active_contacts(&self) -> impl Iterator<Item = usize> + '_ {
         self.tread_nodes.clone().filter(|&index| {
             self.floor.is_some_and(|floor| {
-                floor.normal_force_n(self.positions()[index], self.velocities()[index]) > 0.0
+                let position = self.positions()[index];
+                let velocity = self.velocities()[index];
+                if let Some((depth, axis)) = self
+                    .kerb
+                    .and_then(|kerb| kerb.contact(floor.height_m(), position))
+                {
+                    floor.normal_force_at_depth(depth, velocity.dot(axis)) > 0.0
+                } else {
+                    floor.normal_force_n(position, velocity) > 0.0
+                }
             })
         })
     }
@@ -354,7 +443,7 @@ impl MountedTyre {
         })
     }
 
-    /// Estimate the geometric intersection of the tread with the floor.
+    /// Estimate the geometric intersection of the tread with the flat approach plane.
     pub fn footprint(&self) -> Option<Footprint> {
         let floor = self.floor?;
         let mut polygons = Vec::new();

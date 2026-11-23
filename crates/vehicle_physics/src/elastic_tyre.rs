@@ -5,6 +5,7 @@ use std::{error::Error, fmt};
 use bevy_math::DVec3;
 
 use crate::{
+    beam_damage::{BeamDamage, BeamDamageConfig},
     pressure::{ChamberReading, PressureChamber, PressureConfig, PressureTriangle},
     tread_reinforcement::{CrownSpring, TreadReinforcementConfig},
     tyre::{BeamFamily, RingRole, TyreTopology},
@@ -73,6 +74,7 @@ pub enum ElasticTyreError {
     InvalidTreadReinforcement,
     InvalidRimMotion,
     InvalidFloor,
+    InvalidKerb,
 }
 
 impl fmt::Display for ElasticTyreError {
@@ -111,13 +113,14 @@ impl fmt::Display for ElasticTyreError {
             ),
             Self::InvalidRimMotion => f.write_str("rim motion must be finite with a unit rotation"),
             Self::InvalidFloor => f.write_str("floor settings must be finite, with nonnegative coefficients, a positive friction transition speed, and horizontal surface velocity"),
+            Self::InvalidKerb => f.write_str("kerb dimensions must be finite, with a positive edge radius smaller than the rise"),
         }
     }
 }
 
 impl Error for ElasticTyreError {}
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy)]
 struct ElasticBeam {
     endpoints: [usize; 2],
     rest_length: f64,
@@ -146,6 +149,8 @@ pub struct ElasticTyre {
     pub(crate) positions: Vec<DVec3>,
     pub(crate) velocities: Vec<DVec3>,
     beams: Vec<ElasticBeam>,
+    beam_damage: Option<(BeamDamageConfig, Vec<BeamDamage>)>,
+    next_damage: Vec<BeamDamage>,
     crown_springs: Vec<CrownSpring>,
     crown_coefficients: BeamCoefficients,
     free_nodes: Vec<usize>,
@@ -226,6 +231,8 @@ impl ElasticTyre {
             next_velocities: vec![DVec3::ZERO; node_count],
             forces: vec![DVec3::ZERO; node_count],
             beams,
+            beam_damage: None,
+            next_damage: Vec::new(),
             crown_springs: Vec::new(),
             crown_coefficients: BeamCoefficients {
                 stiffness: 0.0,
@@ -334,6 +341,29 @@ impl ElasticTyre {
         &self.topology
     }
 
+    /// Enable axial damage on the topology beams. Reconfiguring preserves existing damage.
+    pub fn with_beam_damage(mut self, config: BeamDamageConfig) -> Self {
+        if let Some((material, _)) = &mut self.beam_damage {
+            *material = config;
+        } else {
+            let states: Vec<_> = self
+                .beams
+                .iter()
+                .map(|beam| BeamDamage::new(beam.rest_length).expect("validated topology beam"))
+                .collect();
+            self.next_damage = states.clone();
+            self.beam_damage = Some((config, states));
+        }
+        self
+    }
+
+    /// Axial material state in topology beam order, when damage is enabled.
+    pub fn beam_damage(&self) -> Option<&[BeamDamage]> {
+        self.beam_damage
+            .as_ref()
+            .map(|(_, states)| states.as_slice())
+    }
+
     /// Current node positions in tyre-local metres.
     pub fn positions(&self) -> &[DVec3] {
         &self.positions
@@ -344,10 +374,13 @@ impl ElasticTyre {
         &self.velocities
     }
 
-    /// Restore the rest positions, zero velocities, and initial gas charge.
+    /// Restore the rest positions, zero velocities, initial gas charge, and undamaged beams.
     pub fn reset(&mut self) {
         self.positions.copy_from_slice(&self.rest_positions);
         self.velocities.fill(DVec3::ZERO);
+        if let Some((_, states)) = &mut self.beam_damage {
+            states.iter_mut().for_each(BeamDamage::reset);
+        }
         if let Some(chamber) = &mut self.chamber {
             chamber.reset();
         }
@@ -358,7 +391,7 @@ impl ElasticTyre {
     /// Supply one tyre-local force vector in newtons per node. Forces on the
     /// prescribed bead nodes have no effect on their motion. The caller chooses
     /// a timestep small enough for the configured beam coefficients and mass.
-    /// An error leaves the published positions and velocities at the previous step.
+    /// An error preserves the published motion, chamber state, and beam damage.
     pub fn step(
         &mut self,
         dt_seconds: f64,
@@ -399,11 +432,20 @@ impl ElasticTyre {
         }
         self.forces.copy_from_slice(external_forces);
 
-        for beam in &self.beams {
+        let damage = self.beam_damage.as_ref().map(|(_, states)| states);
+        for (index, beam) in self.beams.iter().enumerate() {
+            let state = damage.map(|states| states[index]);
+            if state.is_some_and(BeamDamage::broken) {
+                continue;
+            }
             let [start, end] = beam.endpoints;
             let offset = self.positions[end] - self.positions[start];
-            // The initial and every committed geometry have had their lengths checked.
-            let force = beam.axial_force_on_start(
+            // Committed geometry guarantees a positive length for every intact beam.
+            let mut force_beam = *beam;
+            if let Some(state) = state {
+                force_beam.rest_length = state.stress_free_length_m();
+            }
+            let force = force_beam.axial_force_on_start(
                 offset,
                 offset.length(),
                 self.velocities[end] - self.velocities[start],
@@ -464,16 +506,28 @@ impl ElasticTyre {
             let [start, end] = beam.endpoints;
             let length_squared =
                 self.next_positions[start].distance_squared(self.next_positions[end]);
-            if length_squared == 0.0 {
-                return Err(CollapsedBeam(index));
-            }
             if !length_squared.is_finite() {
                 return Err(NonFiniteStep);
+            }
+            let broken = if let Some((config, states)) = &self.beam_damage {
+                let state = states[index]
+                    .at_length(length_squared.sqrt(), *config)
+                    .ok_or(NonFiniteStep)?;
+                self.next_damage[index] = state;
+                state.broken()
+            } else {
+                false
+            };
+            if length_squared == 0.0 && !broken {
+                return Err(CollapsedBeam(index));
             }
         }
 
         if let Some(chamber) = &mut self.chamber {
             chamber.current = chamber.at_positions(&self.next_positions)?;
+        }
+        if let Some((_, states)) = &mut self.beam_damage {
+            std::mem::swap(states, &mut self.next_damage);
         }
         std::mem::swap(&mut self.positions, &mut self.next_positions);
         std::mem::swap(&mut self.velocities, &mut self.next_velocities);
@@ -485,6 +539,73 @@ impl ElasticTyre {
 mod tests {
     use super::*;
     use crate::tyre::TyreConfig;
+
+    #[test]
+    fn broken_beam_applies_no_spring_or_damping_and_reset_restores_it() {
+        let config = BeamDamageConfig::new(0.02, 0.02, 0.10, 0.10).unwrap();
+        let mut tyre = default_tyre().with_beam_damage(config);
+        let node = tyre.free_nodes[0];
+        let beam_index = tyre
+            .beams
+            .iter()
+            .position(|beam| beam.endpoints.contains(&node))
+            .unwrap();
+        let target = tyre.beams[beam_index].endpoints;
+        let other = *target.iter().find(|&&index| index != node).unwrap();
+        let direction = (tyre.positions[node] - tyre.positions[other]).normalize();
+        // Isolate the selected beam so its force can be checked without other beams.
+        for (index, beam) in tyre.beams.iter_mut().enumerate() {
+            if index != beam_index {
+                beam.coefficients = BeamCoefficients {
+                    stiffness: 0.0,
+                    damping: 0.0,
+                };
+            }
+        }
+        tyre.next_positions.copy_from_slice(&tyre.positions);
+        tyre.next_positions[node] += direction * tyre.beams[beam_index].rest_length * 0.20;
+        tyre.next_velocities[node] = direction;
+        tyre.commit_next().unwrap();
+        assert!(tyre.beam_damage().unwrap()[beam_index].broken());
+        let clone = tyre.clone();
+        assert_eq!(tyre.beam_damage(), clone.beam_damage());
+        let forces = vec![DVec3::ZERO; tyre.positions.len()];
+        tyre.step(1.0 / 3840.0, &forces).unwrap();
+        assert_eq!(tyre.velocities[node], direction);
+        tyre.reset();
+        assert!(!tyre.beam_damage().unwrap()[beam_index].broken());
+        assert_eq!(
+            tyre.beam_damage().unwrap()[beam_index].permanent_length_change_m(),
+            0.0
+        );
+        assert!(clone.beam_damage().unwrap()[beam_index].broken());
+    }
+
+    #[test]
+    fn invalid_chamber_candidate_does_not_commit_staged_damage() {
+        let topology = TyreTopology::generate(&TyreConfig::default()).unwrap();
+        let mut tyre = ElasticTyre::new_inflated(
+            topology,
+            ElasticTyreConfig::default(),
+            PressureConfig::default(),
+        )
+        .unwrap()
+        .with_beam_damage(BeamDamageConfig::new(0.02, 0.02, 0.06, 0.06).unwrap());
+        let before = tyre.clone();
+        for (next, point) in tyre.next_positions.iter_mut().zip(&tyre.positions) {
+            *next = point.with_x(-point.x);
+        }
+        tyre.next_positions[tyre.free_nodes[0]].y += 0.04;
+        assert_eq!(
+            tyre.commit_next(),
+            Err(ElasticTyreError::InvalidChamberVolume)
+        );
+        assert!(tyre.next_damage.iter().any(|state| state.broken()));
+        assert_eq!(tyre.beam_damage(), before.beam_damage());
+        assert_eq!(tyre.positions(), before.positions());
+        assert_eq!(tyre.velocities(), before.velocities());
+        assert_eq!(tyre.chamber_reading(), before.chamber_reading());
+    }
 
     #[test]
     fn reinforcement_is_applied_only_to_the_tread_band() {

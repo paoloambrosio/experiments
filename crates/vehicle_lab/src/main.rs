@@ -2,6 +2,9 @@ mod drop_experiment;
 mod drop_lab;
 mod drop_report;
 mod elastic_experiment;
+mod impact_experiment;
+mod impact_lab;
+mod impact_report;
 mod inflation_report;
 mod radial_report;
 mod rolling_experiment;
@@ -130,6 +133,7 @@ const BEAM_STYLES: [BeamStyle; 3] = [
 fn main() -> ExitCode {
     let mut inflation_lab = false;
     let mut rolling_lab = false;
+    let mut impact_lab = false;
     for argument in std::env::args_os().skip(1) {
         let result = if argument == "--elastic-report" {
             elastic_experiment::report()
@@ -141,9 +145,12 @@ fn main() -> ExitCode {
             drop_report::report(std::env::args_os().any(|argument| argument == "--samples"))
         } else if argument == "--rolling-report" {
             rolling_report::report(std::env::args_os().any(|argument| argument == "--samples"))
+        } else if argument == "--impact-report" {
+            impact_report::report(std::env::args_os().any(|argument| argument == "--samples"))
         } else {
             inflation_lab |= argument == "--inflation-lab";
             rolling_lab |= argument == "--rolling-lab";
+            impact_lab |= argument == "--impact-lab";
             continue;
         };
         return match result {
@@ -155,7 +162,9 @@ fn main() -> ExitCode {
         };
     }
 
-    if rolling_lab {
+    if impact_lab {
+        impact_lab::run();
+    } else if rolling_lab {
         rolling_lab::run();
     } else if inflation_lab {
         run_inflation_lab();

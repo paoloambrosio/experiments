@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 760 340" role="img" aria-labelledby="title description">
+  <title id="title">Rounded kerb cross-section</title>
+  <desc id="description">The wheel approaches along positive Z. The road rises 60 millimetres at the kerb. A 10 millimetre circular arc joins the vertical face and the top. Contact normals point back from the face, diagonally outward on the arc, and up from the top.</desc>
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="m0 0 10 5-10 5z" fill="#475569"/></marker>
+    <marker id="normal" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="m0 0 10 5-10 5z" fill="#1464a0"/></marker>
+  </defs>
+  <rect width="760" height="340" rx="12" fill="#f8fafc"/>
+  <g font-family="system-ui, sans-serif" fill="#172939" font-size="15">
+    <text x="28" y="40" font-size="21" font-weight="600">Kerb cross-section</text>
+    <path d="M62 273h294V123a30 30 0 0 1 30-30h314v212H62z" fill="#e2e8f0"/>
+    <path d="M62 273h294V123a30 30 0 0 1 30-30h314" fill="none" stroke="#475569" stroke-width="3"/>
+    <text x="144" y="255">Approach floor</text>
+    <text x="552" y="119">Kerb top</text>
+    <g fill="none" stroke="#1464a0" stroke-width="2.2" marker-end="url(#normal)">
+      <path d="M356 189h-63"/><path d="M364.8 101.8l-28-28"/><path d="M485 93V54"/>
+    </g>
+    <text x="267" y="178" fill="#1464a0">Face normal</text>
+    <path d="M386 123l-21-21m21 21h-9m9 0v-9m0 9 44 22" fill="none" stroke="#475569" stroke-width="1"/>
+    <text x="435" y="151">10 mm radius</text>
+    <path d="M624 93h43M356 273h311" stroke="#8496aa" stroke-dasharray="4 4"/>
+    <path d="M661 94v178" stroke="#475569" marker-start="url(#arrow)" marker-end="url(#arrow)"/>
+    <text x="675" y="189">60 mm</text>
+    <path d="M74 206v-43M74 206h58" stroke="#475569" stroke-width="1.6" marker-end="url(#arrow)"/>
+    <text x="62" y="153">+Y</text><text x="140" y="211">+Z</text>
+    <path d="M148 109h106" stroke="#475569" stroke-width="1.6" marker-end="url(#arrow)"/>
+    <text x="148" y="98">Wheel travel</text>
+    <text x="356" y="326" text-anchor="middle">z = 0</text>
+  </g>
+</svg>

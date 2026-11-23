@@ -45,6 +45,25 @@ The rig seals the reinforced tyre at **30 kPa gauge**, settles the 20 kg wheel o
 
 The panel shows live readings during the run and the mean over two complete revolutions at the end. Blue and coral axle arrows show the tyre force transmitted along Z and X, respectively. Positive longitudinal slip means the tyre spins faster than free rolling at the same belt speed. Positive slip angle means the axle moves toward +X relative to the belt.
 
+### Kerb impact and damage
+
+```sh
+cargo run -p vehicle_lab -- --impact-lab
+```
+
+The lab launches the reinforced tyre at 30 kPa initial gauge along +Z toward a 60 mm kerb with a 10 mm rounded leading edge. The wheel coasts through the strike. The lab then holds the rim fixed and lets the tyre relax without road contact or gravity. The chamber stays sealed throughout.
+
+| Control | Action |
+| --- | --- |
+| **1**, **2**, **3** | Select 2, 4, or 6 m/s launch speed |
+| **Enter** | Strike or replay at the selected speed |
+| **Backspace** | Restore the prepared wheel or restart inflation |
+| Left mouse button + drag | Orbit around the wheel |
+| Scroll | Zoom in or out |
+| **R** | Reset the camera orientation and zoom |
+
+Gold marks yielded beams. Red segments with a visible gap mark broken beams. The white overlay shows the original tread-centre profile against the recovered tyre. The panel reports the actual strike speed, peak inward displacement, residual displacement after unloading, and damage counts.
+
 ### Inflation and tread press
 
 ```sh
@@ -188,7 +207,33 @@ mounted.set_floor(Some(belt));
 
 `AvianTyre::set_floor` also updates the surface for subsequent substeps. `MountedStep::floor_force_n` gives total upward support, `floor_tangential_force` gives the horizontal floor force on the tyre, and `rim_force` gives the bead force on the rim. All are in newtons and use world axes. At a supported node the horizontal force opposes its motion relative to the belt, with a shared longitudinal and lateral limit of the coefficient times that node's normal force.
 
+### Enable axial damage and kerb contact
+
+```rust
+use vehicle_physics::{
+    beam_damage::BeamDamageConfig,
+    kerb::Kerb,
+    mounted_tyre::MountedTyre,
+};
+
+// tyre, rim, and floor come from the examples above.
+let material = BeamDamageConfig::new(0.10, 0.09, 0.35, 0.12)?;
+let mounted = MountedTyre::new(tyre.with_beam_damage(material), rim, Some(floor))?
+    .with_kerb(Kerb::new(0.0, 0.06, 0.01)?);
+```
+
+The material arguments are tensile yield, compressive yield, tensile fracture, and compressive fracture. They are positive dimensionless strain limits. `beam_damage()` on either tyre returns states in topology beam order. Each state reports its stress-free length, permanent length change, yield history, and fracture status. `reset()` on the fixed-bead tyre restores its undamaged state.
+
+`Kerb::new` takes the leading face's world Z, the rise above the floor, and the edge radius, all in metres. The top extends along +Z and the cross-section spans world X. Kerb contact uses the floor's stiffness, damping, and friction coefficients. `MountedStep::kerb_force` gives the world-space reaction on the tyre and `kerb_normal_force_n` gives the sum of normal force magnitudes, both in newtons. `into_fixed_bead_tyre()` returns the tyre in the rim's local frame for unloaded measurements, preserving its deformation, damage history, and gas charge.
+
 ## Run the headless comparisons
+
+```sh
+cargo run -p vehicle_lab -- --impact-report
+cargo run -p vehicle_lab -- --impact-report --samples
+```
+
+The impact report runs three kerb strikes and a flat-road control at 3,840 and 7,680 substeps/s. It reports actual strike speed, inward displacement, residual displacement, damage counts, and broken beam indices. `--samples` adds lab-rate coast traces at 60 Hz and one pair of tyre-local positions per node for the original and unloaded profiles. CSV positions and displacements are in metres.
 
 ```sh
 cargo run -p vehicle_lab -- --rolling-report
