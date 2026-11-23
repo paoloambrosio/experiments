@@ -1,6 +1,6 @@
 use std::f32::consts::FRAC_PI_2;
 
-use bevy::{input::InputSystems, math::DVec3, prelude::*, window::WindowResolution};
+use bevy::{input::InputSystems, math::DVec3, prelude::*};
 use vehicle_physics::{avian_tyre::AvianTyre, tyre::BeamFamily};
 
 use crate::{
@@ -8,6 +8,7 @@ use crate::{
     drop_experiment::{self, CLEARANCE_M, DropBench},
     elastic_experiment::{PRESETS_PA, RADIAL_SUBSTEPS_PER_SECOND},
     orbit_camera,
+    performance::{self, Benchmark, WindowOptions},
 };
 
 #[derive(Component)]
@@ -21,22 +22,35 @@ struct DropReadout;
 
 const CONTACT: Color = Color::srgb(1.0, 0.48, 0.38);
 
-pub fn run() {
+pub fn run(window: WindowOptions) -> AppExit {
     let mut app = App::new();
     app.insert_resource(ClearColor(Color::srgb(0.047, 0.063, 0.091)))
-        .add_plugins(DefaultPlugins.set(WindowPlugin {
-            primary_window: Some(Window {
-                title: "Vehicle Lab | Wheel Drop".into(),
-                resolution: WindowResolution::new(1120, 720),
-                ..default()
-            }),
-            ..default()
-        }))
+        .add_plugins(DefaultPlugins.set(window.plugin("Vehicle Lab | Wheel Drop")))
         .add_systems(Startup, setup)
         .add_systems(PreUpdate, drop_input.after(InputSystems))
         .add_systems(Update, (orbit_camera, draw_drop));
-    drop_experiment::install(&mut app, 0, RADIAL_SUBSTEPS_PER_SECOND, false);
-    app.run();
+    let mut preset = 0;
+    if window.benchmark {
+        preset = performance::BENCHMARK_PRESSURE_PRESET;
+        Benchmark::install(&mut app, "Wheel drop at 30 kPa");
+        app.add_systems(Last, benchmark_drop.before(performance::finish));
+    }
+    drop_experiment::install(&mut app, preset, RADIAL_SUBSTEPS_PER_SECOND, false);
+    app.run()
+}
+
+fn benchmark_drop(
+    mut bench: ResMut<DropBench>,
+    mut benchmark: ResMut<Benchmark>,
+    mut commands: Commands,
+) {
+    if benchmark.observe(
+        bench.baseline.is_some(),
+        bench.run.settled.is_some(),
+        bench.error.as_deref(),
+    ) {
+        bench.release(&mut commands);
+    }
 }
 
 fn setup(

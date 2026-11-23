@@ -6,6 +6,7 @@ mod impact_experiment;
 mod impact_lab;
 mod impact_report;
 mod inflation_report;
+mod performance;
 mod puncture_experiment;
 mod puncture_report;
 mod radial_report;
@@ -13,7 +14,7 @@ mod rolling_experiment;
 mod rolling_lab;
 mod rolling_report;
 
-use std::{collections::BTreeMap, f32::consts::TAU, process::ExitCode};
+use std::{collections::BTreeMap, f32::consts::TAU};
 
 use bevy::{
     camera::visibility::RenderLayers,
@@ -22,11 +23,11 @@ use bevy::{
         mouse::{AccumulatedMouseMotion, AccumulatedMouseScroll, MouseScrollUnit},
     },
     prelude::*,
-    window::WindowResolution,
 };
 use elastic_experiment::{
     Experiment, LOAD_NEWTONS, PRESETS_PA, RADIAL_SUBSTEPS_PER_SECOND, TICKS_PER_SECOND,
 };
+use performance::{Benchmark, WindowOptions};
 use vehicle_physics::tyre::BeamFamily;
 
 #[derive(Resource)]
@@ -132,11 +133,12 @@ const BEAM_STYLES: [BeamStyle; 3] = [
     },
 ];
 
-fn main() -> ExitCode {
+fn main() -> AppExit {
     let mut inflation_lab = false;
     let mut rolling_lab = false;
     let mut impact_lab = false;
     let mut puncture_lab = false;
+    let mut window = WindowOptions::default();
     for argument in std::env::args_os().skip(1) {
         let result = if argument == "--elastic-report" {
             elastic_experiment::report()
@@ -157,54 +159,69 @@ fn main() -> ExitCode {
             rolling_lab |= argument == "--rolling-lab";
             impact_lab |= argument == "--impact-lab";
             puncture_lab |= argument == "--puncture-lab";
+            window.no_vsync |= argument == "--no-vsync";
+            window.benchmark |= argument == "--benchmark";
             continue;
         };
         return match result {
-            Ok(()) => ExitCode::SUCCESS,
+            Ok(()) => AppExit::Success,
             Err(error) => {
                 eprintln!("Vehicle lab report failed: {error}");
-                ExitCode::FAILURE
+                AppExit::error()
             }
         };
     }
 
     if puncture_lab {
-        impact_lab::run_puncture();
+        impact_lab::run_puncture(window)
     } else if impact_lab {
-        impact_lab::run();
+        impact_lab::run(window)
     } else if rolling_lab {
-        rolling_lab::run();
+        rolling_lab::run(window)
     } else if inflation_lab {
-        run_inflation_lab();
+        run_inflation_lab(window)
     } else {
-        drop_lab::run();
+        drop_lab::run(window)
     }
-    ExitCode::SUCCESS
 }
 
-fn run_inflation_lab() {
-    App::new()
-        .insert_resource(LabTyre {
-            experiment: Experiment::radial(RADIAL_SUBSTEPS_PER_SECOND, PRESETS_PA[0]),
-            mode: Mode::Idle,
-            preset: 0,
-            show_pressure_surface: false,
-        })
+fn run_inflation_lab(window: WindowOptions) -> AppExit {
+    let mut tyre = LabTyre {
+        experiment: Experiment::radial(RADIAL_SUBSTEPS_PER_SECOND, PRESETS_PA[0]),
+        mode: Mode::Idle,
+        preset: 0,
+        show_pressure_surface: false,
+    };
+    let mut app = App::new();
+    if window.benchmark {
+        tyre.select_preset(performance::BENCHMARK_PRESSURE_PRESET);
+        Benchmark::install(&mut app, "Inflation at 30 kPa and 3 N tread press");
+        app.add_systems(Last, benchmark_inflation.before(performance::finish));
+    }
+    app.insert_resource(tyre)
         .insert_resource(Time::<Fixed>::from_hz(f64::from(TICKS_PER_SECOND)))
         .insert_resource(ClearColor(Color::srgb(0.047, 0.063, 0.091)))
-        .add_plugins(DefaultPlugins.set(WindowPlugin {
-            primary_window: Some(Window {
-                title: "Vehicle Lab | Tyre Inflation".into(),
-                resolution: WindowResolution::new(1120, 720),
-                ..default()
-            }),
-            ..default()
-        }))
+        .add_plugins(DefaultPlugins.set(window.plugin("Vehicle Lab | Tyre Inflation")))
         .add_systems(Startup, (setup_scene, setup_panel))
         .add_systems(PreUpdate, experiment_input.after(InputSystems))
         .add_systems(FixedUpdate, advance_experiment)
-        .add_systems(Update, (orbit_camera, toggle_beams, draw_experiment))
-        .run();
+        .add_systems(Update, (orbit_camera, toggle_beams, draw_experiment));
+    app.run()
+}
+
+fn benchmark_inflation(mut tyre: ResMut<LabTyre>, mut benchmark: ResMut<Benchmark>) {
+    let error = match &tyre.mode {
+        Mode::Failed(error) => Some(error.as_str()),
+        _ => None,
+    };
+    if benchmark.observe(
+        tyre.experiment.is_ready(),
+        tyre.experiment.replay_finished(),
+        error,
+    ) {
+        tyre.experiment.reset();
+        tyre.mode = Mode::Replay;
+    }
 }
 
 fn setup_scene(

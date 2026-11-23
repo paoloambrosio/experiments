@@ -1,6 +1,6 @@
 use std::f32::consts::{FRAC_PI_2, TAU};
 
-use bevy::{input::InputSystems, prelude::*, window::WindowResolution};
+use bevy::{input::InputSystems, prelude::*};
 use vehicle_physics::{avian_tyre::AvianTyre, tyre::RingRole};
 
 use crate::{
@@ -11,6 +11,7 @@ use crate::{
         damage_counts, launch_height_m,
     },
     orbit_camera,
+    performance::{self, Benchmark, WindowOptions},
     puncture_experiment::PunctureCase,
 };
 
@@ -36,32 +37,53 @@ struct ImpactReadout;
 #[derive(Resource, Default)]
 struct SelectedSpeed(usize);
 
-pub fn run() {
-    run_lab(LabMode::Impact, "Vehicle Lab | Kerb Impact");
+pub fn run(window: WindowOptions) -> AppExit {
+    run_lab(window, LabMode::Impact, "Vehicle Lab | Kerb Impact")
 }
 
-pub fn run_puncture() {
-    run_lab(LabMode::Puncture, "Vehicle Lab | Puncture");
+pub fn run_puncture(window: WindowOptions) -> AppExit {
+    run_lab(window, LabMode::Puncture, "Vehicle Lab | Puncture")
 }
 
-fn run_lab(mode: LabMode, title: &str) {
+fn run_lab(window: WindowOptions, mode: LabMode, title: &str) -> AppExit {
     let mut app = App::new();
     app.insert_resource(ClearColor(Color::srgb(0.047, 0.063, 0.091)))
         .insert_resource(mode)
         .init_resource::<SelectedSpeed>()
-        .add_plugins(DefaultPlugins.set(WindowPlugin {
-            primary_window: Some(Window {
-                title: title.into(),
-                resolution: WindowResolution::new(1120, 720),
-                ..default()
-            }),
-            ..default()
-        }))
+        .add_plugins(DefaultPlugins.set(window.plugin(title)))
         .add_systems(Startup, setup)
         .add_systems(PreUpdate, input.after(InputSystems))
         .add_systems(Update, (draw, orbit_camera).chain());
     impact_experiment::install(&mut app, RADIAL_SUBSTEPS_PER_SECOND);
-    app.run();
+    if window.benchmark {
+        let scenario = match mode {
+            LabMode::Impact => {
+                app.insert_resource(SelectedSpeed(2));
+                "Kerb strike at 6 m/s and unloaded recovery"
+            }
+            LabMode::Puncture => "Kerb strike at 6 m/s with tearing and five seconds of coast",
+        };
+        Benchmark::install(&mut app, scenario);
+        app.add_systems(Last, benchmark_impact.before(performance::finish));
+    }
+    app.run()
+}
+
+fn benchmark_impact(
+    mut bench: ResMut<ImpactBench>,
+    mut benchmark: ResMut<Benchmark>,
+    mode: Res<LabMode>,
+) {
+    if benchmark.observe(
+        bench.is_at(Phase::Ready),
+        bench.is_at(Phase::Complete),
+        bench.error.as_deref(),
+    ) {
+        match *mode {
+            LabMode::Impact => bench.launch(SPEEDS_MPS[2], false),
+            LabMode::Puncture => bench.launch_puncture(PunctureCase::Tearing),
+        }
+    }
 }
 
 fn setup(

@@ -9,3 +9,9 @@ edition = "2024"
 avian3d = { version = "0.8.0", default-features = false, features = ["3d", "parry-f32"] }
 bevy = { version = "0.20.1", default-features = false }
 bevy_math = "0.20.1"
+
+[profile.dev]
+opt-level = 2
+
+[profile.dev.package."*"]
+opt-level = 3

@@ -1,6 +1,6 @@
 use std::f32::consts::FRAC_PI_2;
 
-use bevy::{input::InputSystems, prelude::*, window::WindowResolution};
+use bevy::{input::InputSystems, prelude::*};
 use vehicle_physics::avian_tyre::AvianTyre;
 
 use crate::{
@@ -8,6 +8,7 @@ use crate::{
     drop_experiment::CLEARANCE_M,
     elastic_experiment::RADIAL_SUBSTEPS_PER_SECOND,
     orbit_camera,
+    performance::{self, Benchmark, WindowOptions},
     rolling_experiment::{self, BELT_SPEED_MPS, LoadCase, Phase, RollingBench},
 };
 
@@ -24,23 +25,31 @@ struct RollingReadout;
 #[derive(Resource, Default)]
 struct Selection(LoadCase);
 
-pub fn run() {
+pub fn run(window: WindowOptions) -> AppExit {
     let mut app = App::new();
     app.insert_resource(ClearColor(Color::srgb(0.047, 0.063, 0.091)))
         .init_resource::<Selection>()
-        .add_plugins(DefaultPlugins.set(WindowPlugin {
-            primary_window: Some(Window {
-                title: "Vehicle Lab | Rolling and Grip".into(),
-                resolution: WindowResolution::new(1120, 720),
-                ..default()
-            }),
-            ..default()
-        }))
+        .add_plugins(DefaultPlugins.set(window.plugin("Vehicle Lab | Rolling and Grip")))
         .add_systems(Startup, setup)
         .add_systems(PreUpdate, input.after(InputSystems))
         .add_systems(Update, (draw, orbit_camera).chain());
     rolling_experiment::install(&mut app, RADIAL_SUBSTEPS_PER_SECOND);
-    app.run();
+    if window.benchmark {
+        app.insert_resource(Selection(LoadCase::Drive));
+        Benchmark::install(&mut app, "Rolling with 10 N m drive torque");
+        app.add_systems(Last, benchmark_rolling.before(performance::finish));
+    }
+    app.run()
+}
+
+fn benchmark_rolling(mut bench: ResMut<RollingBench>, mut benchmark: ResMut<Benchmark>) {
+    if benchmark.observe(
+        bench.is_at(Phase::Ready),
+        bench.is_at(Phase::Complete),
+        bench.error.as_deref(),
+    ) {
+        bench.replay(LoadCase::Drive);
+    }
 }
 
 fn setup(

@@ -105,6 +105,26 @@ The default tyre starts sealed at 0 kPa gauge with 160 nodes, 544 beams, and a r
 | **3** | Toggle diagonal beams (violet) |
 | **4** | Toggle the chamber wireframe (blue carcass, orange rim closure) |
 
+### Performance
+
+`cargo run -p vehicle_lab` uses an optimised development profile with debug symbols and assertions. Normal windows sync to the display. Add `--no-vsync` after the Cargo separator to run an interactive lab without that cap on supported backends.
+
+```sh
+cargo run -p vehicle_lab -- --puncture-lab --no-vsync
+```
+
+Use `--benchmark` for an automated windowed run. It requests no VSync, warms the renderer for two seconds, measures preparation and one second of ready/idle time, then starts a replay and exits when it finishes. Leave the window at its default size and avoid changing controls during the run.
+
+```sh
+cargo run -p vehicle_lab -- --benchmark
+cargo run -p vehicle_lab -- --rolling-lab --benchmark
+cargo run -p vehicle_lab -- --impact-lab --benchmark
+cargo run -p vehicle_lab -- --puncture-lab --benchmark
+cargo run -p vehicle_lab -- --inflation-lab --benchmark
+```
+
+Read average FPS alongside the 95th-percentile and longest frame times. The fixed-update number is the average CPU wall time per 60 Hz tick, including the tyre's 64 substeps when active. A fixed clock reading near `1.000x` means the simulation clock kept pace with wall time. Add Cargo's `--release` before the separator to compare against a release build.
+
 ## Generate a tyre in Rust
 
 Add `vehicle_physics` as a dependency using the path to `crates/vehicle_physics`. Use `TyreTopology::generate` to create the rest geometry.

@@ -14,6 +14,8 @@ cargo run -p vehicle_lab -- --inflation-lab
 cargo run -p vehicle_lab -- --drop-report
 ```
 
+Regular lab builds use compiler optimisations. Add `--no-vsync` to run without the display's refresh cap where supported, or `--benchmark` to time preparation and a real-time replay in the lab window. [Performance controls and measurement](docs/user/README.md#performance)
+
 - `vehicle_physics` generates and advances the tyre with a windowless solver. Its optional Avian integration couples the moving bead rings to a dynamic rim.
 - `vehicle_lab` runs the wheel drop, moving-belt rig, kerb strike, puncture comparison, and fixed-bead tread press with interactive views and headless reports.
 
