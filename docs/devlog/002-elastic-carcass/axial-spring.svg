@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="480" height="256" viewBox="0 0 480 256"
+     role="img" aria-labelledby="title description">
+  <title id="title">Spring forces on the ends of an axial beam</title>
+  <desc id="description">A stretched spring pulls its endpoints towards each other. A compressed spring pushes its endpoints away from each other. In both cases the forces are equal in magnitude and lie on the beam axis.</desc>
+  <defs>
+    <marker id="arrow" markerWidth="8" markerHeight="8" refX="6" refY="4" orient="auto" markerUnits="userSpaceOnUse">
+      <path d="M0 0L7 4L0 8Z" fill="#ffb552"/>
+    </marker>
+  </defs>
+  <rect x="0.5" y="0.5" width="479" height="255" rx="14" fill="#0c1017" stroke="#293444"/>
+  <path d="M24 130H456" stroke="#293444"/>
+  <g text-anchor="middle" font-family="system-ui, sans-serif" font-size="19" fill="#eef4ff">
+    <text x="240" y="36">Stretched (L &gt; L₀)</text>
+    <text x="240" y="156">Compressed (L &lt; L₀)</text>
+    <text x="108" y="115">A</text><text x="372" y="115">B</text>
+    <text x="154" y="235">A</text><text x="326" y="235">B</text>
+  </g>
+  <g stroke="#8493a6" stroke-dasharray="3 5">
+    <path d="M108 76H372 M154 196H326"/>
+  </g>
+  <g fill="none" stroke="#40debf" stroke-width="2.5" stroke-linejoin="round">
+    <path d="M108 76H155L169 65L197 87L225 65L253 87L281 65L309 87L323 76H372"/>
+    <path d="M154 196H178L187 185L205 207L223 185L241 207L259 185L277 207L286 196H326"/>
+  </g>
+  <g fill="none" stroke="#ffb552" stroke-width="2.5" marker-end="url(#arrow)">
+    <path d="M108 54H156"/>
+    <path d="M372 54H324"/>
+    <path d="M154 174H106"/>
+    <path d="M326 174H374"/>
+  </g>
+  <g fill="#eef4ff" stroke="#0c1017" stroke-width="1.5">
+    <circle cx="108" cy="76" r="5.5"/><circle cx="372" cy="76" r="5.5"/>
+    <circle cx="154" cy="196" r="5.5"/><circle cx="326" cy="196" r="5.5"/>
+  </g>
+</svg>

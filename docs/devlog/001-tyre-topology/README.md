@@ -37,4 +37,4 @@ Around the full tyre, each of the five rings contributes one circumferential bea
 3. Press **2** to isolate the circumferential beams. Zoom in and find the two larger dots on each ring. They mark the seam from segment 31 to segment 0. Follow the beam between those dots, then restore **2** and **3** to see how the other beam families continue around the seam.
 4. Run `cargo test -p vehicle_physics`. The tests check the counts, the specific seam connections, rest lengths, left/right symmetry, and invalid configurations. The three-segment case checks the smallest closed rings.
 
-The next experiment fixes the two bead rings, presses a tread patch, and measures its rebound after release. See the [remaining milestones](../README.md#planned).
+The next experiment fixes the two bead rings, presses a tread patch, and measures its rebound after release. [002 — Elastic carcass](../002-elastic-carcass/README.md)

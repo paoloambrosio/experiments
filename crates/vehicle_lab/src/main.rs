@@ -1,18 +1,37 @@
-use std::f32::consts::TAU;
+mod elastic_experiment;
+
+use std::{f32::consts::TAU, process::ExitCode};
 
 use bevy::{
     camera::visibility::RenderLayers,
-    input::mouse::{AccumulatedMouseMotion, AccumulatedMouseScroll, MouseScrollUnit},
+    input::{
+        InputSystems,
+        mouse::{AccumulatedMouseMotion, AccumulatedMouseScroll, MouseScrollUnit},
+    },
     prelude::*,
     window::WindowResolution,
 };
-use vehicle_physics::tyre::{BeamFamily, TyreConfig, TyreTopology};
+use elastic_experiment::{Experiment, LAB_SUBSTEPS_PER_SECOND, LOAD_NEWTONS, TICKS_PER_SECOND};
+use vehicle_physics::{elastic_tyre::ElasticTyreError, tyre::BeamFamily};
 
 #[derive(Resource)]
 struct LabTyre {
-    topology: TyreTopology,
-    segments: usize,
+    experiment: Experiment,
+    mode: Mode,
 }
+
+enum Mode {
+    Idle,
+    Replay,
+    Manual { pressed: bool },
+    Failed(ElasticTyreError),
+}
+
+#[derive(Component)]
+struct NodeIndex(usize);
+
+#[derive(Component)]
+struct ExperimentReadout;
 
 #[derive(Component)]
 struct OrbitCamera {
@@ -74,26 +93,41 @@ const BEAM_STYLES: [BeamStyle; 3] = [
     },
 ];
 
-fn main() {
-    let config = TyreConfig::default();
-    let topology = TyreTopology::generate(&config).expect("default tyre must be valid");
+fn main() -> ExitCode {
+    if std::env::args_os()
+        .skip(1)
+        .any(|arg| arg == "--elastic-report")
+    {
+        return match elastic_experiment::report() {
+            Ok(()) => ExitCode::SUCCESS,
+            Err(error) => {
+                eprintln!("Elastic carcass report failed: {error}");
+                ExitCode::FAILURE
+            }
+        };
+    }
+
     App::new()
         .insert_resource(LabTyre {
-            topology,
-            segments: config.segments,
+            experiment: Experiment::new(LAB_SUBSTEPS_PER_SECOND),
+            mode: Mode::Idle,
         })
+        .insert_resource(Time::<Fixed>::from_hz(f64::from(TICKS_PER_SECOND)))
         .insert_resource(ClearColor(Color::srgb(0.047, 0.063, 0.091)))
         .add_plugins(DefaultPlugins.set(WindowPlugin {
             primary_window: Some(Window {
-                title: "Vehicle Lab | Tyre Topology".into(),
+                title: "Vehicle Lab | Elastic Carcass".into(),
                 resolution: WindowResolution::new(1120, 720),
                 ..default()
             }),
             ..default()
         }))
         .add_systems(Startup, (setup_scene, setup_panel))
-        .add_systems(Update, (orbit_camera, toggle_beams))
+        .add_systems(PreUpdate, experiment_input.after(InputSystems))
+        .add_systems(FixedUpdate, advance_experiment)
+        .add_systems(Update, (orbit_camera, toggle_beams, draw_experiment))
         .run();
+    ExitCode::SUCCESS
 }
 
 fn setup_scene(
@@ -112,36 +146,49 @@ fn setup_scene(
         unlit: true,
         ..default()
     });
-    for (index, node) in tyre.topology.nodes().iter().enumerate() {
-        let segment = index % tyre.segments;
-        let size = if segment == 0 || segment == tyre.segments - 1 {
-            1.8
+    let patch_material = materials.add(StandardMaterial {
+        base_color: Color::srgb(1.0, 0.45, 0.63),
+        unlit: true,
+        ..default()
+    });
+    let experiment = &tyre.experiment;
+    let mut rest_markers = GizmoAsset::new();
+    for (index, node) in experiment.tyre.topology().nodes().iter().enumerate() {
+        let segment = index % experiment.segments;
+        let seam = segment == 0 || segment == experiment.segments - 1;
+        let patch_node = experiment.patch.contains(&index);
+        let mut size = if seam { 1.8 } else { 1.0 };
+        let material = if patch_node {
+            size *= 0.65;
+            let marker_colour = Color::srgb(0.78, 0.81, 0.87);
+            for axis in [Vec3::X, Vec3::Z] {
+                let arm = axis * 0.006;
+                rest_markers.line(
+                    node.rest_position - arm,
+                    node.rest_position + arm,
+                    marker_colour,
+                );
+            }
+            patch_material.clone()
         } else {
-            1.0
+            node_material.clone()
         };
         commands.spawn((
+            NodeIndex(index),
             Mesh3d(node_mesh.clone()),
-            MeshMaterial3d(node_material.clone()),
+            MeshMaterial3d(material),
             Transform::from_translation(node.rest_position).with_scale(Vec3::splat(size)),
         ));
     }
 
+    commands.spawn(Gizmo {
+        handle: gizmos.add(rest_markers),
+        ..default()
+    });
     for style in BEAM_STYLES {
-        let mut lines = GizmoAsset::new();
-        for beam in tyre
-            .topology
-            .beams()
-            .iter()
-            .filter(|beam| beam.family == style.family)
-        {
-            let [a, b] = beam
-                .endpoints
-                .map(|index| tyre.topology.nodes()[index].rest_position);
-            lines.line(a, b, style.colour);
-        }
         commands.spawn((
             Gizmo {
-                handle: gizmos.add(lines),
+                handle: gizmos.add(GizmoAsset::new()),
                 line_config: GizmoLineConfig {
                     width: if style.family == BeamFamily::Diagonal {
                         1.0
@@ -159,6 +206,7 @@ fn setup_scene(
 }
 
 fn setup_panel(mut commands: Commands, tyre: Res<LabTyre>) {
+    let topology = tyre.experiment.tyre.topology();
     let panel = Node {
         position_type: PositionType::Absolute,
         left: px(20),
@@ -172,16 +220,17 @@ fn setup_panel(mut commands: Commands, tyre: Res<LabTyre>) {
     commands
         .spawn((panel, BackgroundColor(Color::srgb(0.085, 0.112, 0.155))))
         .with_children(|panel| {
-            panel.spawn((Text::new("Tyre topology"), TextFont::from_font_size(23.0)));
+            panel.spawn((Text::new("Elastic carcass"), TextFont::from_font_size(23.0)));
             panel.spawn((
                 Text::new(format!(
                     "{} nodes  /  {} beams",
-                    tyre.topology.nodes().len(),
-                    tyre.topology.beams().len()
+                    topology.nodes().len(),
+                    topology.beams().len()
                 )),
                 TextFont::from_font_size(15.0),
                 TextColor(Color::srgb(0.77, 0.83, 0.91)),
             ));
+            panel.spawn((ExperimentReadout, Text::default(), TextFont::from_font_size(15.0)));
             for style in BEAM_STYLES {
                 panel.spawn((
                     Text::new(style.legend_label(true)),
@@ -191,16 +240,101 @@ fn setup_panel(mut commands: Commands, tyre: Res<LabTyre>) {
                 ));
             }
             panel.spawn((
-                Text::new("Larger dots mark the seam"),
+                Text::new("Pink nodes mark the load patch\nCrosses mark its rest positions"),
                 TextFont::from_font_size(14.0),
                 TextColor(Color::srgb(0.77, 0.83, 0.91)),
             ));
             panel.spawn((
-                Text::new("Left drag   Orbit\nScroll   Zoom\nR   Reset view"),
+                Text::new("Enter   Replay\nHold Space   Press tread\nBackspace   Reset experiment\nLeft drag   Orbit\nScroll   Zoom\nR   Reset view"),
                 TextFont::from_font_size(14.0),
                 TextColor(Color::srgb(0.77, 0.83, 0.91)),
             ));
         });
+}
+
+fn experiment_input(keys: Res<ButtonInput<KeyCode>>, mut tyre: ResMut<LabTyre>) {
+    if keys.just_pressed(KeyCode::Backspace) {
+        tyre.experiment.reset();
+        tyre.mode = Mode::Idle;
+    } else if keys.just_pressed(KeyCode::Enter) {
+        tyre.experiment.reset();
+        tyre.mode = Mode::Replay;
+    } else if let Mode::Manual { pressed } = tyre.mode {
+        let now_pressed = keys.pressed(KeyCode::Space);
+        if pressed != now_pressed {
+            tyre.mode = Mode::Manual {
+                pressed: now_pressed,
+            };
+        }
+    } else if keys.just_pressed(KeyCode::Space) {
+        tyre.experiment.reset();
+        tyre.mode = Mode::Manual {
+            pressed: keys.pressed(KeyCode::Space),
+        };
+    }
+}
+
+fn advance_experiment(mut tyre: ResMut<LabTyre>) {
+    for _ in 0..LAB_SUBSTEPS_PER_SECOND / TICKS_PER_SECOND {
+        let load = match tyre.mode {
+            Mode::Replay if !tyre.experiment.replay_finished() => tyre.experiment.replay_load(),
+            Mode::Manual { pressed } => pressed,
+            _ => return,
+        };
+        if let Err(error) = tyre.experiment.advance(load) {
+            tyre.mode = Mode::Failed(error);
+            return;
+        }
+    }
+}
+
+fn draw_experiment(
+    tyre: Res<LabTyre>,
+    mut nodes: Query<(&NodeIndex, &mut Transform)>,
+    beam_gizmos: Query<(&Gizmo, &BeamStyle)>,
+    mut assets: ResMut<Assets<GizmoAsset>>,
+    mut readout: Single<&mut Text, With<ExperimentReadout>>,
+) {
+    if !tyre.is_changed() {
+        return;
+    }
+    let experiment = &tyre.experiment;
+    let positions = experiment.tyre.positions();
+    for (index, mut transform) in &mut nodes {
+        transform.translation = positions[index.0].as_vec3();
+    }
+    for (gizmo, style) in &beam_gizmos {
+        let mut lines = assets.get_mut(&gizmo.handle).expect("lab beam gizmo");
+        lines.clear();
+        for beam in experiment
+            .tyre
+            .topology()
+            .beams()
+            .iter()
+            .filter(|beam| beam.family == style.family)
+        {
+            let [a, b] = beam.endpoints.map(|index| positions[index].as_vec3());
+            lines.line(a, b, style.colour);
+        }
+    }
+    let (phase, loaded) = match tyre.mode {
+        Mode::Idle => ("Ready", false),
+        Mode::Replay if experiment.replay_load() => ("Loading", true),
+        Mode::Replay if experiment.replay_finished() => ("Replay complete", false),
+        Mode::Replay => ("Rebound", false),
+        Mode::Manual { pressed: true } => ("Manual press", true),
+        Mode::Manual { pressed: false } => ("Manual release", false),
+        Mode::Failed(error) => {
+            readout.0 = format!("Simulation stopped\n{error}\nPress Backspace to reset");
+            return;
+        }
+    };
+    let load = if loaded { LOAD_NEWTONS } else { 0.0 };
+    readout.0 = format!(
+        "{phase}   {:.2} s\nLoad   {load:.1} N\nDeflection   {:+.2} mm",
+        experiment.elapsed_seconds(),
+        experiment.deflection_mm()
+    );
 }
 
 fn orbit_camera(
@@ -253,5 +387,62 @@ fn toggle_beams(
                 };
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn space_interrupts_replay_and_loads_only_while_held() {
+        let mut app = App::new();
+        app.insert_resource(LabTyre {
+            experiment: Experiment::new(LAB_SUBSTEPS_PER_SECOND),
+            mode: Mode::Replay,
+        })
+        .init_resource::<ButtonInput<KeyCode>>()
+        .add_systems(PreUpdate, experiment_input)
+        .add_systems(FixedUpdate, advance_experiment);
+        let world = app.world_mut();
+        world.run_schedule(FixedUpdate);
+        world
+            .resource_mut::<ButtonInput<KeyCode>>()
+            .press(KeyCode::Space);
+        world.run_schedule(PreUpdate);
+
+        let tyre = world.resource::<LabTyre>();
+        assert!(matches!(tyre.mode, Mode::Manual { pressed: true }));
+        assert_eq!(tyre.experiment.elapsed_seconds(), 0.0);
+        assert_eq!(tyre.experiment.deflection_mm(), 0.0);
+        for _ in 0..30 {
+            world.run_schedule(FixedUpdate);
+        }
+        assert!(world.resource::<LabTyre>().experiment.deflection_mm() > 3.0);
+
+        world
+            .resource_mut::<ButtonInput<KeyCode>>()
+            .release(KeyCode::Space);
+        world.run_schedule(PreUpdate);
+        assert!(matches!(
+            world.resource::<LabTyre>().mode,
+            Mode::Manual { pressed: false }
+        ));
+        let mut crossed_rest = false;
+        for _ in 0..90 {
+            world.run_schedule(FixedUpdate);
+            crossed_rest |= world.resource::<LabTyre>().experiment.deflection_mm() < 0.0;
+        }
+        assert!(crossed_rest);
+
+        world
+            .resource_mut::<ButtonInput<KeyCode>>()
+            .press(KeyCode::Backspace);
+        world.run_schedule(PreUpdate);
+        world.run_schedule(FixedUpdate);
+        let tyre = world.resource::<LabTyre>();
+        assert!(matches!(tyre.mode, Mode::Idle));
+        assert_eq!(tyre.experiment.elapsed_seconds(), 0.0);
+        assert_eq!(tyre.experiment.deflection_mm(), 0.0);
     }
 }
