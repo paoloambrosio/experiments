@@ -1,6 +1,8 @@
 mod elastic_experiment;
+mod inflation_report;
+mod radial_report;
 
-use std::{f32::consts::TAU, process::ExitCode};
+use std::{collections::BTreeMap, f32::consts::TAU, process::ExitCode};
 
 use bevy::{
     camera::visibility::RenderLayers,
@@ -11,20 +13,37 @@ use bevy::{
     prelude::*,
     window::WindowResolution,
 };
-use elastic_experiment::{Experiment, LAB_SUBSTEPS_PER_SECOND, LOAD_NEWTONS, TICKS_PER_SECOND};
-use vehicle_physics::{elastic_tyre::ElasticTyreError, tyre::BeamFamily};
+use elastic_experiment::{
+    Experiment, LOAD_NEWTONS, PRESETS_PA, RADIAL_SUBSTEPS_PER_SECOND, TICKS_PER_SECOND,
+};
+use vehicle_physics::tyre::BeamFamily;
 
 #[derive(Resource)]
 struct LabTyre {
     experiment: Experiment,
     mode: Mode,
+    preset: usize,
+    show_pressure_surface: bool,
+}
+
+impl LabTyre {
+    fn select_preset(&mut self, preset: usize) {
+        self.preset = preset;
+        self.experiment = Experiment::radial(RADIAL_SUBSTEPS_PER_SECOND, PRESETS_PA[preset]);
+        self.mode = if self.experiment.is_ready() {
+            Mode::Idle
+        } else {
+            Mode::Preparing
+        };
+    }
 }
 
 enum Mode {
     Idle,
+    Preparing,
     Replay,
     Manual { pressed: bool },
-    Failed(ElasticTyreError),
+    Failed(String),
 }
 
 #[derive(Component)]
@@ -32,6 +51,12 @@ struct NodeIndex(usize);
 
 #[derive(Component)]
 struct ExperimentReadout;
+
+#[derive(Component)]
+enum Overlay {
+    PatchReference,
+    PressureSurface(BTreeMap<[usize; 2], bool>),
+}
 
 #[derive(Component)]
 struct OrbitCamera {
@@ -94,14 +119,20 @@ const BEAM_STYLES: [BeamStyle; 3] = [
 ];
 
 fn main() -> ExitCode {
-    if std::env::args_os()
-        .skip(1)
-        .any(|arg| arg == "--elastic-report")
-    {
-        return match elastic_experiment::report() {
+    for argument in std::env::args_os().skip(1) {
+        let result = if argument == "--elastic-report" {
+            elastic_experiment::report()
+        } else if argument == "--inflation-report" {
+            inflation_report::report()
+        } else if argument == "--radial-report" {
+            radial_report::report()
+        } else {
+            continue;
+        };
+        return match result {
             Ok(()) => ExitCode::SUCCESS,
             Err(error) => {
-                eprintln!("Elastic carcass report failed: {error}");
+                eprintln!("Vehicle lab report failed: {error}");
                 ExitCode::FAILURE
             }
         };
@@ -109,14 +140,16 @@ fn main() -> ExitCode {
 
     App::new()
         .insert_resource(LabTyre {
-            experiment: Experiment::new(LAB_SUBSTEPS_PER_SECOND),
+            experiment: Experiment::radial(RADIAL_SUBSTEPS_PER_SECOND, PRESETS_PA[0]),
             mode: Mode::Idle,
+            preset: 0,
+            show_pressure_surface: false,
         })
         .insert_resource(Time::<Fixed>::from_hz(f64::from(TICKS_PER_SECOND)))
         .insert_resource(ClearColor(Color::srgb(0.047, 0.063, 0.091)))
         .add_plugins(DefaultPlugins.set(WindowPlugin {
             primary_window: Some(Window {
-                title: "Vehicle Lab | Elastic Carcass".into(),
+                title: "Vehicle Lab | Tyre Inflation".into(),
                 resolution: WindowResolution::new(1120, 720),
                 ..default()
             }),
@@ -152,7 +185,6 @@ fn setup_scene(
         ..default()
     });
     let experiment = &tyre.experiment;
-    let mut rest_markers = GizmoAsset::new();
     for (index, node) in experiment.tyre.topology().nodes().iter().enumerate() {
         let segment = index % experiment.segments;
         let seam = segment == 0 || segment == experiment.segments - 1;
@@ -160,15 +192,6 @@ fn setup_scene(
         let mut size = if seam { 1.8 } else { 1.0 };
         let material = if patch_node {
             size *= 0.65;
-            let marker_colour = Color::srgb(0.78, 0.81, 0.87);
-            for axis in [Vec3::X, Vec3::Z] {
-                let arm = axis * 0.006;
-                rest_markers.line(
-                    node.rest_position - arm,
-                    node.rest_position + arm,
-                    marker_colour,
-                );
-            }
             patch_material.clone()
         } else {
             node_material.clone()
@@ -181,10 +204,27 @@ fn setup_scene(
         ));
     }
 
-    commands.spawn(Gizmo {
-        handle: gizmos.add(rest_markers),
-        ..default()
-    });
+    let mut pressure_edges = BTreeMap::new();
+    for face in experiment.tyre.pressure_triangles() {
+        let [a, b, c] = face.nodes;
+        for mut edge in [[a, b], [b, c], [c, a]] {
+            edge.sort_unstable();
+            // Give the shared bead edge the same colour as the rim closure.
+            *pressure_edges.entry(edge).or_insert(false) |= face.rim_closure;
+        }
+    }
+    for overlay in [
+        Overlay::PatchReference,
+        Overlay::PressureSurface(pressure_edges),
+    ] {
+        commands.spawn((
+            Gizmo {
+                handle: gizmos.add(GizmoAsset::new()),
+                ..default()
+            },
+            overlay,
+        ));
+    }
     for style in BEAM_STYLES {
         commands.spawn((
             Gizmo {
@@ -211,7 +251,7 @@ fn setup_panel(mut commands: Commands, tyre: Res<LabTyre>) {
         position_type: PositionType::Absolute,
         left: px(20),
         top: px(20),
-        width: px(268),
+        width: px(290),
         padding: UiRect::all(px(16)),
         flex_direction: FlexDirection::Column,
         row_gap: px(10),
@@ -220,7 +260,7 @@ fn setup_panel(mut commands: Commands, tyre: Res<LabTyre>) {
     commands
         .spawn((panel, BackgroundColor(Color::srgb(0.085, 0.112, 0.155))))
         .with_children(|panel| {
-            panel.spawn((Text::new("Elastic carcass"), TextFont::from_font_size(23.0)));
+            panel.spawn((Text::new("Tyre inflation"), TextFont::from_font_size(23.0)));
             panel.spawn((
                 Text::new(format!(
                     "{} nodes  /  {} beams",
@@ -240,12 +280,12 @@ fn setup_panel(mut commands: Commands, tyre: Res<LabTyre>) {
                 ));
             }
             panel.spawn((
-                Text::new("Pink nodes mark the load patch\nCrosses mark its rest positions"),
+                Text::new("Pink nodes mark the load patch\nCrosses mark the baseline"),
                 TextFont::from_font_size(14.0),
                 TextColor(Color::srgb(0.77, 0.83, 0.91)),
             ));
             panel.spawn((
-                Text::new("Enter   Replay\nHold Space   Press tread\nBackspace   Reset experiment\nLeft drag   Orbit\nScroll   Zoom\nR   Reset view"),
+                Text::new("P   Next pressure preset\nEnter   Replay\nHold Space   Press tread\nBackspace   Reset experiment\nLeft drag   Orbit\nScroll   Zoom\nR   Reset view"),
                 TextFont::from_font_size(14.0),
                 TextColor(Color::srgb(0.77, 0.83, 0.91)),
             ));
@@ -253,6 +293,21 @@ fn setup_panel(mut commands: Commands, tyre: Res<LabTyre>) {
 }
 
 fn experiment_input(keys: Res<ButtonInput<KeyCode>>, mut tyre: ResMut<LabTyre>) {
+    if keys.just_pressed(KeyCode::Digit4) {
+        tyre.show_pressure_surface = !tyre.show_pressure_surface;
+    }
+    if keys.just_pressed(KeyCode::KeyP) {
+        let next = (tyre.preset + 1) % PRESETS_PA.len();
+        tyre.select_preset(next);
+        return;
+    }
+    if !tyre.experiment.is_ready() {
+        if keys.just_pressed(KeyCode::Backspace) {
+            let preset = tyre.preset;
+            tyre.select_preset(preset);
+        }
+        return;
+    }
     if keys.just_pressed(KeyCode::Backspace) {
         tyre.experiment.reset();
         tyre.mode = Mode::Idle;
@@ -275,14 +330,25 @@ fn experiment_input(keys: Res<ButtonInput<KeyCode>>, mut tyre: ResMut<LabTyre>) 
 }
 
 fn advance_experiment(mut tyre: ResMut<LabTyre>) {
-    for _ in 0..LAB_SUBSTEPS_PER_SECOND / TICKS_PER_SECOND {
+    for _ in 0..tyre.experiment.substeps_per_tick() {
+        if matches!(tyre.mode, Mode::Preparing) {
+            if let Err(error) = tyre.experiment.prepare_step() {
+                tyre.mode = Mode::Failed(error.to_string());
+                return;
+            }
+            if tyre.experiment.is_ready() {
+                tyre.mode = Mode::Idle;
+                return;
+            }
+            continue;
+        }
         let load = match tyre.mode {
             Mode::Replay if !tyre.experiment.replay_finished() => tyre.experiment.replay_load(),
             Mode::Manual { pressed } => pressed,
             _ => return,
         };
         if let Err(error) = tyre.experiment.advance(load) {
-            tyre.mode = Mode::Failed(error);
+            tyre.mode = Mode::Failed(error.to_string());
             return;
         }
     }
@@ -292,6 +358,7 @@ fn draw_experiment(
     tyre: Res<LabTyre>,
     mut nodes: Query<(&NodeIndex, &mut Transform)>,
     beam_gizmos: Query<(&Gizmo, &BeamStyle)>,
+    overlays: Query<(&Gizmo, &Overlay)>,
     mut assets: ResMut<Assets<GizmoAsset>>,
     mut readout: Single<&mut Text, With<ExperimentReadout>>,
 ) {
@@ -317,23 +384,77 @@ fn draw_experiment(
             lines.line(a, b, style.colour);
         }
     }
+    for (gizmo, overlay) in &overlays {
+        let mut lines = assets.get_mut(&gizmo.handle).expect("lab overlay gizmo");
+        lines.clear();
+        match overlay {
+            Overlay::PatchReference => {
+                if let Some(references) = experiment.patch_reference_positions() {
+                    for position in references.map(|position| position.as_vec3()) {
+                        for axis in [Vec3::X, Vec3::Z] {
+                            let arm = axis * 0.006;
+                            lines.line(
+                                position - arm,
+                                position + arm,
+                                Color::srgb(0.78, 0.81, 0.87),
+                            );
+                        }
+                    }
+                }
+            }
+            Overlay::PressureSurface(edges) if tyre.show_pressure_surface => {
+                for (&edge, &rim) in edges {
+                    let [a, b] = edge.map(|index| positions[index].as_vec3());
+                    let colour = if rim {
+                        Color::srgb(1.0, 0.53, 0.32)
+                    } else {
+                        Color::srgb(0.46, 0.70, 0.99)
+                    };
+                    lines.line(a, b, colour);
+                }
+            }
+            Overlay::PressureSurface(_) => {}
+        }
+    }
+    let chamber = experiment
+        .tyre
+        .chamber_reading()
+        .expect("lab uses a sealed tyre");
+    let surface = if tyre.show_pressure_surface {
+        "On"
+    } else {
+        "Off"
+    };
+    let pressures = format!(
+        "Target   {:.0} kPa gauge\nGauge   {:+.3} kPa\nVolume   {:.3} L\n4   Chamber [{surface}]",
+        PRESETS_PA[tyre.preset] / 1000.0,
+        chamber.gauge_pressure_pa / 1000.0,
+        chamber.volume_m3 * 1000.0,
+    );
     let (phase, loaded) = match tyre.mode {
-        Mode::Idle => ("Ready", false),
+        Mode::Idle => ("Sealed / ready", false),
+        Mode::Preparing => {
+            let time = experiment.preparation_seconds();
+            let phase = if time < 1.0 { "Filling" } else { "Settling" };
+            readout.0 = format!("{phase}   {time:.2} s\n{pressures}");
+            return;
+        }
         Mode::Replay if experiment.replay_load() => ("Loading", true),
         Mode::Replay if experiment.replay_finished() => ("Replay complete", false),
         Mode::Replay => ("Rebound", false),
         Mode::Manual { pressed: true } => ("Manual press", true),
         Mode::Manual { pressed: false } => ("Manual release", false),
-        Mode::Failed(error) => {
-            readout.0 = format!("Simulation stopped\n{error}\nPress Backspace to reset");
+        Mode::Failed(ref error) => {
+            readout.0 = format!("Simulation stopped\n{error}\n{pressures}");
             return;
         }
     };
     let load = if loaded { LOAD_NEWTONS } else { 0.0 };
     readout.0 = format!(
-        "{phase}   {:.2} s\nLoad   {load:.1} N\nDeflection   {:+.2} mm",
+        "{phase}   {:.2} s\n{pressures}\nLoad   {load:.1} N\nDeflection   {:+.3} mm\nPeak press   {:.3} mm",
         experiment.elapsed_seconds(),
-        experiment.deflection_mm()
+        experiment.deflection_mm(),
+        experiment.peak_inward_mm(),
     );
 }
 
@@ -393,13 +514,54 @@ fn toggle_beams(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::elastic_experiment::REFERENCE_SUBSTEPS_PER_SECOND;
+
+    #[test]
+    fn changing_pressure_mid_fill_starts_at_zero_for_the_new_target() {
+        let mut tyre = LabTyre {
+            experiment: Experiment::radial(RADIAL_SUBSTEPS_PER_SECOND, 0.0),
+            mode: Mode::Idle,
+            preset: 0,
+            show_pressure_surface: false,
+        };
+        assert!(tyre.experiment.is_ready());
+        tyre.select_preset(1);
+        assert!(matches!(tyre.mode, Mode::Preparing));
+        for _ in 0..120 {
+            tyre.experiment.prepare_step().unwrap();
+        }
+        assert!(
+            tyre.experiment
+                .tyre
+                .chamber_reading()
+                .unwrap()
+                .gauge_pressure_pa
+                > 0.0
+        );
+        tyre.select_preset(2);
+        assert!(!tyre.experiment.is_ready());
+        assert_eq!(tyre.experiment.preparation_seconds(), 0.0);
+        assert_eq!(
+            tyre.experiment
+                .tyre
+                .chamber_reading()
+                .unwrap()
+                .gauge_pressure_pa,
+            0.0
+        );
+        tyre.select_preset(0);
+        assert!(matches!(tyre.mode, Mode::Idle));
+        assert!(tyre.experiment.is_ready());
+    }
 
     #[test]
     fn space_interrupts_replay_and_loads_only_while_held() {
         let mut app = App::new();
         app.insert_resource(LabTyre {
-            experiment: Experiment::new(LAB_SUBSTEPS_PER_SECOND),
+            experiment: Experiment::new(REFERENCE_SUBSTEPS_PER_SECOND),
             mode: Mode::Replay,
+            preset: 0,
+            show_pressure_surface: false,
         })
         .init_resource::<ButtonInput<KeyCode>>()
         .add_systems(PreUpdate, experiment_input)
@@ -419,6 +581,7 @@ mod tests {
             world.run_schedule(FixedUpdate);
         }
         assert!(world.resource::<LabTyre>().experiment.deflection_mm() > 3.0);
+        assert!(world.resource::<LabTyre>().experiment.peak_inward_mm() > 4.0);
 
         world
             .resource_mut::<ButtonInput<KeyCode>>()
@@ -444,5 +607,6 @@ mod tests {
         assert!(matches!(tyre.mode, Mode::Idle));
         assert_eq!(tyre.experiment.elapsed_seconds(), 0.0);
         assert_eq!(tyre.experiment.deflection_mm(), 0.0);
+        assert_eq!(tyre.experiment.peak_inward_mm(), 0.0);
     }
 }

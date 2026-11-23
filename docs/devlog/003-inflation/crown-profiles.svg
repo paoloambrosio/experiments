@@ -1,0 +1,43 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="560" height="395" viewBox="0 0 560 395"
+     role="img" aria-labelledby="title description">
+  <title id="title">Settled tyre cross-sections before and after tread reinforcement</title>
+  <desc id="description">At 60 kPa the crown reaches a radius of 386.7 mm with the original carcass and 343.3 mm with reinforcement. Both tyres start at 330 mm. The fixed beads stay at the same coordinates.</desc>
+  <rect x="0.5" y="0.5" width="559" height="394" rx="14" fill="#0c1017" stroke="#293444"/>
+  <path d="M101 65H475 M101 127.5H475 M101 190H475 M101 252.5H475 M101 315H475
+           M163 65V329 M288 65V329 M413 65V329" stroke="#293444"/>
+  <path d="M101 65V329H475 M95 65H101 M95 127.5H101 M95 190H101 M95 252.5H101 M95 315H101
+           M163 329V335 M288 329V335 M413 329V335" stroke="#8493a6" fill="none"/>
+  <g font-family="system-ui, sans-serif" font-size="17" fill="#b6c4d3">
+    <g text-anchor="end">
+      <text x="88" y="71">400</text>
+      <text x="88" y="134">350</text>
+      <text x="88" y="196">300</text>
+      <text x="88" y="259">250</text>
+      <text x="88" y="321">200</text>
+    </g>
+    <g text-anchor="middle">
+      <text x="163" y="355">−100</text>
+      <text x="288" y="355">0</text>
+      <text x="413" y="355">+100</text>
+      <text x="288" y="380">Local X (mm)</text>
+      <text transform="translate(31 197) rotate(-90)">Radius (mm)</text>
+    </g>
+  </g>
+  <polyline points="181.75,315.00 163.00,165.00 288.00,152.50 413.00,165.00 394.25,315.00"
+            stroke="#9facbc" stroke-dasharray="5 5" fill="none" stroke-width="2.8" stroke-linejoin="round" />
+  <polyline points="181.75,315.00 169.22,151.89 288.00,81.57 406.78,151.89 394.25,315.00"
+            stroke="#ffb552" fill="none" stroke-width="2.8" stroke-linejoin="round" />
+  <polyline points="181.75,315.00 160.36,156.65 288.00,135.82 415.64,156.65 394.25,315.00"
+            stroke="#40debf" fill="none" stroke-width="2.8" stroke-linejoin="round" />
+  <g fill="#eef4ff" stroke="#0c1017" stroke-width="1.5">
+    <circle cx="181.75" cy="315" r="5"/><circle cx="394.25" cy="315" r="5"/>
+  </g>
+  <g font-family="system-ui, sans-serif" font-size="17" fill="#eef4ff">
+    <path d="M45 35H69" stroke="#9facbc" stroke-width="2.8" stroke-dasharray="5 5"/>
+    <text x="77" y="41">0 kPa</text>
+    <path d="M155 35H179" stroke="#ffb552" stroke-width="2.8"/>
+    <text x="187" y="41">Original at 60 kPa</text>
+    <path d="M348 35H372" stroke="#40debf" stroke-width="2.8"/>
+    <text x="380" y="41">Reinforced at 60 kPa</text>
+  </g>
+</svg>

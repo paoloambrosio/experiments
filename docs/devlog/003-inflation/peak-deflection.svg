@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="576" height="334" viewBox="0 0 576 334"
+     role="img" aria-labelledby="title description">
+  <title id="title">Peak inward deflection under the same 3 N tread load</title>
+  <desc id="description">At 960 substeps per second the vented tyre deflects 4.603 mm. The sealed tyre deflects 4.105, 0.500, 0.213 and 0.123 mm at 0, 10, 30 and 60 kPa gauge, respectively.</desc>
+  <rect x="0.5" y="0.5" width="575" height="333" rx="14" fill="#0c1017" stroke="#293444"/>
+  <path d="M226 52V273 M294 52V273 M362 52V273 M430 52V273 M498 52V273"
+        stroke="#293444" fill="none"/>
+  <path d="M158 52V273H498" stroke="#8493a6" fill="none"/>
+  <g font-family="system-ui, sans-serif" font-size="18" fill="#eef4ff">
+    <text x="22" y="32">Peak inward deflection at 960 substeps/s</text>
+    <text x="145" y="81" text-anchor="end">Vented</text>
+    <rect x="158" y="64" width="313.0" height="22" rx="2" fill="#8493a6"/>
+    <text x="481.0" y="81">4.603</text>
+    <text x="145" y="123" text-anchor="end">0 kPa sealed</text>
+    <rect x="158" y="106" width="279.1" height="22" rx="2" fill="#6caeff"/>
+    <text x="447.1" y="123">4.105</text>
+    <text x="145" y="165" text-anchor="end">10 kPa</text>
+    <rect x="158" y="148" width="34.0" height="22" rx="2" fill="#40debf"/>
+    <text x="202.0" y="165">0.500</text>
+    <text x="145" y="207" text-anchor="end">30 kPa</text>
+    <rect x="158" y="190" width="14.5" height="22" rx="2" fill="#40debf"/>
+    <text x="182.5" y="207">0.213</text>
+    <text x="145" y="249" text-anchor="end">60 kPa</text>
+    <rect x="158" y="232" width="8.4" height="22" rx="2" fill="#40debf"/>
+    <text x="176.4" y="249">0.123</text>
+    <g text-anchor="middle" fill="#b6c4d3">
+      <text x="158" y="296">0</text><text x="226" y="296">1</text><text x="294" y="296">2</text>
+      <text x="362" y="296">3</text><text x="430" y="296">4</text><text x="498" y="296">5</text>
+      <text x="328" y="320">Deflection (mm)</text>
+    </g>
+  </g>
+</svg>

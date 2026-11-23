@@ -32,4 +32,4 @@ The table uses every substep to find the peaks. The plot and timestep comparison
 2. Run `cargo run -p vehicle_lab -- --elastic-report` to reproduce the measurements and check the timestep comparison without opening a window.
 3. Run `cargo run -p vehicle_lab` and press **Enter**. Watch the load change from 3 N to zero and the signed deflection oscillate around zero. Zoom in on the pink nodes and compare their motion with the grey crosses. Hold **Space**, toggle a beam family with **1–3**, release **Space**, and press **Backspace** to return to rest.
 
-The next milestone adds a closed pressure surface and compares the tyre's response at several inflation pressures. [Remaining milestones](../README.md#planned)
+The current lab opens with a sealed tyre at zero gauge pressure. Use `--elastic-report` to reproduce the vented numbers above. [003 — Inflation and tread reinforcement](../003-inflation/README.md)

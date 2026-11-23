@@ -10,19 +10,21 @@ Run this command from the workspace root.
 cargo run -p vehicle_lab
 ```
 
-The default tyre starts at rest with 160 nodes and 544 beams. Larger dots mark the seam where the last segment connects to the first. Three pink nodes mark the load patch, and grey crosses mark their rest positions. The panel shows the phase, elapsed simulation time, applied load, and signed deflection. Positive deflection means the tread moved inward.
+The default tyre starts sealed at 0 kPa gauge with 160 nodes, 544 beams, and a reinforced tread band. Gauge pressure measures the difference from ambient pressure. Press **P** to choose a higher target and watch the tyre inflate from zero. The lab holds the target while the tyre settles, then seals the chamber. Once it is ready, the grey crosses mark the unloaded positions of the three pink tread nodes. The panel shows target and live gauge pressure, volume, load, and deflection from that baseline. Positive deflection means the tread moved inward. **Peak press** records the largest inward deflection under load until the next run or reset. The solver runs at 3,840 substeps per second for the stiffer tread band.
 
 | Control | Action |
 | --- | --- |
+| **P** | Cycle through 0, 10, 30, and 60 kPa gauge. Each selection starts from zero |
 | **Enter** | Start a fresh replay. Apply 3 N inward for 0.5 s and observe rebound through 2 s |
 | Hold **Space** | Press the patch with 3 N. Release the key to let it rebound. Pressing during replay starts a fresh manual run |
-| **Backspace** | Reset the tyre to rest |
+| **Backspace** | Restore the sealed baseline or restart preparation for the selected target |
 | Left mouse button + drag | Orbit around the tyre |
 | Scroll | Zoom in or out |
 | **R** | Reset the camera orientation and zoom |
 | **1** | Toggle circumferential beams (mint) |
 | **2** | Toggle cross-section beams (amber) |
 | **3** | Toggle diagonal beams (violet) |
+| **4** | Toggle the chamber wireframe (blue carcass, orange rim closure) |
 
 ## Generate a tyre in Rust
 
@@ -76,10 +78,53 @@ Read `positions()` and `velocities()` in topology order. Call `reset()` to resto
 | Cross-section | 20,000 | 6 |
 | Diagonal | 8,000 | 3 |
 
-## Compare timesteps without a window
+## Use a sealed air chamber
+
+```rust
+use vehicle_physics::{
+    elastic_tyre::{ElasticTyre, ElasticTyreConfig},
+    pressure::PressureConfig,
+};
+
+let mut tyre = ElasticTyre::new_inflated(
+    make_tyre()?,
+    ElasticTyreConfig::default(),
+    PressureConfig::default(),
+)?;
+tyre.set_gauge_pressure(30_000.0)?;
+let reading = tyre.chamber_reading().expect("sealed tyre");
+```
+
+`PressureConfig::default()` uses 101,325 Pa absolute ambient pressure and 0 Pa initial gauge pressure. `set_gauge_pressure` changes the gas charge at the current volume. Each subsequent `step` conserves that charge and updates volume in m³ and gauge pressure in Pa. Read the chamber mesh with `pressure_triangles()`. Triangles use tyre-local node indices and face out from the cavity. Call `reset()` to restore the constructor's geometry and initial gas charge. To restore a settled state, keep a clone of the settled tyre, as the lab does.
+
+## Reinforce the tread band
+
+Call `with_tread_reinforcement` on an elastic tyre to fit a stiffer band across the tread-centre and shoulder rings. The same configuration works with the vented and sealed constructors.
+
+```rust
+use vehicle_physics::tread_reinforcement::TreadReinforcementConfig;
+
+let mut tyre = tyre.with_tread_reinforcement(TreadReinforcementConfig::default())?;
+```
+
+The defaults multiply tread and shoulder hoop stiffness by 20 and multiply the tread-to-shoulder beam stiffness by 2. A 30,000 N/m spring with 5 N·s/m damping at each segment controls the tread centre's distance from the shoulder midpoint. The lab uses these values on the default 32-segment mesh. Choose a timestep appropriate for your mesh, mass, and stiffness.
+
+## Run the headless comparisons
+
+```sh
+cargo run -p vehicle_lab -- --radial-report
+```
+
+The radial report compares the original and reinforced tyres across all four settled pressures. It prints maximum crown and shoulder radius growth, the largest signed shoulder width change, chamber volume, seal time, and peak deflection under the same 3 N press. It also repeats the reinforced case at 7,680 substeps per second and checks agreement with the lab timestep.
+
+```sh
+cargo run -p vehicle_lab -- --inflation-report
+```
+
+The inflation report reproduces the original milestone 003 carcass. It compares the vented baseline and all four sealed presets at 960 and 1,920 substeps per second. It prints the settled pressure and volume, time to seal, peak inward deflection, deflection at release, and final residual. Each press is measured from its own unloaded baseline. The report checks that the positive presets settle and stiffen in pressure order, and that the peak deflections agree within 0.10 mm across the two rates.
 
 ```sh
 cargo run -p vehicle_lab -- --elastic-report
 ```
 
-The report runs the same timed replay at 960, 1,920, and 3,840 substeps per second. It shows peak inward deflection, deflection at release, outward rebound, and residual deflection. It returns an error if the tread fails to rebound past rest, the residual exceeds 0.25 mm, or the finer timestep pair fails to reduce the trace difference below 0.10 mm.
+The elastic report reproduces the vented milestone 002 replay at 960, 1,920, and 3,840 substeps per second. It shows peak inward deflection, deflection at release, outward rebound, and residual deflection. It returns an error if the tread fails to rebound past rest, the residual exceeds 0.25 mm, or the finer timestep pair fails to reduce the trace difference below 0.10 mm.

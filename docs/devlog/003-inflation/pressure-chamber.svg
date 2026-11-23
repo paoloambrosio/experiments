@@ -1,0 +1,37 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="520" height="290" viewBox="0 0 520 290"
+     role="img" aria-labelledby="title description">
+  <title id="title">Tyre chamber at one angular segment</title>
+  <desc id="description">The carcass and the cylindrical rim closure surround the air chamber. Pressure arrows point outward from the chamber, including inward toward the axle bore on the closure.</desc>
+  <defs>
+    <marker id="arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto" markerUnits="userSpaceOnUse">
+      <path d="M0 0L8 4L0 8Z" fill="#eef4ff"/>
+    </marker>
+  </defs>
+  <rect x="0.5" y="0.5" width="519" height="289" rx="14" fill="#0c1017" stroke="#293444"/>
+  <path d="M175 185L160 65L260 55L360 65L345 185Z" fill="#162d43"/>
+  <path d="M175 185L160 65L260 55L360 65L345 185"
+        fill="none" stroke="#6caeff" stroke-width="3" stroke-linejoin="round"/>
+  <path d="M175 185H345" stroke="#ff9a6e" stroke-width="3"/>
+  <g stroke="#eef4ff" stroke-width="2">
+    <path d="M260 55V30" marker-end="url(#arrow)"/>
+    <path d="M165 111L132 115" marker-end="url(#arrow)"/>
+    <path d="M355 111L388 115" marker-end="url(#arrow)"/>
+    <path d="M260 185V214" marker-end="url(#arrow)"/>
+  </g>
+  <g fill="#eef4ff" stroke="#0c1017" stroke-width="1.5">
+    <circle cx="175" cy="185" r="5"/><circle cx="345" cy="185" r="5"/>
+  </g>
+  <g font-family="system-ui, sans-serif" font-size="18">
+    <text x="260" y="130" text-anchor="middle" fill="#eef4ff">Air chamber</text>
+    <text x="95" y="190" fill="#b6c4d3">Bead</text>
+    <path d="M143 185H164" stroke="#8493a6"/>
+    <text x="260" y="239" text-anchor="middle" fill="#b6c4d3">Axle bore</text>
+    <path d="M24 254H496" stroke="#293444"/>
+    <path d="M42 271H66" stroke="#6caeff" stroke-width="3"/>
+    <text x="77" y="277" fill="#eef4ff">Carcass</text>
+    <path d="M191 271H215" stroke="#ff9a6e" stroke-width="3"/>
+    <text x="226" y="277" fill="#eef4ff">Rim closure</text>
+    <path d="M351 271H375" stroke="#eef4ff" stroke-width="2" marker-end="url(#arrow)"/>
+    <text x="387" y="277" fill="#eef4ff">Pressure force</text>
+  </g>
+</svg>

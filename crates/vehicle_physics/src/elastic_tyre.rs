@@ -4,7 +4,11 @@ use std::{error::Error, fmt};
 
 use bevy_math::DVec3;
 
-use crate::tyre::{BeamFamily, RingRole, TyreTopology};
+use crate::{
+    pressure::{ChamberReading, PressureChamber, PressureConfig, PressureTriangle},
+    tread_reinforcement::{CrownSpring, TreadReinforcementConfig},
+    tyre::{BeamFamily, RingRole, TyreTopology},
+};
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct BeamCoefficients {
@@ -62,6 +66,11 @@ pub enum ElasticTyreError {
     NonFiniteExternalForce(usize),
     CollapsedBeam(usize),
     NonFiniteStep,
+    VentedTyre,
+    InvalidPressure,
+    InvalidPressureTriangle(usize),
+    InvalidChamberVolume,
+    InvalidTreadReinforcement,
 }
 
 impl fmt::Display for ElasticTyreError {
@@ -85,23 +94,38 @@ impl fmt::Display for ElasticTyreError {
             Self::NonFiniteStep => {
                 f.write_str("step produced non-finite geometry, force, or motion")
             }
+            Self::VentedTyre => f.write_str("a vented tyre has no sealed gas charge"),
+            Self::InvalidPressure => f.write_str(
+                "ambient pressure, absolute pressure, and gas charge must be positive and finite",
+            ),
+            Self::InvalidPressureTriangle(index) => {
+                write!(f, "pressure triangle {index} has zero or non-finite area")
+            }
+            Self::InvalidChamberVolume => {
+                f.write_str("the signed chamber volume must be positive and finite")
+            }
+            Self::InvalidTreadReinforcement => f.write_str(
+                "tread multipliers must be at least one and effective coefficients must be finite and nonnegative",
+            ),
         }
     }
 }
 
 impl Error for ElasticTyreError {}
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 struct ElasticBeam {
     endpoints: [usize; 2],
     rest_length: f64,
     coefficients: BeamCoefficients,
+    stiffness_multiplier: f64,
 }
 
 impl ElasticBeam {
     fn axial_force_on_start(&self, offset: DVec3, length: f64, relative_velocity: DVec3) -> DVec3 {
         let axis = offset / length;
-        let spring = self.coefficients.stiffness * (length - self.rest_length);
+        let spring =
+            self.coefficients.stiffness * self.stiffness_multiplier * (length - self.rest_length);
         let damping = self.coefficients.damping * relative_velocity.dot(axis);
         axis * (spring + damping)
     }
@@ -111,15 +135,18 @@ impl ElasticBeam {
 ///
 /// Positions use tyre-local metres, with the axle along X and segment zero on
 /// +Y. Velocities are in m/s and all node arrays follow topology order.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct ElasticTyre {
     topology: TyreTopology,
     rest_positions: Vec<DVec3>,
     positions: Vec<DVec3>,
     velocities: Vec<DVec3>,
     beams: Vec<ElasticBeam>,
+    crown_springs: Vec<CrownSpring>,
+    crown_coefficients: BeamCoefficients,
     free_nodes: Vec<usize>,
     node_mass: f64,
+    chamber: Option<PressureChamber>,
     forces: Vec<DVec3>,
     next_positions: Vec<DVec3>,
     next_velocities: Vec<DVec3>,
@@ -166,6 +193,7 @@ impl ElasticTyre {
                     // Match the integrator's precision so the unloaded rest shape has zero spring force.
                     rest_length: (rest_positions[end] - rest_positions[start]).length(),
                     coefficients: config.coefficients(beam.family),
+                    stiffness_multiplier: 1.0,
                 }
             })
             .collect();
@@ -186,9 +214,107 @@ impl ElasticTyre {
             next_velocities: vec![DVec3::ZERO; node_count],
             forces: vec![DVec3::ZERO; node_count],
             beams,
+            crown_springs: Vec::new(),
+            crown_coefficients: BeamCoefficients {
+                stiffness: 0.0,
+                damping: 0.0,
+            },
             free_nodes,
             node_mass,
+            chamber: None,
         })
+    }
+
+    /// Construct a tyre with a sealed chamber at the given initial gauge pressure in Pa.
+    pub fn new_inflated(
+        topology: TyreTopology,
+        config: ElasticTyreConfig,
+        pressure: PressureConfig,
+    ) -> Result<Self, ElasticTyreError> {
+        let mut tyre = Self::new(topology, config)?;
+        tyre.chamber = Some(PressureChamber::new(
+            &tyre.topology,
+            &tyre.positions,
+            pressure,
+        )?);
+        Ok(tyre)
+    }
+
+    /// Configure the tread band while keeping the current node positions and gas charge.
+    ///
+    /// The original mesh supplies the crown spring's rest geometry. Applying another
+    /// configuration replaces the multipliers and coefficients. Stiffer beams can
+    /// require a smaller timestep.
+    pub fn with_tread_reinforcement(
+        mut self,
+        config: TreadReinforcementConfig,
+    ) -> Result<Self, ElasticTyreError> {
+        if [
+            config.hoop_stiffness_multiplier,
+            config.brace_stiffness_multiplier,
+        ]
+        .into_iter()
+        .any(|scale| !scale.is_finite() || scale < 1.0)
+            || [config.crown.stiffness, config.crown.damping]
+                .into_iter()
+                .any(|coefficient| !coefficient.is_finite() || coefficient < 0.0)
+        {
+            return Err(ElasticTyreError::InvalidTreadReinforcement);
+        }
+        for (beam, topology_beam) in self.beams.iter_mut().zip(self.topology.beams()) {
+            let in_tread = beam.endpoints.iter().all(|&index| {
+                matches!(
+                    self.topology.nodes()[index].ring,
+                    RingRole::LeftShoulder | RingRole::TreadCentre | RingRole::RightShoulder,
+                )
+            });
+            let multiplier = match (in_tread, topology_beam.family) {
+                (true, BeamFamily::Circumferential) => config.hoop_stiffness_multiplier,
+                (true, BeamFamily::CrossSection | BeamFamily::Diagonal) => {
+                    config.brace_stiffness_multiplier
+                }
+                (false, _) => 1.0,
+            };
+            if !(beam.coefficients.stiffness * multiplier).is_finite() {
+                return Err(ElasticTyreError::InvalidTreadReinforcement);
+            }
+            beam.stiffness_multiplier = multiplier;
+        }
+        // The five-ring topology stores every ring in the same angular order.
+        let segments = self.topology.nodes().len() / 5;
+        self.crown_coefficients = config.crown;
+        self.crown_springs = (0..segments)
+            .map(|segment| {
+                let nodes = [
+                    segments + segment,
+                    2 * segments + segment,
+                    3 * segments + segment,
+                ];
+                CrownSpring::new(nodes, &self.rest_positions)
+            })
+            .collect();
+        Ok(self)
+    }
+
+    /// Change the sealed gas charge to obtain this gauge pressure at the current volume.
+    /// Subsequent steps conserve the new charge.
+    pub fn set_gauge_pressure(&mut self, gauge_pressure_pa: f64) -> Result<(), ElasticTyreError> {
+        self.chamber
+            .as_mut()
+            .ok_or(ElasticTyreError::VentedTyre)?
+            .set_gauge_pressure(gauge_pressure_pa)
+    }
+
+    /// Pressure and volume of the sealed chamber, when present.
+    pub fn chamber_reading(&self) -> Option<ChamberReading> {
+        self.chamber.as_ref().map(PressureChamber::reading)
+    }
+
+    /// Outward-facing pressure triangles indexed by node. Empty for a vented tyre.
+    pub fn pressure_triangles(&self) -> &[PressureTriangle] {
+        self.chamber
+            .as_ref()
+            .map_or(&[], |chamber| chamber.triangles.as_slice())
     }
 
     pub fn topology(&self) -> &TyreTopology {
@@ -205,10 +331,13 @@ impl ElasticTyre {
         &self.velocities
     }
 
-    /// Restore all nodes to their rest positions with zero velocity.
+    /// Restore the rest positions, zero velocities, and initial gas charge.
     pub fn reset(&mut self) {
         self.positions.copy_from_slice(&self.rest_positions);
         self.velocities.fill(DVec3::ZERO);
+        if let Some(chamber) = &mut self.chamber {
+            chamber.reset();
+        }
     }
 
     /// Advance one semi-implicit Euler step by a positive, finite number of seconds.
@@ -250,6 +379,17 @@ impl ElasticTyre {
             self.forces[start] += force;
             self.forces[end] -= force;
         }
+        for spring in &self.crown_springs {
+            spring.add_forces(
+                self.crown_coefficients,
+                &self.positions,
+                &self.velocities,
+                &mut self.forces,
+            );
+        }
+        if let Some(chamber) = &self.chamber {
+            chamber.add_forces(&self.positions, &mut self.forces);
+        }
         if self.forces.iter().any(|force| !force.is_finite()) {
             return Err(NonFiniteStep);
         }
@@ -276,6 +416,9 @@ impl ElasticTyre {
             }
         }
 
+        if let Some(chamber) = &mut self.chamber {
+            chamber.current = chamber.at_positions(&self.next_positions)?;
+        }
         std::mem::swap(&mut self.positions, &mut self.next_positions);
         std::mem::swap(&mut self.velocities, &mut self.next_velocities);
         Ok(())
@@ -286,6 +429,118 @@ impl ElasticTyre {
 mod tests {
     use super::*;
     use crate::tyre::TyreConfig;
+
+    #[test]
+    fn reinforcement_is_applied_only_to_the_tread_band() {
+        let mut tyre = default_tyre()
+            .with_tread_reinforcement(TreadReinforcementConfig::default())
+            .unwrap();
+        let mut hoop_count = 0;
+        let mut brace_count = 0;
+        for (beam, topology_beam) in tyre.beams.iter().zip(tyre.topology.beams()) {
+            let rings = beam
+                .endpoints
+                .map(|index| tyre.topology.nodes()[index].ring);
+            if rings.contains(&RingRole::LeftBead) || rings.contains(&RingRole::RightBead) {
+                assert_eq!(beam.stiffness_multiplier, 1.0);
+            } else if topology_beam.family == BeamFamily::Circumferential {
+                assert_eq!(beam.stiffness_multiplier, 20.0);
+                hoop_count += 1;
+            } else {
+                assert_eq!(beam.stiffness_multiplier, 2.0);
+                brace_count += 1;
+            }
+        }
+        let segments = TyreConfig::default().segments;
+        assert_eq!(hoop_count, 3 * segments);
+        assert_eq!(brace_count, 6 * segments);
+        assert_eq!(tyre.crown_springs.len(), segments);
+        for spring in &tyre.crown_springs {
+            assert_eq!(
+                spring.nodes.map(|index| tyre.topology.nodes()[index].ring),
+                [
+                    RingRole::LeftShoulder,
+                    RingRole::TreadCentre,
+                    RingRole::RightShoulder
+                ],
+            );
+        }
+        let unloaded = vec![DVec3::ZERO; tyre.positions.len()];
+        tyre.step(1.0 / 3840.0, &unloaded).unwrap();
+        assert_eq!(tyre.positions, tyre.rest_positions);
+        assert_eq!(tyre.velocities, unloaded);
+    }
+
+    #[test]
+    fn inflated_tyre_keeps_beads_fixed_and_reset_restores_initial_charge() {
+        let config = PressureConfig {
+            initial_gauge_pressure_pa: 10_000.0,
+            ..PressureConfig::default()
+        };
+        let mut tyre = ElasticTyre::new_inflated(
+            TyreTopology::generate(&TyreConfig::default()).unwrap(),
+            ElasticTyreConfig::default(),
+            config,
+        )
+        .unwrap();
+        let initial = tyre.chamber_reading().unwrap();
+        tyre.set_gauge_pressure(15_000.0).unwrap();
+        let forces = vec![DVec3::ZERO; tyre.positions().len()];
+        for _ in 0..120 {
+            tyre.step(1.0 / 960.0, &forces).unwrap();
+        }
+        assert!(tyre.chamber_reading().unwrap().volume_m3 > initial.volume_m3);
+        for (index, node) in tyre.topology().nodes().iter().enumerate() {
+            if matches!(node.ring, RingRole::LeftBead | RingRole::RightBead) {
+                assert_eq!(tyre.positions()[index], node.rest_position.as_dvec3());
+                assert_eq!(tyre.velocities()[index], DVec3::ZERO);
+            }
+        }
+        tyre.reset();
+        assert_eq!(tyre.chamber_reading(), Some(initial));
+        assert_eq!(tyre.positions(), tyre.rest_positions);
+    }
+
+    #[test]
+    fn invalid_pressure_changes_and_invalid_candidate_meshes_roll_back() {
+        let topology = TyreTopology::generate(&TyreConfig::default()).unwrap();
+        let config = ElasticTyreConfig {
+            total_mass: topology.nodes().len() as f64,
+            ..ElasticTyreConfig::default()
+        };
+        let mut tyre =
+            ElasticTyre::new_inflated(topology, config, PressureConfig::default()).unwrap();
+        let initial = tyre.chamber_reading();
+        assert_eq!(
+            tyre.set_gauge_pressure(f64::NAN),
+            Err(ElasticTyreError::InvalidPressure)
+        );
+        assert_eq!(
+            tyre.set_gauge_pressure(-101_325.0),
+            Err(ElasticTyreError::InvalidPressure)
+        );
+        assert_eq!(tyre.chamber_reading(), initial);
+
+        // Flat triangle with three distinct vertices and all beam lengths nonzero.
+        let [a, b, c] = tyre.pressure_triangles()[0].nodes;
+        let midpoint = (tyre.positions()[a] + tyre.positions()[b]) * 0.5;
+        let mut forces = vec![DVec3::ZERO; tyre.positions().len()];
+        forces[c] = midpoint - tyre.positions()[c];
+        assert_eq!(
+            tyre.step(1.0, &forces),
+            Err(ElasticTyreError::InvalidPressureTriangle(0))
+        );
+        assert_eq!(tyre.positions(), tyre.rest_positions);
+        assert!(
+            tyre.velocities()
+                .iter()
+                .all(|velocity| *velocity == DVec3::ZERO)
+        );
+        assert_eq!(tyre.chamber_reading(), initial);
+        forces.fill(DVec3::ZERO);
+        tyre.step(1.0 / 960.0, &forces).unwrap();
+        assert_eq!(tyre.chamber_reading(), initial);
+    }
 
     fn default_tyre() -> ElasticTyre {
         ElasticTyre::new(
@@ -300,6 +555,7 @@ mod tests {
         let beam = ElasticBeam {
             endpoints: [0, 1],
             rest_length: 1.0,
+            stiffness_multiplier: 1.0,
             coefficients: BeamCoefficients {
                 stiffness: 10.0,
                 damping: 3.0,
@@ -320,6 +576,7 @@ mod tests {
         let beam = ElasticBeam {
             endpoints: [0, 1],
             rest_length: 1.0,
+            stiffness_multiplier: 1.0,
             coefficients: BeamCoefficients {
                 stiffness: 10.0,
                 damping: 3.0,

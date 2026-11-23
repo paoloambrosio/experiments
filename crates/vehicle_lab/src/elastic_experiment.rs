@@ -1,12 +1,16 @@
 use bevy::math::DVec3;
 use vehicle_physics::{
     elastic_tyre::{ElasticTyre, ElasticTyreConfig, ElasticTyreError},
+    pressure::PressureConfig,
+    tread_reinforcement::TreadReinforcementConfig,
     tyre::{RingRole, TyreConfig, TyreTopology},
 };
 
-pub const LAB_SUBSTEPS_PER_SECOND: u32 = 960;
+pub const REFERENCE_SUBSTEPS_PER_SECOND: u32 = 960;
+pub const RADIAL_SUBSTEPS_PER_SECOND: u32 = 3_840;
 pub const TICKS_PER_SECOND: u32 = 60;
 pub const LOAD_NEWTONS: f64 = 3.0;
+pub const PRESETS_PA: [f64; 4] = [0.0, 10_000.0, 30_000.0, 60_000.0];
 
 pub struct Experiment {
     pub tyre: ElasticTyre,
@@ -14,11 +18,28 @@ pub struct Experiment {
     pub patch: [usize; 3],
     substeps_per_second: u32,
     completed_steps: u32,
+    peak_inward_mm: f64,
     external_forces: Vec<DVec3>,
+    baseline: Option<ElasticTyre>,
+    target_pressure_pa: Option<f64>,
+    preparation_steps: u32,
+    slow_steps: u32,
 }
 
 impl Experiment {
     pub fn new(substeps_per_second: u32) -> Self {
+        Self::build(substeps_per_second, None, false)
+    }
+
+    pub fn inflated(substeps_per_second: u32, target_pa: f64) -> Self {
+        Self::build(substeps_per_second, Some(target_pa), false)
+    }
+
+    pub fn radial(substeps_per_second: u32, target_pa: f64) -> Self {
+        Self::build(substeps_per_second, Some(target_pa), true)
+    }
+
+    fn build(substeps_per_second: u32, target_pressure_pa: Option<f64>, reinforced: bool) -> Self {
         let config = TyreConfig::default();
         let topology = TyreTopology::generate(&config).expect("default tyre geometry");
         let tread_start = topology
@@ -32,20 +53,115 @@ impl Experiment {
             tread_start + 1,
         ];
         let external_forces = vec![DVec3::ZERO; topology.nodes().len()];
+        let config_elastic = ElasticTyreConfig::default();
+        let tyre = if target_pressure_pa.is_some() {
+            ElasticTyre::new_inflated(topology, config_elastic, PressureConfig::default())
+        } else {
+            ElasticTyre::new(topology, config_elastic)
+        }
+        .expect("default elastic tyre");
+        let tyre = if reinforced {
+            tyre.with_tread_reinforcement(TreadReinforcementConfig::default())
+                .expect("default tread reinforcement")
+        } else {
+            tyre
+        };
+        let baseline = if target_pressure_pa.unwrap_or(0.0) == 0.0 {
+            Some(tyre.clone())
+        } else {
+            None
+        };
         Self {
-            tyre: ElasticTyre::new(topology, ElasticTyreConfig::default())
-                .expect("default elastic tyre"),
+            tyre,
             segments: config.segments,
             patch,
             substeps_per_second,
             completed_steps: 0,
+            peak_inward_mm: 0.0,
             external_forces,
+            baseline,
+            target_pressure_pa,
+            preparation_steps: 0,
+            slow_steps: 0,
         }
     }
 
     pub fn reset(&mut self) {
-        self.tyre.reset();
+        self.tyre.clone_from(
+            self.baseline
+                .as_ref()
+                .expect("prepare the tyre before pressing"),
+        );
         self.completed_steps = 0;
+        self.peak_inward_mm = 0.0;
+    }
+
+    pub fn is_ready(&self) -> bool {
+        self.baseline.is_some()
+    }
+
+    pub fn substeps_per_tick(&self) -> u32 {
+        self.substeps_per_second / TICKS_PER_SECOND
+    }
+
+    pub fn preparation_seconds(&self) -> f64 {
+        f64::from(self.preparation_steps) / f64::from(self.substeps_per_second)
+    }
+
+    pub fn patch_reference_positions(&self) -> Option<[DVec3; 3]> {
+        self.baseline
+            .as_ref()
+            .map(|baseline| self.patch.map(|node| baseline.positions()[node]))
+    }
+
+    pub fn prepare_step(&mut self) -> Result<(), Box<dyn std::error::Error>> {
+        let target = self.target_pressure_pa.expect("positive-pressure preset");
+        let next = self.preparation_steps + 1;
+        let fraction =
+            f64::from(next.min(self.substeps_per_second)) / f64::from(self.substeps_per_second);
+        // The valve regulates pressure during the step. Restore the setpoint at the new
+        // volume as well, so the displayed pressure and the final sealed charge agree.
+        self.tyre.set_gauge_pressure(target * fraction)?;
+        self.tyre.step(
+            1.0 / f64::from(self.substeps_per_second),
+            &self.external_forces,
+        )?;
+        self.tyre.set_gauge_pressure(target * fraction)?;
+        self.preparation_steps = next;
+
+        // The fixed beads' velocities are zero, so they don't affect this test.
+        if next >= self.substeps_per_second
+            && self
+                .tyre
+                .velocities()
+                .iter()
+                .all(|velocity| velocity.length_squared() < 0.0001_f64.powi(2))
+        {
+            self.slow_steps += 1;
+        } else {
+            self.slow_steps = 0;
+        }
+        if self.slow_steps >= self.substeps_per_second / 4 {
+            let actual = self
+                .tyre
+                .chamber_reading()
+                .expect("sealed chamber")
+                .gauge_pressure_pa;
+            if (actual - target).abs() > 100.0 {
+                return Err(format!(
+                    "sealed pressure {actual:.0} Pa missed the {target:.0} Pa target"
+                )
+                .into());
+            }
+            self.baseline = Some(self.tyre.clone());
+        } else if next >= 30 * self.substeps_per_second {
+            return Err(format!(
+                "tyre at {:.0} kPa failed to settle within 30 s",
+                target / 1000.0
+            )
+            .into());
+        }
+        Ok(())
     }
 
     pub fn replay_load(&self) -> bool {
@@ -74,42 +190,48 @@ impl Experiment {
             &self.external_forces,
         )?;
         self.completed_steps = self.completed_steps.saturating_add(1);
+        if load {
+            self.peak_inward_mm = self.peak_inward_mm.max(self.deflection_mm());
+        }
         Ok(())
     }
 
+    pub fn peak_inward_mm(&self) -> f64 {
+        self.peak_inward_mm
+    }
+
     pub fn deflection_mm(&self) -> f64 {
+        let Some(reference) = self.patch_reference_positions() else {
+            return 0.0;
+        };
         self.patch
             .into_iter()
-            .map(|index| {
-                f64::from(self.tyre.topology().nodes()[index].rest_position.y)
-                    - self.tyre.positions()[index].y
-            })
+            .zip(reference)
+            .map(|(index, reference)| reference.y - self.tyre.positions()[index].y)
             .sum::<f64>()
             * (1_000.0 / 3.0)
     }
 }
 
-struct Measurement {
+pub(crate) struct Measurement {
     samples_mm: Vec<f64>,
-    peak_inward_mm: f64,
-    release_mm: f64,
+    pub(crate) peak_inward_mm: f64,
+    pub(crate) release_mm: f64,
     outward_rebound_mm: f64,
-    residual_mm: f64,
+    pub(crate) residual_mm: f64,
 }
 
-fn measure(substeps_per_second: u32) -> Result<Measurement, ElasticTyreError> {
-    let mut experiment = Experiment::new(substeps_per_second);
+pub(crate) fn measure(experiment: &mut Experiment) -> Result<Measurement, ElasticTyreError> {
+    experiment.reset();
     let mut samples_mm = vec![0.0];
-    let mut peak_inward_mm: f64 = 0.0;
     let mut release_mm = 0.0;
     let mut outward_rebound_mm: f64 = 0.0;
-    let sample_period = substeps_per_second / TICKS_PER_SECOND;
+    let sample_period = experiment.substeps_per_tick();
     while !experiment.replay_finished() {
         let load = experiment.replay_load();
         experiment.advance(load)?;
         let deflection_mm = experiment.deflection_mm();
         if load {
-            peak_inward_mm = peak_inward_mm.max(deflection_mm);
             release_mm = deflection_mm;
         } else {
             outward_rebound_mm = outward_rebound_mm.max(-deflection_mm);
@@ -120,7 +242,7 @@ fn measure(substeps_per_second: u32) -> Result<Measurement, ElasticTyreError> {
     }
     Ok(Measurement {
         samples_mm,
-        peak_inward_mm,
+        peak_inward_mm: experiment.peak_inward_mm(),
         release_mm,
         outward_rebound_mm,
         residual_mm: experiment.deflection_mm(),
@@ -137,11 +259,11 @@ fn max_sample_difference(a: &Measurement, b: &Measurement) -> f64 {
 
 pub fn report() -> Result<(), Box<dyn std::error::Error>> {
     let rates = [
-        LAB_SUBSTEPS_PER_SECOND,
-        2 * LAB_SUBSTEPS_PER_SECOND,
-        4 * LAB_SUBSTEPS_PER_SECOND,
+        REFERENCE_SUBSTEPS_PER_SECOND,
+        2 * REFERENCE_SUBSTEPS_PER_SECOND,
+        4 * REFERENCE_SUBSTEPS_PER_SECOND,
     ];
-    let measurements = rates.map(measure);
+    let measurements = rates.map(|rate| measure(&mut Experiment::new(rate)));
     let [coarse, medium, fine] = measurements;
     let measurements = [coarse?, medium?, fine?];
     println!("Elastic carcass | 3 N inward for 0.5 s | observe until 2 s");
@@ -181,5 +303,55 @@ mod tests {
     #[test]
     fn replay_meets_acceptance_checks() {
         report().unwrap();
+    }
+
+    #[test]
+    fn restoring_sealed_baseline_repeats_replay() {
+        let mut experiment = Experiment::inflated(REFERENCE_SUBSTEPS_PER_SECOND, 10_000.0);
+        while !experiment.is_ready() {
+            experiment.prepare_step().unwrap();
+        }
+        let reading = experiment.tyre.chamber_reading();
+        let positions = experiment.tyre.positions().to_vec();
+        let velocities = experiment.tyre.velocities().to_vec();
+        let first = measure(&mut experiment).unwrap();
+        let second = measure(&mut experiment).unwrap();
+        assert_eq!(first.samples_mm, second.samples_mm);
+        assert_eq!(first.peak_inward_mm, second.peak_inward_mm);
+        experiment.reset();
+        assert_eq!(experiment.tyre.chamber_reading(), reading);
+        assert_eq!(experiment.tyre.positions(), positions);
+        assert_eq!(experiment.tyre.velocities(), velocities);
+        assert_eq!(experiment.deflection_mm(), 0.0);
+    }
+
+    #[test]
+    fn fill_ramps_then_seals_at_target() {
+        let mut experiment = Experiment::inflated(REFERENCE_SUBSTEPS_PER_SECOND, 30_000.0);
+        let start = experiment.tyre.chamber_reading().unwrap();
+        assert_eq!(start.gauge_pressure_pa, 0.0);
+        while !experiment.is_ready() {
+            let reading = experiment.tyre.chamber_reading().unwrap();
+            let seconds = experiment.preparation_seconds();
+            assert!((reading.gauge_pressure_pa - 30_000.0 * seconds.min(1.0)).abs() < 1e-9);
+            if experiment.preparation_steps.is_multiple_of(32) {
+                println!(
+                    "TRACE {:.6} {:.6} {:.6}",
+                    seconds,
+                    reading.gauge_pressure_pa / 1000.0,
+                    reading.volume_m3 * 1000.0
+                );
+            }
+            experiment.prepare_step().unwrap();
+        }
+        let reading = experiment.tyre.chamber_reading().unwrap();
+        assert!((reading.gauge_pressure_pa - 30_000.0).abs() <= 100.0);
+        assert!(reading.volume_m3 > start.volume_m3);
+        println!(
+            "TRACE {:.6} {:.6} {:.6}",
+            experiment.preparation_seconds(),
+            reading.gauge_pressure_pa / 1000.0,
+            reading.volume_m3 * 1000.0
+        );
     }
 }
