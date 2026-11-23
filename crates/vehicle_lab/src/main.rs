@@ -7,6 +7,9 @@ mod elastic_experiment;
 mod grip_experiment;
 mod grip_lab;
 mod grip_report;
+mod handling_experiment;
+mod handling_lab;
+mod handling_report;
 mod impact_experiment;
 mod impact_lab;
 mod impact_report;
@@ -84,6 +87,14 @@ struct OrbitCamera {
     focus: Vec3,
 }
 
+#[derive(Component)]
+struct OrbitHome {
+    pitch: f32,
+    distance: f32,
+    min_distance: f32,
+    max_distance: f32,
+}
+
 impl Default for OrbitCamera {
     fn default() -> Self {
         Self {
@@ -146,9 +157,12 @@ fn main() -> AppExit {
     let mut puncture_lab = false;
     let mut corner_lab = false;
     let mut grip_lab = false;
+    let mut handling_lab = false;
     let mut window = WindowOptions::default();
     for argument in std::env::args_os().skip(1) {
-        let result = if argument == "--grip-report" {
+        let result = if argument == "--handling-report" {
+            handling_report::report(std::env::args_os().any(|argument| argument == "--samples"))
+        } else if argument == "--grip-report" {
             grip_report::report(std::env::args_os().any(|argument| argument == "--samples"))
         } else if argument == "--corner-report" {
             corner_experiment::report(std::env::args_os().any(|argument| argument == "--samples"))
@@ -173,6 +187,7 @@ fn main() -> AppExit {
             puncture_lab |= argument == "--puncture-lab";
             corner_lab |= argument == "--corner-lab";
             grip_lab |= argument == "--grip-lab";
+            handling_lab |= argument == "--handling-lab";
             window.no_vsync |= argument == "--no-vsync";
             window.benchmark |= argument == "--benchmark";
             continue;
@@ -186,7 +201,9 @@ fn main() -> AppExit {
         };
     }
 
-    if grip_lab {
+    if handling_lab {
+        handling_lab::run(window)
+    } else if grip_lab {
         grip_lab::run(window)
     } else if corner_lab {
         corner_lab::run(window)
@@ -538,18 +555,22 @@ fn draw_experiment(
 }
 
 fn orbit_camera(
-    camera: Single<(&mut OrbitCamera, &mut Transform)>,
+    camera: Single<(&mut OrbitCamera, &mut Transform, Option<&OrbitHome>)>,
     mouse: Res<ButtonInput<MouseButton>>,
     motion: Res<AccumulatedMouseMotion>,
     scroll: Res<AccumulatedMouseScroll>,
     keys: Res<ButtonInput<KeyCode>>,
 ) {
-    let (mut orbit, mut transform) = camera.into_inner();
+    let (mut orbit, mut transform, home) = camera.into_inner();
     if keys.just_pressed(KeyCode::KeyR) {
         *orbit = OrbitCamera {
             focus: orbit.focus,
             ..default()
         };
+        if let Some(home) = home {
+            orbit.pitch = home.pitch;
+            orbit.distance = home.distance;
+        }
     } else {
         if mouse.pressed(MouseButton::Left) {
             orbit.yaw = (orbit.yaw - motion.delta.x * 0.006).rem_euclid(TAU);
@@ -559,7 +580,8 @@ fn orbit_camera(
             MouseScrollUnit::Line => 0.14,
             MouseScrollUnit::Pixel => 0.003,
         };
-        orbit.distance = (orbit.distance * (-scroll.delta.y * scroll_scale).exp()).clamp(0.65, 3.5);
+        let (near, far) = home.map_or((0.65, 3.5), |home| (home.min_distance, home.max_distance));
+        orbit.distance = (orbit.distance * (-scroll.delta.y * scroll_scale).exp()).clamp(near, far);
     }
     *transform = orbit.transform();
 }

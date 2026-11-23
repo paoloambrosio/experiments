@@ -13,9 +13,9 @@ Each entry documents one development step. Supporting diagrams, media, and deep 
 - [007 — Puncture and pressure loss](007-puncture-and-pressure-loss/README.md) maps sidewall fractures to growing openings and measures air loss, loaded shape, and support against a sealed replay.
 - [008 — Loaded wheel and suspension](008-loaded-wheel-and-suspension/README.md) tests the tyre under a 1,000 kg car's corner load and measures suspension travel over a rounded step.
 - [009 — Loaded tyre grip](009-loaded-tyre-grip/README.md) measures longitudinal, lateral, and combined slip at three loads and two speeds.
+- [010 — Scripted whole-car handling](010-scripted-whole-car-handling/README.md) measures launch, turns, stopping distances, load transfer, and wheel lock with four live deformable tyres.
 
 ## Roadmap
 
-1. **010 — Scripted whole-car handling.** Reuse four suspension corners on a rigid chassis. Measure stopping distance, turning radius, yaw rate, load transfer, and the cost of stepping all four tyres live in a separate lab.
-2. **Driving controls.** Add human input after the scripted manoeuvres establish a handling baseline.
+1. **Driving controls.** Add human input using the scripted handling baseline.
 

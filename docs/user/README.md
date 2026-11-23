@@ -45,6 +45,28 @@ The rig seals the reinforced tyre at **30 kPa gauge**, settles the 20 kg wheel o
 
 The panel shows live readings during the run and the mean over two complete revolutions at the end. Blue and coral axle arrows show the tyre force transmitted along Z and X, respectively. Positive longitudinal slip means the tyre spins faster than free rolling at the same belt speed. Positive slip angle means the axle moves toward +X relative to the belt.
 
+### Whole-car handling
+
+```sh
+cargo run -p vehicle_lab -- --handling-lab
+```
+
+The flat-road lab replays a 1,000 kg car on four sealed 150 kPa tyres. Each run settles the car for four seconds before launching. The road arrows and panel show the mean support of each wheel over the current physics tick. A red arrow and the **LOCKED** label mark sustained lock. The path is blue under drive and orange under braking, with a grid at 5 m intervals.
+
+| Control | Action |
+| --- | --- |
+| **1**, **2**, **3** | Select the moderate stop from 4 m/s, moderate stop from 8 m/s, or limit stop from 8 m/s |
+| **4**, **5**, **6**, **7** | Select left and right turns at 4 m/s, then left and right turns at 8 m/s |
+| **8**, **9** | Select moderate or limit braking in the 8 m/s left turn |
+| **Left**, **Right** | Cycle through the nine cases |
+| **Enter** | Replay the selected case from rest |
+| **Backspace** | Clear the replay or restart tyre preparation |
+| Left mouse button + drag | Orbit around the chassis |
+| Scroll | Zoom in or out |
+| **R** | Reset the camera orientation and zoom |
+
+Add `--benchmark` to replay case 9 automatically with all four tyres stepping live. [Measured handling results](../devlog/010-scripted-whole-car-handling/README.md)
+
 ### Loaded tyre grip
 
 ```sh
@@ -295,6 +317,23 @@ let corner = WheelCorner::spawn(app.world_mut(), chassis, mounted, CornerConfig 
 
 The adapter creates a hub, a rim entity carrying `AvianTyre`, a travel-limited prismatic joint, and a spin hinge. The spring and damper exchange force between the chassis mount and hub at each substep. In this example the 3 kg hub, 9 kg bare rim, and 8 kg tyre add up to 20 kg. Read the tyre and contact forces from `AvianTyre` on `corner.rim`. The caller owns the returned entities and both joints.
 
+### Steer, drive, and brake the wheels
+
+Update `WheelControl` on each corner's spin joint before the Avian physics step. Positive steer rotates +Z towards +X around the hub's local +Y, and positive drive spins the rim about the steered +X axis. The brake torque capacity is a nonnegative value. The brake opposes relative axle spin and caps its impulse at the amount required to cancel spin.
+
+```rust
+use vehicle_physics::avian_suspension::{WheelControl, ackermann_steer};
+
+// front_left and front_right are WheelCorner values. +X is vehicle left.
+let [left, right] = ackermann_steer(2.5, 1.5, 6.0_f32.to_radians()).unwrap();
+for (corner, steer_rad) in [(front_left, left), (front_right, right)] {
+    let mut control = app.world_mut().get_mut::<WheelControl>(corner.spin_joint).unwrap();
+    *control = WheelControl { steer_rad, drive_nm: 0.0, brake_nm: 250.0 };
+}
+```
+
+The Ackermann helper takes wheelbase and track in metres, plus an equivalent steer in radians. It gives the front wheel angles in +X, −X order. Use zero steer at the rear and positive drive torque at the desired driven wheels. All three fields default to zero.
+
 ### Enable grip on a flat floor
 
 `FlatFloor::new` creates a stationary, frictionless floor. Set a dimensionless coefficient and a positive transition speed (m/s) to enable grip. A moving surface takes a world-space velocity in m/s with a zero Y component.
@@ -345,6 +384,13 @@ let tyre = tyre.with_puncture(PunctureConfig::new(0.001, 0.65)?)?;
 The arguments are the maximum opening as a fraction of a panel's original area and the orifice discharge coefficient. Both are dimensionless. `torn_panels()` identifies the open panels by side and segment and returns their topology node indices and opening areas in m². `puncture_reading()` reports the total area and mass flow in kg/s, with positive flow leaving the tyre. `chamber_air_mass_kg()` also works with a sealed chamber. These readings are available on fixed-bead and mounted tyres. Reinflating changes the air mass and preserves the openings. Resetting the fixed-bead tyre restores the intact sidewalls and initial air charge.
 
 ## Run the headless comparisons
+
+```sh
+cargo run -p vehicle_lab -- --handling-report
+cargo run -p vehicle_lab -- --handling-report --samples
+```
+
+The handling report checks nine cases at 3,840 and 7,680 substeps/s. Filter `handling` rows for per-case launch, turning, and braking results. Lock times are seconds from brake onset. `handling_comparison` gives the signed fraction of steady path curvature retained under braking. `--samples` adds `handling_chassis` and `handling_wheel` rows at 60 Hz, with road forces averaged over each tick's substeps. World +Y is up, initial forward is +Z, and initial left is +X. Wheel loads are ordered front left, front right, rear left, rear right. [Fixture, metrics, and measured paths](../devlog/010-scripted-whole-car-handling/README.md)
 
 ```sh
 cargo run -p vehicle_lab -- --grip-report

@@ -1,0 +1,43 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 780 350" role="img" aria-labelledby="title desc">
+  <title id="title">Whole-car fixture dimensions</title>
+  <desc id="desc">Top and side views of the chassis and four wheels. Centres are 2.5 metres apart front to rear and 1.5 metres across. The chassis centre of mass sits 0.50 metres above the road.</desc>
+  <defs>
+    <marker id="arrow" markerWidth="7" markerHeight="7" refX="5.5" refY="3.5" orient="auto-start-reverse"><path d="M0 0L7 3.5L0 7Z" fill="#aec1d9"/></marker>
+  </defs>
+  <rect width="780" height="350" rx="16" fill="#111b2c"/>
+  <g font-family="system-ui,sans-serif" font-size="14" fill="#e9f2ff">
+    <text x="30" y="33" font-size="19" font-weight="600">Plan view</text>
+    <text x="399" y="33" font-size="19" font-weight="600">Side view</text>
+    <rect x="147" y="60" width="90" height="216" rx="8" fill="#243a59" stroke="#698ab4" stroke-dasharray="4 3"/>
+    <path d="M147 93H237M147 243H237" stroke="#9cb2cd" stroke-dasharray="4 4"/>
+    <g fill="#7ad1e3" stroke="#152337" stroke-width="2">
+      <rect x="138" y="73" width="18" height="40" rx="5" transform="rotate(-6.19 147 93)"/>
+      <rect x="228" y="73" width="18" height="40" rx="5" transform="rotate(-5.82 237 93)"/>
+      <rect x="138" y="223" width="18" height="40" rx="5"/>
+      <rect x="228" y="223" width="18" height="40" rx="5"/>
+    </g>
+    <text x="108" y="98">FL</text><text x="253" y="98">FR</text><text x="107" y="248">RL</text><text x="253" y="248">RR</text>
+    <circle cx="192" cy="168" r="5" fill="#ffcb78"/>
+    <text x="192" y="195" text-anchor="middle" font-size="12">920 kg</text>
+    <path d="M82 93V243M147 302H237" stroke="#aec1d9" marker-start="url(#arrow)" marker-end="url(#arrow)"/>
+    <text x="72" y="168" text-anchor="middle" transform="rotate(-90 72 168)">2.50 m wheelbase</text>
+    <text x="192" y="324" text-anchor="middle">1.50 m track</text>
+    <path d="M322 172H288" stroke="#aec1d9" marker-end="url(#arrow)"/>
+    <path d="M322 172V136" stroke="#aec1d9" marker-end="url(#arrow)"/>
+    <text x="318" y="128">+Z</text><text x="265" y="177">+X</text>
+    <path d="M395 239H753" stroke="#97a9c0" stroke-width="2"/>
+    <rect x="456" y="194" width="216" height="30" rx="6" fill="#243a59" stroke="#698ab4" stroke-dasharray="4 3"/>
+    <g fill="#7ad1e3" stroke="#152337" stroke-width="3">
+      <circle cx="489" cy="219.4" r="20"/><circle cx="639" cy="219.4" r="20"/>
+    </g>
+    <path d="M489 209V219.4M639 209V219.4" stroke="#eaf0f8" stroke-width="2"/>
+    <circle cx="564" cy="209" r="5" fill="#ffcb78"/>
+    <path d="M569 209H714" stroke="#aec1d9" stroke-dasharray="3 4"/>
+    <path d="M710 209V239" stroke="#aec1d9" marker-start="url(#arrow)" marker-end="url(#arrow)"/>
+    <text x="713" y="193" text-anchor="middle">0.50 m</text>
+    <path d="M542 164H580L564 202" fill="none" stroke="#ffcb78"/>
+    <text x="538" y="168" text-anchor="end">Sprung mass centre</text>
+    <text x="563" y="277" text-anchor="middle">20 kg at each corner</text>
+    <text x="563" y="303" text-anchor="middle" fill="#aec1d9">Dashed outline shows the inertia box</text>
+  </g>
+</svg>

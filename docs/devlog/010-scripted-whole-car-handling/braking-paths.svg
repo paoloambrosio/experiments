@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 362" role="img" aria-labelledby="title desc">
+  <title id="title">Braking paths from the same left turn</title>
+  <desc id="desc">The moderate brake path continues left and runs about 11 metres. The limit brake path stays near the entry tangent and stops after about 4 metres. Both axes share the same scale.</desc>
+  <rect width="720" height="362" rx="16" fill="#111b2c"/>
+  <g font-family="system-ui,sans-serif" fill="#e9f2ff">
+    <text x="30" y="34" font-size="20" font-weight="600">Braking paths from the same left turn</text>
+    <text x="30" y="60" font-size="14" fill="#a9bcd4">7.95 m/s entry speed · 3,840 substeps/s</text>
+    <g font-size="13" text-anchor="middle">
+      <g stroke="#324762" fill="#b4c6de">
+        <path d="M105 113V291.5"/><text stroke="none" x="105" y="312">0</text>
+        <path d="M207 113V291.5"/><text stroke="none" x="207" y="312">2</text>
+        <path d="M309 113V291.5"/><text stroke="none" x="309" y="312">4</text>
+        <path d="M411 113V291.5"/><text stroke="none" x="411" y="312">6</text>
+        <path d="M513 113V291.5"/><text stroke="none" x="513" y="312">8</text>
+        <path d="M615 113V291.5"/><text stroke="none" x="615" y="312">10</text>
+        <path d="M105 266H666"/><text stroke="none" x="87" y="271">0</text>
+        <path d="M105 215H666"/><text stroke="none" x="87" y="220">1</text>
+        <path d="M105 164H666"/><text stroke="none" x="87" y="169">2</text>
+        <path d="M105 113H666"/><text stroke="none" x="87" y="118">3</text>
+      </g>
+      <path d="M105 266H666" stroke="#9bb0cd" stroke-dasharray="4 4"/>
+      <polyline points="105.00,266.00 125.09,265.84 144.79,265.35 164.10,264.54 183.00,263.41 201.51,262.00 219.61,260.30 237.31,258.36 254.60,256.19 271.49,253.81 287.96,251.24 304.03,248.49 319.70,245.60 334.96,242.57 349.81,239.43 364.26,236.18 378.31,232.84 391.95,229.42 405.20,225.93 418.04,222.38 430.49,218.78 442.54,215.16 454.19,211.50 465.46,207.84 476.33,204.18 486.82,200.52 496.92,196.89 506.65,193.30 516.00,189.75 524.98,186.26 533.59,182.83 541.84,179.48 549.72,176.22 557.24,173.03 564.40,169.95 571.20,166.96 577.65,164.07 583.74,161.30 589.49,158.64 594.89,156.11 599.94,153.70 604.66,151.43 609.03,149.30 613.07,147.32 616.77,145.49 620.13,143.80 623.17,142.28 625.87,140.90 628.23,139.69 630.27,138.65 631.98,137.76 633.36,137.05 634.41,136.50 635.14,136.12 635.54,135.90 635.60,135.86" fill="none" stroke="#71d8e9" stroke-width="3.5" stroke-linejoin="round"/>
+      <circle cx="635.60" cy="135.86" r="5.2" fill="#71d8e9"/>
+      <polyline points="105.00,266.00 124.88,265.92 143.76,265.82 161.64,265.72 178.51,265.65 194.38,265.60 209.24,265.57 223.11,265.56 235.99,265.56 247.87,265.57 258.76,265.60 268.65,265.63 277.55,265.68 285.43,265.73 292.32,265.78 298.20,265.84 303.08,265.90 306.97,265.97 309.85,266.02 311.73,266.08 312.62,266.11 312.70,266.12" fill="none" stroke="#ffba73" stroke-width="3.5" stroke-linejoin="round"/>
+      <circle cx="312.70" cy="266.12" r="5.2" fill="#ffba73"/>
+      <circle cx="105" cy="266" r="4.5" fill="#e9f2ff"/>
+      <text x="370" y="339">Forward along the entry tangent (m)</text>
+      <text x="44" y="210" transform="rotate(-90 44 210)">Left of entry tangent (m)</text>
+    </g>
+    <path d="M327 83H352" stroke="#71d8e9" stroke-width="3"/><text x="362" y="88" font-size="14">Moderate brake</text>
+    <path d="M512 83H537" stroke="#ffba73" stroke-width="3"/><text x="547" y="88" font-size="14">Limit brake</text>
+  </g>
+</svg>

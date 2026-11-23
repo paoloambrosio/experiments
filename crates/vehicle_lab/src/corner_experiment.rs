@@ -31,7 +31,7 @@ pub const STEP_RISE_M: f64 = 0.02;
 pub const SETTLE_TICKS: u32 = 4 * TICKS_PER_SECOND;
 pub const CORNER_TICKS: u32 = 10 * TICKS_PER_SECOND;
 
-fn physics_app(rate: u32) -> App {
+pub(crate) fn physics_app(rate: u32) -> App {
     let mut app = App::new();
     app.add_plugins((
         MinimalPlugins,
@@ -52,7 +52,7 @@ fn physics_app(rate: u32) -> App {
     app
 }
 
-fn spawn_chassis(world: &mut World, mass_kg: f32, centre: Vec3, size: Vec3) -> Entity {
+pub(crate) fn spawn_chassis(world: &mut World, mass_kg: f32, centre: Vec3, size: Vec3) -> Entity {
     let squared = size * size;
     let inertia = (Vec3::splat(squared.element_sum()) - squared) * (mass_kg / 12.0);
     world
