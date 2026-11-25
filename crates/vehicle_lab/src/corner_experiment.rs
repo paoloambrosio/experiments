@@ -1,4 +1,4 @@
-use std::{error::Error, time::Duration};
+use std::{error::Error, sync::Arc, time::Duration};
 
 use avian3d::prelude::*;
 use bevy::{math::DVec3, prelude::*, time::TimeUpdateStrategy};
@@ -8,6 +8,7 @@ use vehicle_physics::{
     elastic_tyre::ElasticTyre,
     kerb::Kerb,
     mounted_tyre::{MountedTyre, RimMotion},
+    triangle_road::TriangleRoad,
 };
 
 use crate::{
@@ -24,6 +25,63 @@ pub const STEP_Z_M: f64 = 3.5;
 pub const STEP_RISE_M: f64 = 0.02;
 pub const SETTLE_TICKS: u32 = 4 * TICKS_PER_SECOND;
 pub const CORNER_TICKS: u32 = 10 * TICKS_PER_SECOND;
+
+pub const SEAM_Z_M: f64 = 2.0;
+pub const RAMP_START_M: f64 = STEP_Z_M;
+pub const RAMP_END_M: f64 = RAMP_START_M + 1.0;
+pub const RAMP_RISE_M: f64 = 0.1;
+const HALF_WIDTH_M: f64 = 0.7;
+const COURSE_STATIONS_M: [f64; 5] = [-3.0, SEAM_Z_M, RAMP_START_M, RAMP_END_M, 13.0];
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(crate) enum CornerRoad {
+    Flat,
+    Step,
+    TriangleFlat,
+    Ramp,
+}
+
+impl CornerRoad {
+    pub(crate) fn name(self) -> &'static str {
+        match self {
+            Self::Flat => "Flat road",
+            Self::Step => "Rounded step",
+            Self::TriangleFlat => "Triangle flat",
+            Self::Ramp => "Triangle ramp",
+        }
+    }
+
+    pub(crate) fn height(self, z: f64) -> f64 {
+        match self {
+            Self::Step if z >= STEP_Z_M => STEP_RISE_M,
+            Self::Ramp => {
+                RAMP_RISE_M * ((z - RAMP_START_M) / (RAMP_END_M - RAMP_START_M)).clamp(0.0, 1.0)
+            }
+            _ => 0.0,
+        }
+    }
+
+    pub(crate) fn geometry(self) -> ([DVec3; 10], [[usize; 3]; 8]) {
+        let vertices = std::array::from_fn(|index| {
+            let z = COURSE_STATIONS_M[index / 2];
+            let x = if index.is_multiple_of(2) {
+                -HALF_WIDTH_M
+            } else {
+                HALF_WIDTH_M
+            };
+            DVec3::new(x, self.height(z), z)
+        });
+        let triangles = std::array::from_fn(|index| {
+            let a = (index / 2) * 2;
+            if index.is_multiple_of(2) {
+                [a, a + 2, a + 3]
+            } else {
+                [a, a + 3, a + 1]
+            }
+        });
+        (vertices, triangles)
+    }
+}
 
 pub(crate) fn physics_app(rate: u32) -> App {
     let mut app = App::new();
@@ -51,7 +109,7 @@ fn attach(
     chassis: Entity,
     tyre: &ElasticTyre,
     mount: Vec3,
-    step: bool,
+    road: CornerRoad,
 ) -> Result<WheelCorner, Box<dyn Error>> {
     let centre = world.get::<Position>(chassis).unwrap().0 + mount
         - Vec3::Y * (SUSPENSION.free_length_m - SAG_M as f32);
@@ -59,9 +117,18 @@ fn attach(
         centre: centre.as_dvec3(),
         ..Default::default()
     };
-    let mut mounted = MountedTyre::new(tyre.clone(), motion, Some(loaded_tyre::floor(true)))?;
-    if step {
-        mounted = mounted.with_kerb(Kerb::new(STEP_Z_M, STEP_RISE_M, 0.008)?);
+    let floor = loaded_tyre::floor(true);
+    let mut mounted = MountedTyre::new(tyre.clone(), motion, Some(floor))?;
+    match road {
+        CornerRoad::Step => {
+            mounted = mounted.with_kerb(Kerb::new(STEP_Z_M, STEP_RISE_M, 0.008)?);
+        }
+        CornerRoad::TriangleFlat | CornerRoad::Ramp => {
+            let (vertices, triangles) = road.geometry();
+            let surface = Arc::new(TriangleRoad::new(&vertices, &triangles, 0.05)?);
+            mounted.set_triangle_road(surface, floor.contact_parameters());
+        }
+        CornerRoad::Flat => {}
     }
     Ok(WheelCorner::spawn(
         world,
@@ -84,8 +151,12 @@ pub struct CornerSample {
     pub compression: f64,
     pub support: f64,
     pub kerb_force: f64,
+    pub spin: f64,
+    pub penetration: f64,
+    pub normal_force: DVec3,
+    pub tangential_force: DVec3,
     pub clearance: f64,
-    hub_error: f64,
+    pub hub_error: f64,
 }
 
 pub struct CornerRun {
@@ -93,11 +164,11 @@ pub struct CornerRun {
     pub wheel: WheelCorner,
     pub chassis: Entity,
     pub tick: u32,
-    pub step: bool,
+    pub road: CornerRoad,
 }
 
 impl CornerRun {
-    pub fn new(rate: u32, tyre: &ElasticTyre, step: bool) -> Result<Self, Box<dyn Error>> {
+    pub fn new(rate: u32, tyre: &ElasticTyre, road: CornerRoad) -> Result<Self, Box<dyn Error>> {
         let mut app = physics_app(rate);
         let world = app.world_mut();
         let body_y = loaded_tyre::unloaded_radius(tyre) as f32 + SUSPENSION.free_length_m
@@ -111,13 +182,13 @@ impl CornerRun {
                 .lock_rotation_y()
                 .lock_rotation_z(),
         );
-        let wheel = attach(world, chassis, tyre, Vec3::NEG_Y * BODY_MOUNT_DROP_M, step)?;
+        let wheel = attach(world, chassis, tyre, Vec3::NEG_Y * BODY_MOUNT_DROP_M, road)?;
         Ok(Self {
             app,
             wheel,
             chassis,
             tick: 0,
-            step,
+            road,
         })
     }
 
@@ -140,15 +211,14 @@ impl CornerRun {
         if let Some(error) = wheel.error() {
             return Err(error.into());
         }
-        let position = wheel.tyre().rim().centre;
+        let motion = wheel.tyre().rim();
+        let position = motion.centre;
         let body_y = f64::from(world.get::<Position>(self.chassis).unwrap().y);
         let hub = world.get::<Position>(self.wheel.hub).unwrap().0.as_dvec3();
-        let road_y = if self.step && position.z + BEAD_RADIUS_M >= STEP_Z_M {
-            STEP_RISE_M
-        } else {
-            0.0
-        };
+        // Clearance uses the highest road point within the rim's forward reach.
+        let road_y = self.road.height(position.z + BEAD_RADIUS_M);
         let road = wheel.last_step();
+        let reaction = wheel.tyre().triangle_reaction();
         if !position.is_finite() || !body_y.is_finite() || !hub.is_finite() {
             return Err("nonfinite corner pose".into());
         }
@@ -157,7 +227,14 @@ impl CornerRun {
             position,
             body_y,
             compression: f64::from(SUSPENSION.free_length_m + BODY_MOUNT_DROP_M) - (body_y - hub.y),
-            support: road.floor_force_n + road.kerb_force.y,
+            support: road.floor_force_n
+                + road.kerb_force.y
+                + reaction.normal_force.y
+                + reaction.tangential_force.y,
+            spin: motion.angular_velocity.x,
+            penetration: reaction.penetration_m,
+            normal_force: reaction.normal_force,
+            tangential_force: reaction.tangential_force,
             kerb_force: road.kerb_normal_force_n,
             clearance: position.y - road_y - BEAD_RADIUS_M,
             hub_error: position.distance(hub),
@@ -235,7 +312,12 @@ fn run_case(
     samples: bool,
 ) -> Result<(f64, f64), Box<dyn Error>> {
     let name = if step { "step" } else { "flat" };
-    let mut run = CornerRun::new(rate, tyre, step)?;
+    let road = if step {
+        CornerRoad::Step
+    } else {
+        CornerRoad::Flat
+    };
+    let mut run = CornerRun::new(rate, tyre, road)?;
     let mut static_sums = [0.0; 2];
     let mut final_sums = [0.0; 4];
     let mut peak = 0.0_f64;

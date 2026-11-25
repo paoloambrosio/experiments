@@ -1,14 +1,17 @@
 use std::f32::consts::FRAC_PI_2;
 use vehicle_physics::reference_car::ReferenceTyre;
 
-use bevy::{ecs::change_detection::NonSendMut, input::InputSystems, prelude::*};
+use bevy::{
+    asset::RenderAssetUsages, ecs::change_detection::NonSendMut, input::InputSystems,
+    mesh::PrimitiveTopology, prelude::*,
+};
 use vehicle_physics::avian_tyre::AvianTyre;
 
 use crate::{
     BEAM_STYLES, OrbitCamera,
     corner_experiment::{
-        BODY_MOUNT_DROP_M, CORNER_TICKS, CornerRun, CornerSample, SETTLE_TICKS, STEP_RISE_M,
-        STEP_Z_M, SUSPENSION,
+        BODY_MOUNT_DROP_M, CORNER_TICKS, CornerRoad, CornerRun, CornerSample, SETTLE_TICKS,
+        STEP_RISE_M, STEP_Z_M, SUSPENSION,
     },
     elastic_experiment::TICKS_PER_SECOND,
     loaded_tyre::{self, BEAD_RADIUS_M, RATES},
@@ -28,7 +31,7 @@ struct Replay {
     experiment: ReferenceTyre,
     simulation: Option<CornerRun>,
     sample: Option<CornerSample>,
-    selected_step: bool,
+    selected_road: CornerRoad,
     running: bool,
     action: Action,
     error: Option<String>,
@@ -46,6 +49,12 @@ struct Body;
 #[derive(Component)]
 struct StepTop;
 
+#[derive(Component)]
+struct AnalyticFloor;
+
+#[derive(Component)]
+struct Ramp;
+
 pub fn run(window: WindowOptions) -> AppExit {
     let mut app = App::new();
     app.add_plugins(DefaultPlugins.set(window.plugin("Vehicle Lab | Loaded Wheel and Suspension")))
@@ -59,7 +68,7 @@ pub fn run(window: WindowOptions) -> AppExit {
         experiment: ReferenceTyre::new(RATES[0]),
         simulation: None,
         sample: None,
-        selected_step: true,
+        selected_road: CornerRoad::Step,
         running: false,
         action: Action::None,
         error: None,
@@ -105,6 +114,7 @@ fn setup(
         MeshMaterial3d(materials.add(Color::srgb(0.15, 0.35, 0.59))),
     ));
     commands.spawn((
+        AnalyticFloor,
         Mesh3d(meshes.add(Cuboid::new(1.4, 0.035, 16.0))),
         MeshMaterial3d(materials.add(Color::srgb(0.12, 0.17, 0.23))),
         Transform::from_xyz(0.0, -0.0175, 5.0),
@@ -114,6 +124,26 @@ fn setup(
         Mesh3d(meshes.add(Cuboid::new(1.4, STEP_RISE_M as f32, 12.0))),
         MeshMaterial3d(materials.add(Color::srgb(0.22, 0.29, 0.37))),
         Transform::from_xyz(0.0, STEP_RISE_M as f32 * 0.5, STEP_Z_M as f32 + 6.0),
+    ));
+    let (vertices, triangles) = CornerRoad::Ramp.geometry();
+    let mut ramp = Mesh::new(
+        PrimitiveTopology::TriangleList,
+        RenderAssetUsages::RENDER_WORLD,
+    );
+    ramp.insert_attribute(
+        Mesh::ATTRIBUTE_POSITION,
+        triangles
+            .iter()
+            .flatten()
+            .map(|&index| vertices[index].as_vec3().to_array())
+            .collect::<Vec<_>>(),
+    );
+    ramp.compute_flat_normals();
+    commands.spawn((
+        Ramp,
+        Mesh3d(meshes.add(ramp)),
+        MeshMaterial3d(materials.add(Color::srgb(0.19, 0.27, 0.35))),
+        Visibility::Hidden,
     ));
     commands
         .spawn((
@@ -133,7 +163,7 @@ fn setup(
             panel.spawn((Text::new("Loaded suspension"), TextFont::from_font_size(23.0)));
             panel.spawn((Readout, Text::default(), TextFont::from_font_size(16.0)));
             panel.spawn((
-                Text::new("1  Flat    2  Step\nEnter   Run / replay\nBackspace   Reset\nLeft drag   Orbit\nScroll   Zoom\nR   Reset view"),
+                Text::new("1  Flat    2  Step    3  Ramp\nEnter   Run / replay\nBackspace   Reset\nLeft drag   Orbit\nScroll   Zoom\nR   Reset view"),
                 TextFont::from_font_size(14.0),
                 TextColor(Color::srgb(0.77, 0.83, 0.91)),
             ));
@@ -142,9 +172,11 @@ fn setup(
 
 fn input(keys: Res<ButtonInput<KeyCode>>, mut replay: NonSendMut<Replay>) {
     if keys.just_pressed(KeyCode::Digit1) {
-        replay.selected_step = false;
+        replay.selected_road = CornerRoad::Flat;
     } else if keys.just_pressed(KeyCode::Digit2) {
-        replay.selected_step = true;
+        replay.selected_road = CornerRoad::Step;
+    } else if keys.just_pressed(KeyCode::Digit3) {
+        replay.selected_road = CornerRoad::Ramp;
     }
     if keys.just_pressed(KeyCode::Backspace) {
         replay.action = Action::Reset;
@@ -167,7 +199,7 @@ fn advance(mut replay: NonSendMut<Replay>) {
         Action::Start if replay.experiment.is_ready() => {
             replay.sample = None;
             replay.error = None;
-            match CornerRun::new(RATES[0], &replay.experiment.tyre, replay.selected_step) {
+            match CornerRun::new(RATES[0], &replay.experiment.tyre, replay.selected_road) {
                 Ok(simulation) => {
                     replay.simulation = Some(simulation);
                     replay.running = true;
@@ -222,19 +254,31 @@ fn draw(
     mut readout: Single<&mut Text, With<Readout>>,
     mut rim: Single<&mut Transform, (With<Rim>, Without<Body>)>,
     mut body: Single<&mut Transform, (With<Body>, Without<Rim>)>,
-    mut step_top: Single<&mut Visibility, With<StepTop>>,
+    mut road_meshes: Query<
+        (&mut Visibility, Has<StepTop>, Has<Ramp>),
+        Or<(With<StepTop>, With<AnalyticFloor>, With<Ramp>)>,
+    >,
     gizmo: Single<&Gizmo>,
     mut assets: ResMut<Assets<GizmoAsset>>,
 ) {
     let mut lines = assets.get_mut(&gizmo.handle).unwrap();
     lines.clear();
     let run = replay.simulation.as_ref();
-    let step = run.map_or(replay.selected_step, |run| run.step);
-    **step_top = if step {
-        Visibility::Visible
-    } else {
-        Visibility::Hidden
-    };
+    let road = run.map_or(replay.selected_road, |run| run.road);
+    for (mut visibility, is_step, is_ramp) in &mut road_meshes {
+        let visible = if is_step {
+            road == CornerRoad::Step
+        } else if is_ramp {
+            road == CornerRoad::Ramp
+        } else {
+            road != CornerRoad::Ramp
+        };
+        *visibility = if visible {
+            Visibility::Visible
+        } else {
+            Visibility::Hidden
+        };
+    }
     let tyre = &replay.experiment.tyre;
     let (topology, positions, offset) = if let Some(run) = run {
         let wheel = run
@@ -283,19 +327,22 @@ fn draw(
         };
         lines.line(point(segment), point(segment + 1), spring_colour);
     }
-    for index in -4..=22 {
-        let z = index as f32 * 0.5;
-        let y = if step && z >= STEP_Z_M as f32 {
-            STEP_RISE_M as f32
-        } else {
-            0.0
-        };
-        for x in [-0.52, 0.52] {
-            lines.line(
-                Vec3::new(x, y + 0.001, z),
-                Vec3::new(x, y + 0.001, z + 0.20),
-                Color::srgb(0.53, 0.62, 0.72),
-            );
+    let road_line = Color::srgb(0.53, 0.62, 0.72);
+    if road == CornerRoad::Ramp {
+        let (vertices, triangles) = road.geometry();
+        for [a, b, c] in triangles {
+            let [a, b, c] = [a, b, c].map(|index| vertices[index].as_vec3() + Vec3::Y * 0.001);
+            lines.line(a, b, road_line);
+            lines.line(b, c, road_line);
+            lines.line(c, a, road_line);
+        }
+    } else {
+        for index in -4..=22 {
+            let z = index as f32 * 0.5;
+            let y = road.height(f64::from(z)) as f32 + 0.001;
+            for x in [-0.52, 0.52] {
+                lines.line(Vec3::new(x, y, z), Vec3::new(x, y, z + 0.20), road_line);
+            }
         }
     }
     camera.focus.z = rim.translation.z;
@@ -314,12 +361,11 @@ fn draw(
     } else {
         "Inflating to 150 kPa gauge"
     };
-    let case = |step| if step { "Rounded step" } else { "Flat road" };
-    let mut text = format!("{phase}\nSelected   {}", case(replay.selected_step));
+    let mut text = format!("{phase}\nSelected   {}", replay.selected_road.name());
     if let Some(sample) = replay.sample {
         text.push_str(&format!(
             "\n{}   {:.2} s\nAxle height   {:.1} mm\nBody height   {:.1} mm\nSpring compression   {:.1} mm\nRoad support   {:.0} N",
-            case(step), sample.time, sample.position.y * 1000.0, sample.body_y * 1000.0,
+            road.name(), sample.time, sample.position.y * 1000.0, sample.body_y * 1000.0,
             sample.compression * 1000.0, sample.support,
         ));
     }

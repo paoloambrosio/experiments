@@ -15,11 +15,10 @@ Each entry documents a development step in the `vehicle_physics` core crate. Sup
 - [009 — Loaded tyre grip](009-loaded-tyre-grip/README.md) measures longitudinal, lateral, and combined slip at three loads and two speeds.
 - [010 — Scripted whole-car handling](010-scripted-whole-car-handling/README.md) measures launch, turns, stopping distances, load transfer, and wheel lock with four live deformable tyres.
 - [011 — Reference car assembly](011-reference-car-assembly/README.md) extracts the sealed reference tyre and four-corner chassis assembly into the core crate and checks them against the loaded-wheel and whole-car baselines.
+- [012 — Tyre contact on driving surfaces](012-tyre-contact-on-driving-surfaces/README.md) adds static triangle roads and measures a loaded wheel crossing a coplanar seam and climbing a ramp.
 
 ## Roadmap
 
-- **012 · Tyre contact on imported surfaces** tests loaded tread contact against static terrain triangles.
 - **013 · Data-driven rigid vehicle assembly** makes chassis and wheel parameters configurable while preserving the reference car baseline.
 
 These core milestones support the [imported terrain and vehicle roadmap](../drive-roadmap.md).
-

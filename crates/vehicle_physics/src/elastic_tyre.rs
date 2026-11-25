@@ -115,7 +115,7 @@ impl fmt::Display for ElasticTyreError {
                 "tread multipliers must be at least one and effective coefficients must be finite and nonnegative",
             ),
             Self::InvalidRimMotion => f.write_str("rim motion must be finite with a unit rotation"),
-            Self::InvalidFloor => f.write_str("floor settings must be finite, with nonnegative coefficients, a positive friction transition speed, and horizontal surface velocity"),
+            Self::InvalidFloor => f.write_str("road contact settings must be finite, with nonnegative coefficients, a positive friction transition speed, and horizontal surface velocity"),
             Self::InvalidKerb => f.write_str("kerb dimensions must be finite, with a positive edge radius smaller than the rise"),
             Self::InvalidPuncture => f.write_str("effective opening area must be nonnegative and finite, with opening fraction and discharge coefficient in (0, 1]"),
             Self::PunctureRequiresDamage => f.write_str("puncture requires axial beam damage to be enabled"),

@@ -11,6 +11,7 @@ pub mod mounted_tyre;
 pub mod pressure;
 pub mod puncture;
 pub mod tread_reinforcement;
+pub mod triangle_road;
 pub mod tyre;
 
 pub mod inflation;

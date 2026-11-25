@@ -171,17 +171,27 @@ The default case is straight rolling at nominal load and 2 m/s. The readout show
 cargo run -p vehicle_lab -- --corner-lab
 ```
 
-The rig prepares and seals the light-car tyre at **150 kPa initial gauge**. The **230 kg** sled and **20 kg** unsprung assembly represent one corner of an evenly loaded 1,000 kg car. Both replays spend four seconds settling under gravity, then ramp to 2 m/s. The step case crosses a 20 mm rise with an 8 mm rounded edge. The panel shows axle height and body centre height above the original floor, spring compression from its free length, and the vertical road reaction.
+The rig prepares and seals the light-car tyre at **150 kPa initial gauge**. The **230 kg** sled and **20 kg** unsprung assembly represent one corner of an evenly loaded 1,000 kg car. Each replay spends four seconds settling under gravity, then accelerates to 2 m/s. The step case crosses a 20 mm rise with an 8 mm rounded edge. The triangle course crosses a coplanar seam at Z = 2 m, climbs 100 mm over one metre, and continues on a level platform. The panel shows axle height and body centre height above the original floor, spring compression from its free length, and the vertical road reaction.
 
 | Control | Action |
 | --- | --- |
 | **1** | Select the flat-road control |
 | **2** | Select the rounded step |
+| **3** | Select the triangle ramp |
 | **Enter** | Start a fresh replay of the selected case once inflation finishes |
 | **Backspace** | Reset the replay or restart inflation |
 | Left mouse button + drag | Orbit around the corner |
 | Scroll | Zoom in or out |
 | **R** | Reset the camera orientation and zoom |
+
+Run the same tow against analytic flat, triangulated flat, and triangulated ramp surfaces without opening a window.
+
+```sh
+cargo run -p vehicle_lab -- --surface-report
+cargo run -p vehicle_lab -- --surface-report --samples
+```
+
+The report checks settled support, the coplanar seam, ramp traversal, and solver-rate agreement. With `--samples`, standard output contains 60 Hz CSV data from all three cases at both solver rates. The summary goes to standard error.
 
 ### Kerb impact and damage
 
@@ -410,6 +420,21 @@ for (corner, steer_rad) in [(front_left, left), (front_right, right)] {
 ```
 
 The Ackermann helper takes wheelbase and track in metres, plus an equivalent steer in radians. It gives the front wheel angles in +X, −X order. Use zero steer at the rear and positive drive torque at the desired driven wheels. All three fields default to zero.
+
+### Use a static triangle road
+
+Build a `TriangleRoad` from zero-based triangle indices and world-space vertices in metres, with +Y up. Pass it to `MountedTyre::set_triangle_road` or `AvianTyre::set_triangle_road`. Give each tyre a clone of the same `Arc` to share the spatial index.
+
+```rust
+use std::sync::Arc;
+use vehicle_physics::triangle_road::TriangleRoad;
+
+// vertices and triangles contain the world-space road geometry.
+let road = Arc::new(TriangleRoad::new(&vertices, &triangles, 0.05)?);
+mounted.set_triangle_road(Arc::clone(&road), floor.contact_parameters());
+```
+
+The third constructor argument is the maximum accepted vertical penetration in metres. Choose it above the expected tread penetration and below the gap between stacked road levels. Both face windings work. Tread support comes from the top of finite road faces. Use `triangle_reaction()` for the last successful substep’s normal and tangential force vectors and peak normal penetration. Use `active_contacts()` for the tread node indices that would receive positive support at the current pose. Call `set_floor` to return to the analytic surface.
 
 ### Enable grip on a flat floor
 

@@ -1,5 +1,7 @@
 //! Couple a mounted tyre to an Avian dynamic body on the solver's substep clock.
 
+use std::sync::Arc;
+
 use avian3d::{
     dynamics::{
         integrator::IntegrationSystems,
@@ -15,7 +17,8 @@ use bevy::{math::DVec3, prelude::*};
 
 use crate::{
     elastic_tyre::ElasticTyreError,
-    mounted_tyre::{FlatFloor, MountedStep, MountedTyre, RimMotion},
+    mounted_tyre::{ContactParameters, FlatFloor, MountedStep, MountedTyre, RimMotion},
+    triangle_road::TriangleRoad,
 };
 
 /// Insert with [Self::rim_bundle] on the same entity. The rim centre is the centre of mass.
@@ -28,7 +31,7 @@ pub struct AvianTyre {
 
 impl AvianTyre {
     /// An awake, collider-free dynamic rim with mass and inertia for the attached beads.
-    /// Use a floor on the mounted tyre to resolve tread contact.
+    /// Select a road on the mounted tyre to resolve tread contact.
     pub fn rim_bundle(
         tyre: MountedTyre,
         bare_rim_mass_kg: f64,
@@ -70,6 +73,11 @@ impl AvianTyre {
     /// Set or remove the floor used by subsequent substeps.
     pub fn set_floor(&mut self, floor: Option<FlatFloor>) {
         self.tyre.set_floor(floor);
+    }
+
+    /// Select a stationary triangle road for subsequent substeps.
+    pub fn set_triangle_road(&mut self, road: Arc<TriangleRoad>, contact: ContactParameters) {
+        self.tyre.set_triangle_road(road, contact);
     }
 
     pub fn last_step(&self) -> MountedStep {

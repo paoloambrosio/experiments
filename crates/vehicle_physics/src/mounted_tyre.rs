@@ -1,5 +1,7 @@
 //! World-space tyre dynamics with a prescribed rigid rim and optional road contact.
 
+use std::sync::Arc;
+
 use bevy_math::{DQuat, DVec3};
 
 use crate::{
@@ -8,6 +10,7 @@ use crate::{
     kerb::Kerb,
     pressure::{ChamberReading, triangulate},
     puncture::{PunctureReading, TornPanel},
+    triangle_road::TriangleRoad,
     tyre::TyreTopology,
 };
 
@@ -45,24 +48,17 @@ impl RimMotion {
     }
 }
 
-/// +Y-facing horizontal floor. Stiffness and damping are per tread node.
+/// Per-node road stiffness in N/m, damping in N·s/m, and optional friction.
 #[derive(Debug, Clone, Copy)]
-pub struct FlatFloor {
-    height_m: f64,
+pub struct ContactParameters {
     stiffness_n_per_m: f64,
     damping_ns_per_m: f64,
     friction: Option<(f64, f64)>,
-    surface_velocity: DVec3,
 }
 
-impl FlatFloor {
-    pub fn new(
-        height_m: f64,
-        stiffness_n_per_m: f64,
-        damping_ns_per_m: f64,
-    ) -> Result<Self, ElasticTyreError> {
-        if !height_m.is_finite()
-            || !stiffness_n_per_m.is_finite()
+impl ContactParameters {
+    pub fn new(stiffness_n_per_m: f64, damping_ns_per_m: f64) -> Result<Self, ElasticTyreError> {
+        if !stiffness_n_per_m.is_finite()
             || stiffness_n_per_m < 0.0
             || !damping_ns_per_m.is_finite()
             || damping_ns_per_m < 0.0
@@ -70,11 +66,9 @@ impl FlatFloor {
             return Err(ElasticTyreError::InvalidFloor);
         }
         Ok(Self {
-            height_m,
             stiffness_n_per_m,
             damping_ns_per_m,
             friction: None,
-            surface_velocity: DVec3::ZERO,
         })
     }
 
@@ -96,44 +90,12 @@ impl FlatFloor {
         Ok(self)
     }
 
-    /// Set the world-space velocity of the surface in m/s. The Y component must be zero.
-    pub fn with_surface_velocity(mut self, velocity: DVec3) -> Result<Self, ElasticTyreError> {
-        if !velocity.is_finite() || velocity.y != 0.0 {
-            return Err(ElasticTyreError::InvalidFloor);
-        }
-        self.surface_velocity = velocity;
-        Ok(self)
-    }
-
-    pub fn height_m(self) -> f64 {
-        self.height_m
-    }
-
-    /// Upward force magnitude in newtons. A rising node can lose support while still below the plane.
-    pub fn normal_force_n(self, position: DVec3, velocity: DVec3) -> f64 {
-        let depth = self.height_m - position.y;
-        self.normal_force_at_depth(depth, velocity.y)
-    }
-
     fn normal_force_at_depth(self, depth: f64, normal_velocity: f64) -> f64 {
         if depth > 0.0 {
             (self.stiffness_n_per_m * depth - self.damping_ns_per_m * normal_velocity).max(0.0)
         } else {
             0.0
         }
-    }
-
-    fn tangential_force(
-        self,
-        normal_n: f64,
-        predicted_velocity: DVec3,
-        dt_over_mass: f64,
-    ) -> DVec3 {
-        self.friction_force(
-            normal_n,
-            (predicted_velocity - self.surface_velocity).with_y(0.0),
-            dt_over_mass,
-        )
     }
 
     fn friction_force(self, normal_n: f64, slip: DVec3, dt_over_mass: f64) -> DVec3 {
@@ -166,6 +128,81 @@ impl FlatFloor {
     }
 }
 
+/// +Y-facing horizontal floor. Stiffness and damping are per tread node.
+#[derive(Debug, Clone, Copy)]
+pub struct FlatFloor {
+    height_m: f64,
+    contact: ContactParameters,
+    surface_velocity: DVec3,
+}
+
+impl FlatFloor {
+    pub fn new(
+        height_m: f64,
+        stiffness_n_per_m: f64,
+        damping_ns_per_m: f64,
+    ) -> Result<Self, ElasticTyreError> {
+        if !height_m.is_finite() {
+            return Err(ElasticTyreError::InvalidFloor);
+        }
+        Ok(Self {
+            height_m,
+            contact: ContactParameters::new(stiffness_n_per_m, damping_ns_per_m)?,
+            surface_velocity: DVec3::ZERO,
+        })
+    }
+
+    /// Enable regularized Coulomb friction with a dimensionless coefficient and a
+    /// positive transition speed in m/s. A zero coefficient gives normal-only contact.
+    pub fn with_friction(
+        mut self,
+        coefficient: f64,
+        transition_speed_mps: f64,
+    ) -> Result<Self, ElasticTyreError> {
+        self.contact = self
+            .contact
+            .with_friction(coefficient, transition_speed_mps)?;
+        Ok(self)
+    }
+
+    /// Extract the same stationary contact parameters for use on another surface.
+    pub fn contact_parameters(self) -> ContactParameters {
+        self.contact
+    }
+
+    /// Set the world-space velocity of the surface in m/s. The Y component must be zero.
+    pub fn with_surface_velocity(mut self, velocity: DVec3) -> Result<Self, ElasticTyreError> {
+        if !velocity.is_finite() || velocity.y != 0.0 {
+            return Err(ElasticTyreError::InvalidFloor);
+        }
+        self.surface_velocity = velocity;
+        Ok(self)
+    }
+
+    pub fn height_m(self) -> f64 {
+        self.height_m
+    }
+
+    /// Upward force magnitude in newtons. A rising node can lose support while still below the plane.
+    pub fn normal_force_n(self, position: DVec3, velocity: DVec3) -> f64 {
+        let depth = self.height_m - position.y;
+        self.contact.normal_force_at_depth(depth, velocity.y)
+    }
+
+    fn tangential_force(
+        self,
+        normal_n: f64,
+        predicted_velocity: DVec3,
+        dt_over_mass: f64,
+    ) -> DVec3 {
+        self.contact.friction_force(
+            normal_n,
+            (predicted_velocity - self.surface_velocity).with_y(0.0),
+            dt_over_mass,
+        )
+    }
+}
+
 #[derive(Debug, Clone, Copy, Default)]
 pub struct MountedStep {
     /// Force in world newtons transferred from the tyre to the rim.
@@ -192,6 +229,17 @@ pub struct Footprint {
     pub width_m: f64,
 }
 
+/// Triangle road reaction at the start of the tyre's last successful substep.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct TriangleReaction {
+    /// Sum of normal forces in world newtons.
+    pub normal_force: DVec3,
+    /// Sum of friction forces in world newtons.
+    pub tangential_force: DVec3,
+    /// Maximum penetration below a selected face, measured along its normal in metres.
+    pub penetration_m: f64,
+}
+
 /// Reuses the elastic carcass in world space. The rigid rim includes both bead rings' mass.
 #[derive(Debug, Clone)]
 pub struct MountedTyre {
@@ -199,6 +247,8 @@ pub struct MountedTyre {
     rim: RimMotion,
     floor: Option<FlatFloor>,
     kerb: Option<Kerb>,
+    triangle_road: Option<(Arc<TriangleRoad>, ContactParameters)>,
+    triangle_reaction: TriangleReaction,
     tread_nodes: std::ops::Range<usize>,
     tread_triangles: Vec<[usize; 3]>,
     external_forces: Vec<DVec3>,
@@ -235,6 +285,8 @@ impl MountedTyre {
             rim,
             floor,
             kerb: None,
+            triangle_road: None,
+            triangle_reaction: TriangleReaction::default(),
             tread_nodes,
             tread_triangles,
             external_forces: vec![DVec3::ZERO; node_count],
@@ -317,9 +369,22 @@ impl MountedTyre {
         Ok(self.tyre)
     }
 
-    /// Set or remove the floor used by subsequent steps.
+    /// Select the analytic floor and optional kerb, or disable road contact with None.
     pub fn set_floor(&mut self, floor: Option<FlatFloor>) {
         self.floor = floor;
+        self.triangle_road = None;
+        self.triangle_reaction = TriangleReaction::default();
+    }
+
+    /// Select a stationary triangle road for subsequent steps, replacing the analytic floor.
+    pub fn set_triangle_road(&mut self, road: Arc<TriangleRoad>, contact: ContactParameters) {
+        self.floor = None;
+        self.triangle_road = Some((road, contact));
+        self.triangle_reaction = TriangleReaction::default();
+    }
+
+    pub fn triangle_reaction(&self) -> TriangleReaction {
+        self.triangle_reaction
     }
 
     /// Total rim mass (kg) and local principal inertia (kg·m²) including both bead rings.
@@ -368,7 +433,7 @@ impl MountedTyre {
         Ok(())
     }
 
-    /// Advance the free nodes with gravity (world m/s²) and floor contact.
+    /// Advance the free nodes with gravity (world m/s²) and road contact.
     /// The caller applies the returned wrench and gravity to the rim, advances it on
     /// the same clock, then calls [Self::sync_rim] with its new motion.
     pub fn step(
@@ -384,23 +449,52 @@ impl MountedTyre {
         let dt_over_mass = dt_seconds / self.tyre.node_mass;
         let floor = self.floor;
         let kerb = self.kerb;
+        let triangle_road = self.triangle_road.as_ref();
+        let mut triangle_reaction = TriangleReaction::default();
         let tread_nodes = self.tread_nodes.clone();
         let (rim_force, rim_torque) = self.tyre.advance_with_contact(
             dt_seconds,
             &self.external_forces,
             Some(self.rim.centre),
             |positions, velocities, forces| {
+                if let Some((road, contact)) = triangle_road {
+                    for index in tread_nodes {
+                        let Some(hit) = road.contact(positions[index]) else {
+                            continue;
+                        };
+                        let depth = hit.depth();
+                        let axis = hit.normal;
+                        let normal =
+                            contact.normal_force_at_depth(depth, velocities[index].dot(axis));
+                        let predicted = velocities[index] + forces[index] * dt_over_mass;
+                        let slip = predicted - axis * predicted.dot(axis);
+                        let normal_force = axis * normal;
+                        let tangent = contact.friction_force(normal, slip, dt_over_mass);
+                        forces[index] += normal_force + tangent;
+                        triangle_reaction.normal_force += normal_force;
+                        triangle_reaction.tangential_force += tangent;
+                        triangle_reaction.penetration_m =
+                            triangle_reaction.penetration_m.max(depth);
+                    }
+                    if !triangle_reaction.normal_force.is_finite()
+                        || !triangle_reaction.tangential_force.is_finite()
+                    {
+                        return Err(ElasticTyreError::NonFiniteStep);
+                    }
+                    return Ok(());
+                }
                 let Some(floor) = floor else { return Ok(()) };
                 for index in tread_nodes {
                     let predicted_velocity = velocities[index] + forces[index] * dt_over_mass;
                     if let Some((depth, axis)) =
                         kerb.and_then(|kerb| kerb.contact(floor.height_m(), positions[index]))
                     {
-                        let normal =
-                            floor.normal_force_at_depth(depth, velocities[index].dot(axis));
+                        let normal = floor
+                            .contact
+                            .normal_force_at_depth(depth, velocities[index].dot(axis));
                         let slip = predicted_velocity - axis * predicted_velocity.dot(axis);
-                        let reaction =
-                            axis * normal + floor.friction_force(normal, slip, dt_over_mass);
+                        let reaction = axis * normal
+                            + floor.contact.friction_force(normal, slip, dt_over_mass);
                         forces[index] += reaction;
                         kerb_normal_force_n += normal;
                         kerb_force += reaction;
@@ -423,6 +517,7 @@ impl MountedTyre {
                 Ok(())
             },
         )?;
+        self.triangle_reaction = triangle_reaction;
         Ok(MountedStep {
             rim_force,
             rim_torque,
@@ -435,14 +530,22 @@ impl MountedTyre {
 
     pub fn active_contacts(&self) -> impl Iterator<Item = usize> + '_ {
         self.tread_nodes.clone().filter(|&index| {
+            let position = self.positions()[index];
+            let velocity = self.velocities()[index];
+            if let Some((road, contact)) = &self.triangle_road {
+                return road.contact(position).is_some_and(|hit| {
+                    contact.normal_force_at_depth(hit.depth(), velocity.dot(hit.normal)) > 0.0
+                });
+            }
             self.floor.is_some_and(|floor| {
-                let position = self.positions()[index];
-                let velocity = self.velocities()[index];
                 if let Some((depth, axis)) = self
                     .kerb
                     .and_then(|kerb| kerb.contact(floor.height_m(), position))
                 {
-                    floor.normal_force_at_depth(depth, velocity.dot(axis)) > 0.0
+                    floor
+                        .contact
+                        .normal_force_at_depth(depth, velocity.dot(axis))
+                        > 0.0
                 } else {
                     floor.normal_force_n(position, velocity) > 0.0
                 }
@@ -655,5 +758,95 @@ mod tests {
         let step = mounted.step(1.0 / 3840.0, DVec3::ZERO).unwrap();
         assert_eq!(step.floor_force_n, 0.0);
         assert_eq!(step.floor_tangential_force, DVec3::ZERO);
+    }
+
+    #[test]
+    fn triangle_tread_contact_reuses_the_floor_law_once_at_a_seam() {
+        let floor = FlatFloor::new(0.0, 80_000.0, 90.0)
+            .unwrap()
+            .with_friction(0.8, 0.1)
+            .unwrap();
+        let rim = RimMotion {
+            centre: DVec3::Y * 0.325,
+            linear_velocity: DVec3::Z,
+            ..Default::default()
+        };
+        let vertices = [
+            DVec3::new(-1.0, 0.0, -1.0),
+            DVec3::new(1.0, 0.0, -1.0),
+            DVec3::new(1.0, 0.0, 1.0),
+            DVec3::new(-1.0, 0.0, 1.0),
+        ];
+        let road = Arc::new(TriangleRoad::new(&vertices, &[[0, 1, 2], [0, 3, 2]], 0.05).unwrap());
+        let mut analytic = MountedTyre::new(rest_tyre(), rim, Some(floor)).unwrap();
+        let mut mesh = analytic.clone();
+        mesh.set_triangle_road(road, floor.contact_parameters());
+        let active: Vec<_> = analytic.active_contacts().collect();
+        assert!(!active.is_empty());
+        assert_eq!(mesh.active_contacts().collect::<Vec<_>>(), active);
+        let expected_penetration = analytic.floor_penetration_m();
+        let dt = 1.0 / 3_840.0;
+        let expected = analytic.step(dt, DVec3::ZERO).unwrap();
+        let step = mesh.step(dt, DVec3::ZERO).unwrap();
+        let actual = mesh.triangle_reaction();
+        assert_eq!(step.floor_force_n, 0.0);
+        assert!(
+            actual
+                .normal_force
+                .abs_diff_eq(DVec3::Y * expected.floor_force_n, 1e-9)
+        );
+        assert!(
+            actual
+                .tangential_force
+                .abs_diff_eq(expected.floor_tangential_force, 1e-9)
+        );
+        assert!((actual.penetration_m - expected_penetration).abs() < 1e-12);
+        mesh.set_floor(Some(floor));
+        assert_eq!(mesh.triangle_reaction().normal_force, DVec3::ZERO);
+        assert!(mesh.step(dt, DVec3::ZERO).unwrap().floor_force_n > 0.0);
+    }
+
+    #[test]
+    fn triangle_contact_follows_the_ramp_normal_and_releases() {
+        let vertices = [
+            DVec3::new(-1.0, -0.1, -1.0),
+            DVec3::new(1.0, -0.1, -1.0),
+            DVec3::new(1.0, 0.1, 1.0),
+            DVec3::new(-1.0, 0.1, 1.0),
+        ];
+        let road = Arc::new(TriangleRoad::new(&vertices, &[[0, 1, 2], [0, 2, 3]], 0.05).unwrap());
+        let contact = ContactParameters::new(80_000.0, 90.0)
+            .unwrap()
+            .with_friction(0.8, 0.1)
+            .unwrap();
+        let uphill = DVec3::new(0.0, 0.1, 1.0).normalize();
+        let normal = DVec3::new(0.0, 1.0, -0.1).normalize();
+        let rim = RimMotion {
+            centre: DVec3::Y * 0.325,
+            linear_velocity: uphill,
+            ..Default::default()
+        };
+        let mut tyre = MountedTyre::new(rest_tyre(), rim, None).unwrap();
+        tyre.set_triangle_road(road.clone(), contact);
+        tyre.step(1.0 / 3_840.0, DVec3::ZERO).unwrap();
+        let reaction = tyre.triangle_reaction();
+        assert!(reaction.normal_force.dot(normal) > 0.0);
+        assert!(reaction.normal_force.cross(normal).length() < 1e-9);
+        assert!(reaction.tangential_force.dot(uphill) < 0.0);
+        assert!(reaction.tangential_force.dot(normal).abs() < 1e-9);
+        assert!(reaction.tangential_force.length() <= 0.8 * reaction.normal_force.length());
+
+        let rim = RimMotion {
+            linear_velocity: normal * 20.0,
+            ..rim
+        };
+        let mut tyre = MountedTyre::new(rest_tyre(), rim, None).unwrap();
+        tyre.set_triangle_road(road, contact);
+        assert_eq!(tyre.active_contacts().count(), 0);
+        tyre.step(1.0 / 3_840.0, DVec3::ZERO).unwrap();
+        let reaction = tyre.triangle_reaction();
+        assert!(reaction.penetration_m > 0.0);
+        assert_eq!(reaction.normal_force, DVec3::ZERO);
+        assert_eq!(reaction.tangential_force, DVec3::ZERO);
     }
 }

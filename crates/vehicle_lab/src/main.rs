@@ -22,6 +22,7 @@ mod radial_report;
 mod rolling_experiment;
 mod rolling_lab;
 mod rolling_report;
+mod surface_report;
 
 use std::{collections::BTreeMap, f32::consts::TAU};
 
@@ -164,6 +165,8 @@ fn main() -> AppExit {
             handling_report::report(std::env::args_os().any(|argument| argument == "--samples"))
         } else if argument == "--grip-report" {
             grip_report::report(std::env::args_os().any(|argument| argument == "--samples"))
+        } else if argument == "--surface-report" {
+            surface_report::report(std::env::args_os().any(|argument| argument == "--samples"))
         } else if argument == "--corner-report" {
             corner_experiment::report(std::env::args_os().any(|argument| argument == "--samples"))
         } else if argument == "--elastic-report" {
