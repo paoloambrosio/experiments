@@ -14,6 +14,26 @@ A ZIP with a single matching definition selects it automatically. In a terminal,
 
 Use `--config <path>` to select a different TOML file. Relative ZIP paths are interpreted from the directory containing that file. On success the command prints each ZIP path and the selected definition. [Drive roadmap](../drive-roadmap.md)
 
+## View an imported terrain
+
+Run from the workspace root.
+
+```sh
+cargo run -p vehicle_drive -- --view-terrain
+```
+
+The viewer uses the terrain ZIP and optional `terrain_entry` from the local config. It also accepts `--config <path>`. You can open terrain with just `[assets].terrain` configured.
+
+| Control | Action |
+| --- | --- |
+| **WASD** | Fly forward, left, backward, or right |
+| **Q / E** | Descend or rise |
+| **Right mouse button + drag** | Look around |
+| **Home** | Restore the initial overview |
+| **C** | Toggle collision triangle edges |
+
+The startup report lists the heightfield size, placements, collision-bearing objects, and skipped features. In N-Labs Testing Facility 0.5, the floor uses its DDS base texture. The report identifies the skipped secondary shading layer. [Drive roadmap](../drive-roadmap.md)
+
 ## Use imported asset geometry
 
 Use the `vehicle_assets` crate to represent terrain meshes, height samples, and vehicle and wheel geometry in memory. Call `TerrainAsset::validate()` or `VehicleAsset::validate()` before consuming these values. Validation errors identify the field and any relevant element indices. Positions and dimensions use metres, with +Y up, +Z forward, and +X to vehicle left. [Imported terrain and vehicle roadmap](../drive-roadmap.md)

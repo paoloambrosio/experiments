@@ -1,13 +1,15 @@
 mod config;
+mod view;
 
 use std::{
+    collections::BTreeMap,
     io::{self, BufRead, IsTerminal, Write},
     path::{Path, PathBuf},
     process::ExitCode,
 };
 
-use clap::{Arg, Command, value_parser};
-use vehicle_assets::ror::{AssetKind, discover_entries};
+use clap::{Arg, ArgAction, Command, value_parser};
+use vehicle_assets::ror::{AssetKind, TerrainImport, discover_entries, load_terrain};
 
 use crate::config::Config;
 
@@ -22,26 +24,100 @@ fn main() -> ExitCode {
                 .default_value("config.toml")
                 .help("TOML file with terrain and vehicle archive paths"),
         )
+        .arg(
+            Arg::new("view-terrain")
+                .long("view-terrain")
+                .action(ArgAction::SetTrue)
+                .help("Open the selected terrain in a 3D viewer"),
+        )
         .get_matches();
     let path = args
         .get_one::<PathBuf>("config")
         .expect("config has a default");
 
-    let stdin = io::stdin();
-    let stderr = io::stderr();
-    let mut input = (stdin.is_terminal() && stderr.is_terminal()).then(|| stdin.lock());
-    let mut diagnostics = stderr.lock();
-    match run(
-        path,
-        input.as_mut(),
-        &mut io::stdout().lock(),
-        &mut diagnostics,
-    ) {
-        Ok(()) => ExitCode::SUCCESS,
+    let result = {
+        let stdin = io::stdin();
+        let stderr = io::stderr();
+        let mut input = (stdin.is_terminal() && stderr.is_terminal()).then(|| stdin.lock());
+        let mut diagnostics = stderr.lock();
+        if args.get_flag("view-terrain") {
+            import_for_view(path, input.as_mut(), &mut diagnostics).map(Some)
+        } else {
+            run(
+                path,
+                input.as_mut(),
+                &mut io::stdout().lock(),
+                &mut diagnostics,
+            )
+            .map(|()| None)
+        }
+    };
+    match result {
+        Ok(Some(terrain)) => {
+            print_import_summary(&terrain);
+            if view::run(terrain) {
+                ExitCode::SUCCESS
+            } else {
+                ExitCode::FAILURE
+            }
+        }
+        Ok(None) => ExitCode::SUCCESS,
         Err(error) => {
-            let _ = writeln!(diagnostics, "{error}");
+            eprintln!("{error}");
             ExitCode::FAILURE
         }
+    }
+}
+
+fn import_for_view(
+    path: &Path,
+    input: Option<&mut impl BufRead>,
+    diagnostics: &mut impl Write,
+) -> Result<TerrainImport, String> {
+    let config = Config::read(path)?;
+    let archive = &config.assets.terrain;
+    let entries = discover_entries(archive, AssetKind::Terrain)
+        .map_err(|error| format!("[assets].terrain: {error}"))?;
+    let selected = select_entry(
+        &entries,
+        config.assets.terrain_entry.as_deref(),
+        "terrain",
+        archive,
+        input,
+        diagnostics,
+    )?;
+    load_terrain(archive, selected).map_err(|error| error.to_string())
+}
+
+fn print_import_summary(import: &TerrainImport) {
+    let terrain = &import.terrain;
+    println!("Terrain: {}", terrain.name);
+    if let Some(grid) = &terrain.heightfield {
+        println!(
+            "Heightfield: {} x {} samples",
+            grid.samples_x, grid.samples_z
+        );
+    }
+    let collision = terrain
+        .objects
+        .iter()
+        .filter(|object| object.collision_mesh.is_some())
+        .count();
+    println!(
+        "Objects: {} placements, {collision} with collision meshes",
+        terrain.objects.len()
+    );
+    let _ = io::stdout().flush();
+
+    let mut warnings: BTreeMap<&str, Vec<&str>> = BTreeMap::new();
+    for warning in &import.warnings {
+        warnings
+            .entry(&warning.message)
+            .or_default()
+            .push(&warning.entry);
+    }
+    for (message, entries) in warnings {
+        eprintln!("Warning: {message} ({})", entries.join(", "));
     }
 }
 
@@ -52,20 +128,23 @@ fn run(
     diagnostics: &mut impl Write,
 ) -> Result<(), String> {
     let config = Config::read(path)?;
-    let assets = [
-        (
-            AssetKind::Terrain,
-            "terrain",
-            &config.assets.terrain,
-            config.assets.terrain_entry.as_deref(),
-        ),
-        (
-            AssetKind::Vehicle,
-            "vehicle",
-            &config.assets.vehicle,
-            config.assets.vehicle_entry.as_deref(),
-        ),
-    ];
+    let assets =
+        [
+            (
+                AssetKind::Terrain,
+                "terrain",
+                &config.assets.terrain,
+                config.assets.terrain_entry.as_deref(),
+            ),
+            (
+                AssetKind::Vehicle,
+                "vehicle",
+                config.assets.vehicle.as_ref().ok_or_else(|| {
+                    format!("config {} is missing [assets].vehicle", path.display())
+                })?,
+                config.assets.vehicle_entry.as_deref(),
+            ),
+        ];
     let mut selections = Vec::with_capacity(assets.len());
 
     for (kind, field, archive, requested) in assets {

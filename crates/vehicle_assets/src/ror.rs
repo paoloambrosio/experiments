@@ -1,4 +1,10 @@
-//! Discovery of Rigs of Rods definitions in ZIP archives.
+//! Discovery and import of Rigs of Rods assets in ZIP archives.
+
+mod materials;
+mod ogre;
+mod terrain;
+
+pub use terrain::{ImportWarning, TerrainImport, TerrainImportError, load_terrain};
 
 use std::{
     fmt,

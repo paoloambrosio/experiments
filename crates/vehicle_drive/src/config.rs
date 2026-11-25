@@ -13,7 +13,7 @@ pub(crate) struct Config {
 #[derive(Deserialize)]
 pub(crate) struct Assets {
     pub(crate) terrain: PathBuf,
-    pub(crate) vehicle: PathBuf,
+    pub(crate) vehicle: Option<PathBuf>,
     pub(crate) terrain_entry: Option<String>,
     pub(crate) vehicle_entry: Option<String>,
 }
@@ -30,10 +30,14 @@ impl Config {
         let mut config: Self = toml::from_str(&text)
             .map_err(|error| format!("cannot parse config {}: {error}", path.display()))?;
         let dir = path.parent().unwrap_or_else(|| Path::new("."));
-        for (field, archive) in [
-            ("terrain", &mut config.assets.terrain),
-            ("vehicle", &mut config.assets.vehicle),
-        ] {
+        let archives = std::iter::once(("terrain", &mut config.assets.terrain)).chain(
+            config
+                .assets
+                .vehicle
+                .as_mut()
+                .map(|vehicle| ("vehicle", vehicle)),
+        );
+        for (field, archive) in archives {
             if archive.as_os_str().is_empty() {
                 return Err(format!(
                     "config {}: [assets].{field} must be a ZIP path",

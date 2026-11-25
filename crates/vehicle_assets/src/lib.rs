@@ -4,11 +4,15 @@
 //! +Z forward and +X to vehicle left. Converters resolve source coordinates
 //! and references before handing these types to an application.
 
+mod material;
 pub mod ror;
 mod validation;
 
 use bevy_math::{Quat, Vec2, Vec3};
 
+pub use material::{
+    DiffuseMaterial, DiffuseTexture, MaterialId, MaterialSection, MeshAppearance, TextureId,
+};
 pub use validation::{AssetValidationError, ValidationErrorKind};
 
 /// Index into the owning asset's mesh library.

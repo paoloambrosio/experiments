@@ -117,3 +117,22 @@ fn missing_archive_names_the_config_field_and_path() {
     assert!(error.contains("[assets].terrain"));
     assert!(error.contains("missing.zip"));
 }
+
+#[test]
+fn terrain_view_reaches_import_with_only_terrain_configured() {
+    let dir = fixture();
+    let settings = dir.path().join("settings");
+    fs::write(
+        settings.join("config.toml"),
+        "[assets]\nterrain = 'packs/CM sample.zip'\n",
+    )
+    .unwrap();
+
+    // The ZIP has a discoverable definition but no geometry configuration.
+    // Import must fail before any window opens.
+    let output = drive(&settings, &["--view-terrain"]);
+    assert!(!output.status.success());
+    let error = String::from_utf8(output.stderr).unwrap();
+    assert!(error.contains("map/CM.terrn2"), "{error}");
+    assert!(error.contains("missing GeometryConfig"), "{error}");
+}

@@ -4,7 +4,9 @@ version = "0.1.0"
 edition.workspace = true
 
 [dependencies]
+bevy = { workspace = true, features = ["3d"] }
 clap = "4.6"
+image = { version = "0.25.10", default-features = false }
 serde = { version = "1", features = ["derive"] }
 toml = "1.2"
 vehicle_assets = { path = "../vehicle_assets" }
