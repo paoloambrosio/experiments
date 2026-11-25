@@ -24,5 +24,6 @@ Regular lab builds use compiler optimisations. Add `--no-vsync` to run without t
 
 - `vehicle_physics` advances the tyre with a windowless solver. Its optional Avian integration provides the reference car assembly, suspension, steering, drive torque, and braking.
 - `vehicle_lab` runs whole-car handling replays, the loaded suspension corner, wheel drop, moving-belt rig, kerb strike, puncture comparison, and fixed-bead tread press with visual labs and headless reports.
+- `vehicle_assets` defines shared terrain and vehicle geometry for importers and viewers. [Imported terrain and vehicle roadmap](docs/drive-roadmap.md)
 
 See the [user guide](docs/user/README.md) for setup, controls, and library usage. The [devlog](docs/devlog/README.md) records the development steps and the vehicle physics roadmap.

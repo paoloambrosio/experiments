@@ -18,5 +18,8 @@ Each entry documents a development step in the `vehicle_physics` core crate. Sup
 
 ## Roadmap
 
-The next core milestone is open.
+- **012 · Tyre contact on imported surfaces** tests loaded tread contact against static terrain triangles.
+- **013 · Data-driven rigid vehicle assembly** makes chassis and wheel parameters configurable while preserving the reference car baseline.
+
+These core milestones support the [imported terrain and vehicle roadmap](../drive-roadmap.md).
 

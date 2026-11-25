@@ -1,5 +1,5 @@
 [workspace]
-members = ["crates/vehicle_physics", "crates/vehicle_lab"]
+members = ["crates/vehicle_physics", "crates/vehicle_lab", "crates/vehicle_assets"]
 resolver = "3"
 
 [workspace.package]
