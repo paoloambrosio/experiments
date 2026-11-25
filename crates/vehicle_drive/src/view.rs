@@ -3,19 +3,39 @@ use std::collections::{HashMap, HashSet};
 use bevy::{
     asset::RenderAssetUsages,
     color::palettes::css::AQUAMARINE,
+    ecs::system::SystemParam,
     gizmos::config::{DefaultGizmoConfigGroup, GizmoConfigStore},
     image::{ImageAddressMode, ImageSampler, ImageSamplerDescriptor},
-    input::mouse::AccumulatedMouseMotion,
+    input::mouse::{AccumulatedMouseMotion, AccumulatedMouseScroll, MouseScrollUnit},
     mesh::{Indices, PrimitiveTopology},
     prelude::*,
     render::render_resource::{Extent3d, Face, TextureDimension, TextureFormat},
 };
 use vehicle_assets::{
-    DiffuseTexture, Heightfield, MeshId, TerrainAsset, TriangleMesh, ror::TerrainImport,
+    DiffuseTexture, MeshAppearance, MeshId, MeshInstance, TerrainAsset, TriangleMesh,
+    WheelGeometry,
+    ror::{TerrainImport, VehicleImport},
 };
 
+use crate::placement::triangulate;
+
 #[derive(Resource)]
-struct Source(TerrainImport);
+pub(crate) struct Scene {
+    pub terrain: TerrainImport,
+    pub vehicle: Option<ParkedVehicle>,
+}
+
+pub(crate) struct ParkedVehicle {
+    pub import: VehicleImport,
+    pub translation: Vec3,
+}
+
+#[derive(SystemParam)]
+struct MeshAssets<'w> {
+    meshes: ResMut<'w, Assets<Mesh>>,
+    materials: ResMut<'w, Assets<StandardMaterial>>,
+    images: ResMut<'w, Assets<Image>>,
+}
 
 #[derive(Resource)]
 struct CollisionOverlay {
@@ -29,37 +49,119 @@ struct FlyCamera {
     speed: f32,
 }
 
-pub fn run(terrain: TerrainImport) -> bool {
-    let title = terrain.terrain.name.clone();
-    App::new()
-        .insert_resource(Source(terrain))
+pub(crate) fn run(scene: Scene) -> bool {
+    let title = if let Some(vehicle) = &scene.vehicle {
+        format!(
+            "{} | {}",
+            vehicle.import.vehicle.name, scene.terrain.terrain.name
+        )
+    } else {
+        format!("{} | Terrain Viewer", scene.terrain.terrain.name)
+    };
+    let inspect = scene.vehicle.is_some();
+    let mut app = App::new();
+    app.insert_resource(scene)
         .insert_resource(ClearColor(Color::srgb(0.37, 0.49, 0.60)))
         .add_plugins(DefaultPlugins.set(WindowPlugin {
-            primary_window: Some(Window {
-                title: format!("{title} | Terrain Viewer"),
-                ..default()
-            }),
+            primary_window: Some(Window { title, ..default() }),
             ..default()
         }))
         .add_systems(Startup, setup)
-        .add_systems(Update, (fly_camera, collision_overlay))
-        .run()
-        .is_success()
+        .add_systems(Update, collision_overlay);
+    if inspect {
+        app.add_systems(Update, (orbit_camera, structure_overlay));
+    } else {
+        app.add_systems(Update, fly_camera);
+    }
+    app.run().is_success()
 }
 
 fn setup(
     mut commands: Commands,
-    source: Res<Source>,
-    mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<StandardMaterial>>,
-    mut images: ResMut<Assets<Image>>,
+    source: Res<Scene>,
+    mut assets: MeshAssets,
     mut gizmo_config: ResMut<GizmoConfigStore>,
 ) {
     let TerrainImport {
         terrain,
         appearance,
         ..
-    } = &source.0;
+    } = &source.terrain;
+    spawn_meshes(
+        &mut commands,
+        &mut assets,
+        appearance,
+        &terrain.meshes,
+        &terrain.objects,
+        None,
+    );
+    if let Some(grid) = &terrain.heightfield {
+        let terrain_mesh = triangulate(grid);
+        commands.spawn((
+            Name::new("Heightfield"),
+            Mesh3d(
+                assets
+                    .meshes
+                    .add(to_bevy_mesh(&terrain_mesh, &terrain_mesh.triangles, false)),
+            ),
+            MeshMaterial3d(assets.materials.add(Color::srgb(0.35, 0.39, 0.34))),
+        ));
+    }
+
+    if let Some(parked) = &source.vehicle {
+        setup_vehicle(&mut commands, parked, &mut assets);
+    } else {
+        let (min, max) = scene_bounds(terrain);
+        let centre = (max + min) * 0.5;
+        let extent = (max - min).max_element().max(10.0);
+        let overview = Transform::from_translation(centre + extent * Vec3::new(0.86, 0.93, 0.95))
+            .looking_at(centre + extent * Vec3::new(0.03, 0.0, 0.03), Vec3::Y);
+        commands.spawn((
+            Camera3d::default(),
+            overview,
+            FlyCamera {
+                overview,
+                speed: extent / 8.0,
+            },
+        ));
+    }
+    commands.insert_resource(GlobalAmbientLight {
+        brightness: 700.0,
+        ..default()
+    });
+    commands.spawn((
+        DirectionalLight {
+            illuminance: 9300.0,
+            shadow_maps_enabled: source.vehicle.is_some(),
+            ..default()
+        },
+        Transform::from_xyz(1.0, 2.0, 1.5).looking_at(Vec3::ZERO, Vec3::Y),
+    ));
+
+    gizmo_config
+        .config_mut::<DefaultGizmoConfigGroup>()
+        .0
+        .depth_bias = -0.001;
+    commands.insert_resource(CollisionOverlay {
+        edges: edges(terrain),
+        visible: false,
+    });
+    commands.remove_resource::<Scene>();
+}
+
+fn spawn_meshes(
+    commands: &mut Commands,
+    assets: &mut MeshAssets,
+    appearance: &MeshAppearance,
+    geometry: &[TriangleMesh],
+    instances: &[MeshInstance],
+    parent: Option<Entity>,
+) {
+    let MeshAssets {
+        meshes,
+        materials,
+        images,
+    } = assets;
     let textures: Vec<_> = appearance
         .textures
         .iter()
@@ -76,13 +178,18 @@ fn setup(
                 cull_mode: (!material.double_sided).then_some(Face::Back),
                 double_sided: material.double_sided,
                 perceptual_roughness: 0.9,
+                alpha_mode: if material.transparent {
+                    AlphaMode::Blend
+                } else {
+                    AlphaMode::Opaque
+                },
                 ..default()
             })
         })
         .collect();
 
     let mut rendered = HashMap::new();
-    for instance in &terrain.objects {
+    for instance in instances {
         let Some(id) = instance.visual_mesh else {
             continue;
         };
@@ -95,7 +202,7 @@ fn setup(
             % 2
             == 1;
         let sections = rendered.entry((id, reflected)).or_insert_with(|| {
-            let mesh = &terrain.meshes[id.0];
+            let mesh = &geometry[id.0];
             appearance.sections[&id]
                 .iter()
                 .map(|section| {
@@ -111,7 +218,7 @@ fn setup(
                 .collect::<Vec<_>>()
         });
         for (mesh, material) in sections {
-            commands.spawn((
+            let mut entity = commands.spawn((
                 Name::new(instance.name.clone()),
                 Mesh3d(mesh.clone()),
                 MeshMaterial3d(material.clone()),
@@ -121,51 +228,192 @@ fn setup(
                     scale: instance.scale,
                 },
             ));
+            if let Some(parent) = parent {
+                entity.insert(ChildOf(parent));
+            }
         }
     }
-    if let Some(grid) = &terrain.heightfield {
-        let terrain_mesh = triangulate(grid);
-        commands.spawn((
-            Name::new("Heightfield"),
-            Mesh3d(meshes.add(to_bevy_mesh(&terrain_mesh, &terrain_mesh.triangles, false))),
-            MeshMaterial3d(materials.add(Color::srgb(0.35, 0.39, 0.34))),
-        ));
-    }
+}
 
-    let (min, max) = scene_bounds(terrain);
+#[derive(Component)]
+struct OrbitCamera {
+    home: Transform,
+    target: Vec3,
+    minimum_distance: f32,
+    maximum_distance: f32,
+}
+
+#[derive(Resource)]
+struct Inspection {
+    root: Entity,
+    translation: Vec3,
+    nodes: Vec<Vec3>,
+    edges: Vec<[vehicle_assets::NodeId; 2]>,
+    wheels: Vec<WheelGeometry>,
+    nose: Vec3,
+    structural: bool,
+}
+
+fn setup_vehicle(commands: &mut Commands, parked: &ParkedVehicle, assets: &mut MeshAssets) {
+    let vehicle = &parked.import.vehicle;
+    let root = commands
+        .spawn((
+            Name::new(vehicle.name.clone()),
+            Transform::from_translation(parked.translation),
+            Visibility::Visible,
+        ))
+        .id();
+    spawn_meshes(
+        commands,
+        assets,
+        &parked.import.appearance,
+        &vehicle.meshes,
+        &vehicle.objects,
+        Some(root),
+    );
+
+    let (mut min, mut max) = (Vec3::splat(f32::INFINITY), Vec3::splat(f32::NEG_INFINITY));
+    let visuals = vehicle
+        .objects
+        .iter()
+        .filter_map(|instance| Some((instance, &vehicle.meshes[instance.visual_mesh?.0])));
+    for point in visuals.flat_map(|(instance, mesh)| {
+        mesh.vertices
+            .iter()
+            .map(move |&point| instance.transform_point(point))
+    }) {
+        min = min.min(point);
+        max = max.max(point);
+    }
+    if !min.is_finite() {
+        for &point in &vehicle.nodes {
+            min = min.min(point);
+            max = max.max(point);
+        }
+    }
     let centre = (max + min) * 0.5;
-    let extent = (max - min).max_element().max(10.0);
-    let overview = Transform::from_translation(centre + extent * Vec3::new(0.86, 0.93, 0.95))
-        .looking_at(centre + extent * Vec3::new(0.03, 0.0, 0.03), Vec3::Y);
+    let extent = (max - min).max_element().max(1.0);
+    let target = parked.translation + centre;
+    let home = Transform::from_translation(target + extent * Vec3::new(0.88, 0.49, 0.98))
+        .looking_at(target, Vec3::Y);
     commands.spawn((
         Camera3d::default(),
-        overview,
-        FlyCamera {
-            overview,
-            speed: extent / 8.0,
+        home,
+        OrbitCamera {
+            home,
+            target,
+            minimum_distance: extent * 0.45,
+            maximum_distance: extent * 15.0,
         },
     ));
-    commands.insert_resource(GlobalAmbientLight {
-        brightness: 700.0,
-        ..default()
+    commands.insert_resource(Inspection {
+        root,
+        translation: parked.translation,
+        nodes: vehicle.nodes.clone(),
+        edges: vehicle.edges.clone(),
+        wheels: vehicle.wheels.clone(),
+        nose: Vec3::new(centre.x, centre.y + 0.1, max.z),
+        structural: false,
     });
-    commands.spawn((
-        DirectionalLight {
-            illuminance: 9300.0,
-            ..default()
-        },
-        Transform::from_xyz(1.0, 2.0, 1.5).looking_at(Vec3::ZERO, Vec3::Y),
-    ));
+}
 
-    gizmo_config
-        .config_mut::<DefaultGizmoConfigGroup>()
-        .0
-        .depth_bias = -0.001;
-    commands.insert_resource(CollisionOverlay {
-        edges: edges(terrain),
-        visible: false,
-    });
-    commands.remove_resource::<Source>();
+fn orbit_camera(
+    mut camera: Single<(&mut Transform, &OrbitCamera)>,
+    keys: Res<ButtonInput<KeyCode>>,
+    mouse: Res<ButtonInput<MouseButton>>,
+    motion: Res<AccumulatedMouseMotion>,
+    scroll: Res<AccumulatedMouseScroll>,
+) {
+    let (transform, orbit) = &mut *camera;
+    if keys.just_pressed(KeyCode::Home) {
+        **transform = orbit.home;
+        return;
+    }
+    let delta = if mouse.pressed(MouseButton::Right) {
+        motion.delta
+    } else {
+        Vec2::ZERO
+    };
+    let zoom = match scroll.unit {
+        MouseScrollUnit::Line => scroll.delta.y * 0.14,
+        MouseScrollUnit::Pixel => scroll.delta.y * 0.002,
+    };
+    if delta == Vec2::ZERO && zoom == 0.0 {
+        return;
+    }
+    let distance = (transform.translation.distance(orbit.target) * (-zoom).exp())
+        .clamp(orbit.minimum_distance, orbit.maximum_distance);
+    let (yaw, pitch, _) = transform.rotation.to_euler(EulerRot::YXZ);
+    let rotation = Quat::from_euler(
+        EulerRot::YXZ,
+        yaw - delta.x * 0.004,
+        (pitch - delta.y * 0.004).clamp(-1.4, -0.04),
+        0.0,
+    );
+    transform.translation = orbit.target + rotation * Vec3::Z * distance;
+    transform.rotation = rotation;
+}
+
+fn structure_overlay(
+    mut gizmos: Gizmos,
+    keys: Res<ButtonInput<KeyCode>>,
+    mut inspection: ResMut<Inspection>,
+    mut visibilities: Query<&mut Visibility>,
+) {
+    if keys.just_pressed(KeyCode::KeyB) {
+        inspection.structural = !inspection.structural;
+        if let Ok(mut visibility) = visibilities.get_mut(inspection.root) {
+            *visibility = if inspection.structural {
+                Visibility::Hidden
+            } else {
+                Visibility::Visible
+            };
+        }
+    }
+    if !inspection.structural {
+        return;
+    }
+
+    let origin = inspection.translation;
+    for &[a, b] in &inspection.edges {
+        gizmos.line(
+            origin + inspection.nodes[a.0],
+            origin + inspection.nodes[b.0],
+            Color::srgb(0.22, 0.57, 0.72),
+        );
+    }
+    for &node in &inspection.nodes {
+        let centre = origin + node;
+        for axis in [Vec3::X, Vec3::Y, Vec3::Z] {
+            gizmos.line(
+                centre - 0.012 * axis,
+                centre + 0.012 * axis,
+                Color::srgb(0.97, 0.76, 0.30),
+            );
+        }
+    }
+    for wheel in &inspection.wheels {
+        let centre = origin + wheel.centre;
+        let up = (Vec3::Y - wheel.axle * wheel.axle.y).normalize_or_zero();
+        let forward = wheel.axle.cross(up);
+        for side in [-0.5, 0.5] {
+            let face = centre + wheel.axle * (side * wheel.width);
+            let points = (0..32).map(|index| {
+                let phase = index as f32 * std::f32::consts::TAU / 32.0;
+                let (sin, cos) = phase.sin_cos();
+                face + wheel.outer_radius * (cos * up + sin * forward)
+            });
+            gizmos.lineloop(points, Color::srgb(0.40, 0.90, 1.0));
+        }
+        let span = wheel.width * 0.9;
+        gizmos.arrow(
+            centre - wheel.axle * span,
+            centre + wheel.axle * span,
+            Color::srgb(1.0, 0.54, 0.25),
+        );
+    }
+    let nose = origin + inspection.nose;
+    gizmos.arrow(nose, nose + Vec3::Z * 0.75, Color::srgb(1.0, 0.54, 0.25));
 }
 
 fn texture_image(texture: &DiffuseTexture) -> Image {
@@ -238,36 +486,6 @@ fn to_bevy_mesh(mesh: &TriangleMesh, triangles: &[[u32; 3]], reflected: bool) ->
             }
         }
         render
-    }
-}
-
-fn triangulate(grid: &Heightfield) -> TriangleMesh {
-    let vertices = (0..grid.samples_z)
-        .flat_map(|z| {
-            (0..grid.samples_x)
-                .map(move |x| grid.sample_position(x, z).expect("validated heightfield"))
-        })
-        .collect();
-    let mut triangles = Vec::new();
-    for z in 0..grid.samples_z - 1 {
-        for x in 0..grid.samples_x - 1 {
-            let a = (z * grid.samples_x + x) as u32;
-            let b = a + 1;
-            let c = a + grid.samples_x as u32;
-            let d = c + 1;
-            // OGRE alternates the diagonal on consecutive terrain rows.
-            if z.is_multiple_of(2) {
-                triangles.extend([[a, c, d], [a, d, b]]);
-            } else {
-                triangles.extend([[a, c, b], [b, c, d]]);
-            }
-        }
-    }
-    TriangleMesh {
-        vertices,
-        triangles,
-        normals: None,
-        uvs: None,
     }
 }
 

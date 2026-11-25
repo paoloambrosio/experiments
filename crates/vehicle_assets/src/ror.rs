@@ -1,10 +1,15 @@
 //! Discovery and import of Rigs of Rods assets in ZIP archives.
 
+mod archive;
+mod dds;
 mod materials;
 mod ogre;
 mod terrain;
+mod vehicle;
 
-pub use terrain::{ImportWarning, TerrainImport, TerrainImportError, load_terrain};
+pub use archive::{ImportError, ImportError as TerrainImportError, ImportWarning};
+pub use terrain::{TerrainImport, load_terrain};
+pub use vehicle::{VehicleImport, load_vehicle};
 
 use std::{
     fmt,

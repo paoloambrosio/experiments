@@ -34,6 +34,28 @@ The viewer uses the terrain ZIP and optional `terrain_entry` from the local conf
 
 The startup report lists the heightfield size, placements, collision-bearing objects, and skipped features. In N-Labs Testing Facility 0.5, the floor uses its DDS base texture. The report identifies the skipped secondary shading layer. [Drive roadmap](../drive-roadmap.md)
 
+## Inspect an imported vehicle
+
+Run from the workspace root.
+
+```sh
+cargo run -p vehicle_drive -- --view-vehicle
+```
+
+Set both archive paths under `[assets]`. Use `terrain_entry` and `vehicle_entry` to select entries directly, or choose from the terminal menus. The viewer also accepts `--config <path>`.
+
+The car is parked facing +Z at the terrain's authored start. The viewer uses the heightfield centre if the terrain has no start position. It moves the whole car vertically to clear the imported surface beneath the tyres. Differences in front and rear ride height remain visible in this static rest pose.
+
+| Control | Action |
+| --- | --- |
+| **Right mouse button + drag** | Orbit the vehicle |
+| **Mouse wheel** | Zoom |
+| **Home** | Restore the front three-quarter view |
+| **B** | Switch between textured and structural views |
+| **C** | Toggle terrain collision edges |
+
+The structural view shows nodes, beams, wheel outlines, axle directions, and a forward arrow. The startup report lists the selected truck entry, authored wheel geometry, and skipped features. Glass retains its diffuse alpha. Dashboard instruments use a flat material in the parked preview. [Drive roadmap](../drive-roadmap.md)
+
 ## Use imported asset geometry
 
 Use the `vehicle_assets` crate to represent terrain meshes, height samples, and vehicle and wheel geometry in memory. Call `TerrainAsset::validate()` or `VehicleAsset::validate()` before consuming these values. Validation errors identify the field and any relevant element indices. Positions and dimensions use metres, with +Y up, +Z forward, and +X to vehicle left. [Imported terrain and vehicle roadmap](../drive-roadmap.md)

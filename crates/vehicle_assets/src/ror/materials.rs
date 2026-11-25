@@ -4,7 +4,10 @@ use crate::{
     DiffuseMaterial, DiffuseTexture, MaterialId, MaterialSection, MeshAppearance, MeshId, TextureId,
 };
 
-use super::terrain::{Archive, ImportWarning, warn};
+use super::{
+    archive::{Archive, ImportWarning, warn},
+    dds,
+};
 
 const FALLBACK: [f32; 4] = [0.85, 0.25, 0.65, 1.0];
 
@@ -20,6 +23,7 @@ struct Definition {
     entry: String,
     rgba: [f32; 4],
     double_sided: bool,
+    transparent: bool,
     base: Option<String>,
     base_uses_uv0: bool,
     warnings: Vec<String>,
@@ -49,6 +53,27 @@ impl Materials {
             }
         }
         materials
+    }
+
+    pub(super) fn define_managed(
+        &mut self,
+        entry: &str,
+        name: &str,
+        base: Option<&str>,
+        transparent: bool,
+    ) {
+        self.definitions.insert(
+            name.to_owned(),
+            Definition {
+                entry: entry.to_owned(),
+                rgba: [1.0; 4],
+                double_sided: transparent,
+                transparent,
+                base: base.map(str::to_owned),
+                base_uses_uv0: true,
+                warnings: Vec::new(),
+            },
+        );
     }
 
     fn read_definitions(&mut self, entry: &str, text: &str) {
@@ -101,6 +126,7 @@ impl Materials {
                         entry: entry.to_owned(),
                         rgba: [1.0; 4],
                         double_sided: false,
+                        transparent: false,
                         base: None,
                         base_uses_uv0: true,
                         warnings: Vec::new(),
@@ -211,10 +237,12 @@ impl Materials {
             rgba: FALLBACK,
             base_texture: None,
             double_sided: false,
+            transparent: false,
         };
         if let Some(definition) = self.definitions.get(name) {
             material.rgba = definition.rgba;
             material.double_sided = definition.double_sided;
+            material.transparent = definition.transparent;
             for message in &definition.warnings {
                 warn(warnings, &definition.entry, message.clone());
             }
@@ -241,6 +269,13 @@ impl Materials {
                     }
                 }
             }
+        } else if name == "renderdash" {
+            material.rgba = [0.14, 0.15, 0.16, 1.0];
+            warn(
+                warnings,
+                mesh_entry,
+                "live dashboard texture is displayed as a flat material",
+            );
         } else {
             warn(
                 warnings,
@@ -279,5 +314,8 @@ fn load_texture(
 }
 
 pub(super) fn read_image(bytes: &[u8]) -> Result<image::DynamicImage, String> {
+    if let Some(image) = dds::decode_rgb(bytes)? {
+        return Ok(image::DynamicImage::ImageRgba8(image));
+    }
     image::load_from_memory(bytes).map_err(|error| format!("image decode failed: {error}"))
 }

@@ -1,10 +1,42 @@
 //! Read the base static geometry of legacy OGRE binary meshes.
 
-use std::{collections::BTreeMap, ops::Range};
+use std::{
+    collections::{BTreeMap, HashMap},
+    ops::Range,
+};
 
 use bevy_math::{Vec2, Vec3};
 
-use crate::TriangleMesh;
+use super::archive::{Archive, Import};
+use crate::{MeshId, TriangleMesh};
+
+#[derive(Default)]
+pub(super) struct MeshCache {
+    pub geometry: Vec<TriangleMesh>,
+    pub bindings: Vec<(String, Vec<(Range<usize>, String)>)>,
+    loaded: HashMap<String, MeshId>,
+}
+
+impl MeshCache {
+    pub fn load(&mut self, archive: &mut Archive, from: &str, reference: &str) -> Import<MeshId> {
+        let path = archive.reference(from, reference)?;
+        if let Some(id) = self.loaded.get(&path) {
+            return Ok(*id);
+        }
+        let mesh = read(&archive.read(&path)?)
+            .map_err(|error| archive.error(&path, format!("referenced by {from}: {error}")))?;
+        let id = self.push(&path, mesh);
+        self.loaded.insert(path, id);
+        Ok(id)
+    }
+
+    pub fn push(&mut self, entry: &str, mesh: Mesh) -> MeshId {
+        let id = MeshId(self.geometry.len());
+        self.geometry.push(mesh.geometry);
+        self.bindings.push((entry.to_owned(), mesh.sections));
+        id
+    }
+}
 
 pub(super) struct Mesh {
     pub geometry: TriangleMesh,
@@ -29,7 +61,10 @@ pub(super) fn read(bytes: &[u8]) -> Parse<Mesh> {
         return Err("expected little-endian OGRE mesh header".into());
     }
     let version = input.line()?;
-    if !matches!(version, "[MeshSerializer_v1.40]" | "[MeshSerializer_v1.41]") {
+    if !matches!(
+        version,
+        "[MeshSerializer_v1.30]" | "[MeshSerializer_v1.40]" | "[MeshSerializer_v1.41]"
+    ) {
         return Err(format!("unsupported OGRE mesh serializer {version:?}"));
     }
     // Some legacy exporters miscount the sizes of parent chunks. Follow the

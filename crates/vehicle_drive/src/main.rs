@@ -1,4 +1,5 @@
 mod config;
+mod placement;
 mod view;
 
 use std::{
@@ -9,7 +10,10 @@ use std::{
 };
 
 use clap::{Arg, ArgAction, Command, value_parser};
-use vehicle_assets::ror::{AssetKind, TerrainImport, discover_entries, load_terrain};
+use vehicle_assets::ror::{
+    AssetKind, ImportWarning, TerrainImport, VehicleImport, discover_entries, load_terrain,
+    load_vehicle,
+};
 
 use crate::config::Config;
 
@@ -30,6 +34,13 @@ fn main() -> ExitCode {
                 .action(ArgAction::SetTrue)
                 .help("Open the selected terrain in a 3D viewer"),
         )
+        .arg(
+            Arg::new("view-vehicle")
+                .long("view-vehicle")
+                .action(ArgAction::SetTrue)
+                .conflicts_with("view-terrain")
+                .help("Inspect the selected vehicle on the selected terrain"),
+        )
         .get_matches();
     let path = args
         .get_one::<PathBuf>("config")
@@ -40,8 +51,9 @@ fn main() -> ExitCode {
         let stderr = io::stderr();
         let mut input = (stdin.is_terminal() && stderr.is_terminal()).then(|| stdin.lock());
         let mut diagnostics = stderr.lock();
-        if args.get_flag("view-terrain") {
-            import_for_view(path, input.as_mut(), &mut diagnostics).map(Some)
+        let show_vehicle = args.get_flag("view-vehicle");
+        if show_vehicle || args.get_flag("view-terrain") {
+            import_for_view(path, show_vehicle, input.as_mut(), &mut diagnostics).map(Some)
         } else {
             run(
                 path,
@@ -53,9 +65,12 @@ fn main() -> ExitCode {
         }
     };
     match result {
-        Ok(Some(terrain)) => {
-            print_import_summary(&terrain);
-            if view::run(terrain) {
+        Ok(Some(scene)) => {
+            print_import_summary(&scene.terrain);
+            if let Some(vehicle) = &scene.vehicle {
+                print_vehicle_summary(&vehicle.import);
+            }
+            if view::run(scene) {
                 ExitCode::SUCCESS
             } else {
                 ExitCode::FAILURE
@@ -71,22 +86,94 @@ fn main() -> ExitCode {
 
 fn import_for_view(
     path: &Path,
-    input: Option<&mut impl BufRead>,
+    show_vehicle: bool,
+    mut input: Option<&mut impl BufRead>,
     diagnostics: &mut impl Write,
-) -> Result<TerrainImport, String> {
+) -> Result<view::Scene, String> {
     let config = Config::read(path)?;
+    let vehicle_archive =
+        if show_vehicle {
+            Some(
+                config.assets.vehicle.as_deref().ok_or_else(|| {
+                    format!("config {} is missing [assets].vehicle", path.display())
+                })?,
+            )
+        } else {
+            None
+        };
     let archive = &config.assets.terrain;
-    let entries = discover_entries(archive, AssetKind::Terrain)
-        .map_err(|error| format!("[assets].terrain: {error}"))?;
-    let selected = select_entry(
-        &entries,
-        config.assets.terrain_entry.as_deref(),
-        "terrain",
+    let selected = choose_asset(
         archive,
-        input,
+        AssetKind::Terrain,
+        "terrain",
+        config.assets.terrain_entry.as_deref(),
+        input.as_deref_mut(),
         diagnostics,
     )?;
-    load_terrain(archive, selected).map_err(|error| error.to_string())
+    let terrain = load_terrain(archive, &selected).map_err(|error| error.to_string())?;
+    let vehicle = if let Some(archive) = vehicle_archive {
+        let selected = choose_asset(
+            archive,
+            AssetKind::Vehicle,
+            "vehicle",
+            config.assets.vehicle_entry.as_deref(),
+            input,
+            diagnostics,
+        )?;
+        let import = load_vehicle(archive, &selected).map_err(|error| error.to_string())?;
+        let translation = placement::park(&terrain, &import.vehicle).map_err(|error| {
+            format!(
+                "cannot park {} in {}: {error}",
+                import.vehicle.name, terrain.terrain.name
+            )
+        })?;
+        Some(view::ParkedVehicle {
+            import,
+            translation,
+        })
+    } else {
+        None
+    };
+    Ok(view::Scene { terrain, vehicle })
+}
+
+fn choose_asset(
+    archive: &Path,
+    kind: AssetKind,
+    field: &str,
+    requested: Option<&str>,
+    input: Option<&mut impl BufRead>,
+    diagnostics: &mut impl Write,
+) -> Result<String, String> {
+    let entries =
+        discover_entries(archive, kind).map_err(|error| format!("[assets].{field}: {error}"))?;
+    select_entry(&entries, requested, field, archive, input, diagnostics).map(str::to_owned)
+}
+
+fn print_vehicle_summary(import: &VehicleImport) {
+    let vehicle = &import.vehicle;
+    println!("Vehicle: {} ({})", vehicle.name, import.entry);
+    println!(
+        "Structure: {} nodes, {} beams, {} wheels",
+        vehicle.nodes.len(),
+        vehicle.edges.len(),
+        vehicle.wheels.len()
+    );
+    for (index, wheel) in vehicle.wheels.iter().enumerate() {
+        let position = wheel.centre;
+        println!(
+            "Wheel {}: centre ({:.3}, {:.3}, {:.3}) m, radius {:.3} m, rim {:.3} m, width {:.3} m",
+            index + 1,
+            position.x,
+            position.y,
+            position.z,
+            wheel.outer_radius,
+            wheel.rim_radius.unwrap_or_default(),
+            wheel.width,
+        );
+    }
+    let _ = io::stdout().flush();
+    print_warnings(&import.warnings);
 }
 
 fn print_import_summary(import: &TerrainImport) {
@@ -109,8 +196,12 @@ fn print_import_summary(import: &TerrainImport) {
     );
     let _ = io::stdout().flush();
 
+    print_warnings(&import.warnings);
+}
+
+fn print_warnings(diagnostics: &[ImportWarning]) {
     let mut warnings: BTreeMap<&str, Vec<&str>> = BTreeMap::new();
-    for warning in &import.warnings {
+    for warning in diagnostics {
         warnings
             .entry(&warning.message)
             .or_default()
@@ -148,17 +239,15 @@ fn run(
     let mut selections = Vec::with_capacity(assets.len());
 
     for (kind, field, archive, requested) in assets {
-        let entries = discover_entries(archive, kind)
-            .map_err(|error| format!("[assets].{field}: {error}"))?;
-        let selected = select_entry(
-            &entries,
-            requested,
-            field,
+        let selected = choose_asset(
             archive,
+            kind,
+            field,
+            requested,
             input.as_deref_mut(),
             diagnostics,
         )?;
-        selections.push((field, archive, selected.to_owned()));
+        selections.push((field, archive, selected));
     }
 
     for (field, archive, selected) in selections {

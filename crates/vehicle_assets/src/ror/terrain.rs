@@ -1,68 +1,30 @@
 use std::{
     collections::{BTreeMap, HashMap},
-    fmt,
-    fs::File,
-    io::Read,
-    path::{Path, PathBuf},
+    path::Path,
 };
 
 use bevy_math::{Quat, Vec3};
-use zip::{ZipArchive, result::ZipError};
 
 use super::{
+    archive::{Archive, Import, ImportError, ImportWarning, warn},
     materials::{Materials, read_image},
     ogre,
 };
-use crate::{Heightfield, MeshAppearance, MeshId, MeshInstance, TerrainAsset};
+use crate::{Heightfield, MeshAppearance, MeshInstance, TerrainAsset};
 
 #[derive(Debug)]
 pub struct TerrainImport {
     pub terrain: TerrainAsset,
+    pub start_position: Option<Vec3>,
     pub appearance: MeshAppearance,
     pub warnings: Vec<ImportWarning>,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
-pub struct ImportWarning {
-    pub entry: String,
-    pub message: String,
-}
-
-#[derive(Debug)]
-pub struct TerrainImportError {
-    archive: PathBuf,
-    entry: String,
-    detail: String,
-}
-
-impl fmt::Display for TerrainImportError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(
-            f,
-            "{} :: {}: {}",
-            self.archive.display(),
-            self.entry,
-            self.detail
-        )
-    }
-}
-
-impl std::error::Error for TerrainImportError {}
-
 /// Loads one static terrain and its resources directly from a RoR archive.
-pub fn load_terrain(path: &Path, entry: &str) -> Result<TerrainImport, TerrainImportError> {
-    let mut archive = Archive::open(path).map_err(|error| TerrainImportError {
-        archive: path.to_owned(),
-        entry: entry.to_owned(),
-        detail: error.to_string(),
-    })?;
-    let definition = archive
-        .resolve("", entry)
-        .map_err(|detail| archive.error(entry, detail))?;
+pub fn load_terrain(path: &Path, entry: &str) -> Result<TerrainImport, ImportError> {
+    let (mut archive, definition) = Archive::select(path, entry)?;
     import(&mut archive, &definition)
 }
-
-type Import<T> = Result<T, TerrainImportError>;
 
 fn import(archive: &mut Archive, entry: &str) -> Import<TerrainImport> {
     let mut warnings = Vec::new();
@@ -76,6 +38,19 @@ fn import(archive: &mut Archive, entry: &str) -> Import<TerrainImport> {
                 .map(|(_, value)| *value)
         })
     };
+    let start_position = general("StartPosition")
+        .map(|value| {
+            let fields: Vec<_> = value
+                .split(|c: char| c.is_whitespace() || c == ',')
+                .filter(|field| !field.is_empty())
+                .collect();
+            match fields.as_slice() {
+                [x, y, z] => numbers([x, y, z]),
+                _ => Err("expected three coordinates".into()),
+            }
+            .map_err(|error| archive.error(entry, format!("StartPosition: {error}")))
+        })
+        .transpose()?;
     let geometry =
         general("GeometryConfig").ok_or_else(|| archive.error(entry, "missing GeometryConfig"))?;
     let height_entry = archive.reference(entry, geometry)?;
@@ -103,8 +78,7 @@ fn import(archive: &mut Archive, entry: &str) -> Import<TerrainImport> {
         meshes: Vec::new(),
         objects: Vec::new(),
     };
-    let mut meshes = HashMap::new();
-    let mut sections = Vec::new();
+    let mut meshes = ogre::MeshCache::default();
     let mut odefs = HashMap::new();
     for (list, _) in ini.get("objects").into_iter().flatten() {
         let list = archive.reference(entry, list)?;
@@ -144,20 +118,7 @@ fn import(archive: &mut Archive, entry: &str) -> Import<TerrainImport> {
             } else {
                 rotation * Quat::from_rotation_x(-std::f32::consts::FRAC_PI_2)
             };
-            let mut import_mesh = |reference: &str| -> Import<MeshId> {
-                let path = archive.reference(&definition, reference)?;
-                if let Some(id) = meshes.get(&path) {
-                    return Ok(*id);
-                }
-                let mesh = ogre::read(&archive.read(&path)?).map_err(|error| {
-                    archive.error(&path, format!("referenced by {definition}: {error}"))
-                })?;
-                let id = MeshId(terrain.meshes.len());
-                terrain.meshes.push(mesh.geometry);
-                sections.push((path.clone(), mesh.sections));
-                meshes.insert(path, id);
-                Ok(id)
-            };
+            let mut import_mesh = |reference: &str| meshes.load(archive, &definition, reference);
             let visual_mesh = object.visual.as_deref().map(&mut import_mesh).transpose()?;
             let mut collision = object.collision.iter();
             let collision_mesh = collision
@@ -188,6 +149,7 @@ fn import(archive: &mut Archive, entry: &str) -> Import<TerrainImport> {
         }
     }
 
+    terrain.meshes = meshes.geometry;
     terrain
         .validate()
         .map_err(|error| archive.error(entry, error.to_string()))?;
@@ -197,13 +159,14 @@ fn import(archive: &mut Archive, entry: &str) -> Import<TerrainImport> {
         .iter()
         .filter_map(|instance| instance.visual_mesh)
     {
-        let (path, sections) = &sections[id.0];
+        let (path, sections) = &meshes.bindings[id.0];
         materials.bind(archive, id, path, sections, &mut warnings);
     }
     warnings.sort();
     warnings.dedup();
     Ok(TerrainImport {
         terrain,
+        start_position,
         appearance: materials.appearance,
         warnings,
     })
@@ -394,113 +357,4 @@ fn parse_ini(input: &str) -> BTreeMap<String, Vec<(&str, &str)>> {
         }
     }
     sections
-}
-
-pub(super) fn warn(warnings: &mut Vec<ImportWarning>, entry: &str, message: impl Into<String>) {
-    warnings.push(ImportWarning {
-        entry: entry.to_owned(),
-        message: message.into(),
-    });
-}
-
-pub(super) struct Archive {
-    path: PathBuf,
-    zip: ZipArchive<File>,
-    names: Vec<String>,
-}
-
-impl Archive {
-    fn open(path: &Path) -> Result<Self, ZipError> {
-        let zip = ZipArchive::new(File::open(path)?)?;
-        let names = zip
-            .file_names()
-            .map(|entry| entry.map(|name| name.into_owned()))
-            .collect::<Result<_, _>>()?;
-        Ok(Self {
-            zip,
-            names,
-            path: path.to_owned(),
-        })
-    }
-
-    pub(super) fn names(&self) -> &[String] {
-        &self.names
-    }
-
-    pub(super) fn error(&self, entry: &str, detail: impl Into<String>) -> TerrainImportError {
-        TerrainImportError {
-            archive: self.path.clone(),
-            entry: entry.to_owned(),
-            detail: detail.into(),
-        }
-    }
-
-    pub(super) fn resolve(&self, from: &str, reference: &str) -> Result<String, String> {
-        let reference = reference.replace('\\', "/");
-        let parent = from.rsplit_once('/').map_or("", |(parent, _)| parent);
-        if reference.starts_with('/') || reference.contains(':') {
-            return Err(format!("invalid archive reference {reference:?}"));
-        }
-
-        let relative = normalize(parent, &reference)
-            .ok_or_else(|| format!("invalid archive reference {reference:?}"))?;
-        let root = normalize("", &reference).filter(|root| *root != relative);
-        for candidate in std::iter::once(relative.as_str()).chain(root.as_deref()) {
-            if self.names.iter().any(|name| name == candidate) {
-                return Ok(candidate.to_owned());
-            }
-            let mut matches = self
-                .names
-                .iter()
-                .filter(|name| name.eq_ignore_ascii_case(candidate));
-            if let Some(found) = matches.next() {
-                if matches.next().is_some() {
-                    return Err(format!("ambiguous archive reference {reference:?}"));
-                }
-                return Ok(found.clone());
-            }
-        }
-        Err(format!("missing archive reference {reference:?}"))
-    }
-
-    fn reference(&self, from: &str, reference: &str) -> Import<String> {
-        self.resolve(from, reference)
-            .map_err(|error| self.error(from, error))
-    }
-
-    pub(super) fn read(&mut self, entry: &str) -> Import<Vec<u8>> {
-        let path = &self.path;
-        let error = |detail| TerrainImportError {
-            archive: path.clone(),
-            entry: entry.to_owned(),
-            detail,
-        };
-        let mut source = self
-            .zip
-            .by_name(entry)
-            .map_err(|err| error(err.to_string()))?;
-        let mut bytes = Vec::new();
-        source
-            .read_to_end(&mut bytes)
-            .map_err(|err| error(err.to_string()))?;
-        Ok(bytes)
-    }
-
-    pub(super) fn text(&mut self, entry: &str) -> Import<String> {
-        String::from_utf8(self.read(entry)?).map_err(|error| self.error(entry, error.to_string()))
-    }
-}
-
-fn normalize(parent: &str, reference: &str) -> Option<String> {
-    let mut parts = Vec::new();
-    for part in parent.split('/').chain(reference.split('/')) {
-        match part {
-            "" | "." => {}
-            ".." => {
-                parts.pop()?;
-            }
-            value => parts.push(value),
-        }
-    }
-    (!parts.is_empty()).then(|| parts.join("/"))
 }

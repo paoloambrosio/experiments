@@ -28,6 +28,8 @@ pub struct DiffuseMaterial {
     pub rgba: [f32; 4],
     pub base_texture: Option<TextureId>,
     pub double_sided: bool,
+    /// Blend the diffuse image's alpha channel, for surfaces such as glass.
+    pub transparent: bool,
 }
 
 /// Decoded sRGB image in top-to-bottom RGBA8 pixel order.

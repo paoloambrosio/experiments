@@ -136,3 +136,28 @@ fn terrain_view_reaches_import_with_only_terrain_configured() {
     assert!(error.contains("map/CM.terrn2"), "{error}");
     assert!(error.contains("missing GeometryConfig"), "{error}");
 }
+
+#[test]
+fn vehicle_view_requires_a_vehicle_archive() {
+    let dir = fixture();
+    let settings = dir.path().join("settings");
+    fs::write(
+        settings.join("config.toml"),
+        "[assets]\nterrain = 'packs/CM sample.zip'\n",
+    )
+    .unwrap();
+
+    let output = drive(&settings, &["--view-vehicle"]);
+    assert!(!output.status.success());
+    let error = String::from_utf8(output.stderr).unwrap();
+    assert!(error.contains("missing [assets].vehicle"), "{error}");
+}
+
+#[test]
+fn selects_only_one_view_mode_at_a_time() {
+    let dir = fixture();
+    let output = drive(dir.path(), &["--view-terrain", "--view-vehicle"]);
+    assert!(!output.status.success());
+    let error = String::from_utf8(output.stderr).unwrap();
+    assert!(error.contains("cannot be used with"), "{error}");
+}
