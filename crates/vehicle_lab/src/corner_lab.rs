@@ -1,4 +1,5 @@
 use std::f32::consts::FRAC_PI_2;
+use vehicle_physics::reference_car::ReferenceTyre;
 
 use bevy::{ecs::change_detection::NonSendMut, input::InputSystems, prelude::*};
 use vehicle_physics::avian_tyre::AvianTyre;
@@ -9,7 +10,7 @@ use crate::{
         BODY_MOUNT_DROP_M, CORNER_TICKS, CornerRun, CornerSample, SETTLE_TICKS, STEP_RISE_M,
         STEP_Z_M, SUSPENSION,
     },
-    elastic_experiment::{Experiment, TICKS_PER_SECOND},
+    elastic_experiment::TICKS_PER_SECOND,
     loaded_tyre::{self, BEAD_RADIUS_M, RATES},
     orbit_camera,
     performance::{self, Benchmark, WindowOptions},
@@ -24,7 +25,7 @@ enum Action {
 }
 
 struct Replay {
-    experiment: Experiment,
+    experiment: ReferenceTyre,
     simulation: Option<CornerRun>,
     sample: Option<CornerSample>,
     selected_step: bool,
@@ -55,7 +56,7 @@ pub fn run(window: WindowOptions) -> AppExit {
         .add_systems(FixedUpdate, advance)
         .add_systems(Update, (draw, orbit_camera).chain());
     app.world_mut().insert_non_send(Replay {
-        experiment: loaded_tyre::preparation(RATES[0], true),
+        experiment: ReferenceTyre::new(RATES[0]),
         simulation: None,
         sample: None,
         selected_step: true,
@@ -156,7 +157,7 @@ fn advance(mut replay: NonSendMut<Replay>) {
     match std::mem::take(&mut replay.action) {
         Action::Reset => {
             if !replay.experiment.is_ready() {
-                replay.experiment = loaded_tyre::preparation(RATES[0], true);
+                replay.experiment = ReferenceTyre::new(RATES[0]);
             }
             replay.simulation = None;
             replay.sample = None;
@@ -180,8 +181,8 @@ fn advance(mut replay: NonSendMut<Replay>) {
         return;
     }
     if !replay.experiment.is_ready() {
-        for _ in 0..replay.experiment.substeps_per_tick() {
-            if let Err(error) = replay.experiment.prepare_step() {
+        for _ in 0..(RATES[0] / TICKS_PER_SECOND) {
+            if let Err(error) = replay.experiment.advance() {
                 replay.error = Some(error.to_string());
                 break;
             }

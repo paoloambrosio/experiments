@@ -1,10 +1,11 @@
 use std::f32::consts::FRAC_PI_2;
+use vehicle_physics::reference_car::ReferenceTyre;
 
 use bevy::{input::InputSystems, prelude::*};
 
 use crate::{
     BEAM_STYLES, OrbitCamera,
-    elastic_experiment::{Experiment, TICKS_PER_SECOND},
+    elastic_experiment::TICKS_PER_SECOND,
     grip_experiment::{self, Calibration, GripRun, LOADS_N, Preparation, SPEEDS_MPS, SlipCase},
     loaded_tyre::{self, BEAD_RADIUS_M, RATES},
     orbit_camera,
@@ -20,7 +21,7 @@ const AXLE_COLOR: Color = Color::srgb(1.0, 0.71, 0.35);
 
 #[derive(Resource)]
 struct GripLab {
-    inflation: Experiment,
+    inflation: ReferenceTyre,
     preparation: Option<Preparation>,
     calibration: Option<Calibration>,
     replay: Option<(SlipCase, GripRun)>,
@@ -35,7 +36,7 @@ struct GripLab {
 impl GripLab {
     fn new(benchmark: bool) -> Self {
         Self {
-            inflation: loaded_tyre::preparation(RATE, true),
+            inflation: ReferenceTyre::new(RATE),
             preparation: None,
             calibration: None,
             replay: None,
@@ -71,7 +72,7 @@ impl GripLab {
         if self.calibration.is_none() {
             self.preparation = None;
             if !self.inflation.is_ready() {
-                self.inflation = loaded_tyre::preparation(RATE, true);
+                self.inflation = ReferenceTyre::new(RATE);
             }
         }
         self.replay = None;
@@ -93,7 +94,7 @@ impl GripLab {
         for _ in 0..RATE / TICKS_PER_SECOND {
             if !self.inflation.is_ready() {
                 self.inflation
-                    .prepare_step()
+                    .advance()
                     .map_err(|error| error.to_string())?;
             } else if self.calibration.is_none() {
                 if self.preparation.is_none() {

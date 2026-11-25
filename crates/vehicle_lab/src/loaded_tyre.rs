@@ -1,61 +1,36 @@
 use bevy::math::{DQuat, DVec3};
 use vehicle_physics::{
-    elastic_tyre::{ElasticTyre, ElasticTyreConfig, ElasticTyreError},
+    elastic_tyre::{ElasticTyre, ElasticTyreError},
     mounted_tyre::{FlatFloor, MountedStep, MountedTyre, RimMotion},
-    tread_reinforcement::TreadReinforcementConfig,
+    reference_car,
 };
 
-use crate::{drop_experiment, elastic_experiment::Experiment};
+use crate::drop_experiment;
 
-pub const G: f64 = 9.81;
-pub const NOMINAL_LOAD_N: f64 = 250.0 * G;
+pub use reference_car::{
+    BARE_RIM_KG, BEAD_RADIUS_M, FRICTION, G, NOMINAL_LOAD_N, UPRIGHT_KG, unloaded_radius,
+};
 pub const RATES: [u32; 2] = [3840, 7680];
-pub const FRICTION: f64 = 0.8;
-pub const PRESSURE_PA: f64 = 150_000.0;
-pub const BARE_RIM_KG: f64 = 9.0;
-pub const UPRIGHT_KG: f32 = 3.0;
-pub const BEAD_RADIUS_M: f64 = 0.20;
-
 pub fn floor(light_car: bool) -> FlatFloor {
-    let floor = if light_car {
-        FlatFloor::new(0.0, 500_000.0, 150.0).unwrap()
+    if light_car {
+        reference_car::road()
     } else {
         drop_experiment::bench_floor()
-    };
-    floor.with_friction(FRICTION, 0.1).unwrap()
-}
-
-pub fn preparation(rate: u32, light_car: bool) -> Experiment {
-    if !light_car {
-        return drop_experiment::prepare_wheel(rate, 30_000.0);
+            .with_friction(FRICTION, 0.1)
+            .unwrap()
     }
-    let mut material = ElasticTyreConfig::default();
-    material.circumferential.stiffness *= 2.5;
-    material.cross_section.stiffness *= 4.0;
-    material.diagonal.stiffness *= 4.0;
-    material.circumferential.damping *= 3.0;
-    material.cross_section.damping *= 3.0;
-    material.diagonal.damping *= 3.0;
-    let mut reinforcement = TreadReinforcementConfig::default();
-    reinforcement.hoop_stiffness_multiplier = 16.0;
-    reinforcement.crown.stiffness *= 4.0;
-    Experiment::reinforced(rate, PRESSURE_PA, material, reinforcement)
 }
-
 pub fn prepare(rate: u32, light_car: bool) -> Result<ElasticTyre, Box<dyn std::error::Error>> {
-    let mut experiment = preparation(rate, light_car);
+    if light_car {
+        let mut reference = reference_car::ReferenceTyre::new(rate);
+        while !reference.advance()? {}
+        return Ok(reference.tyre);
+    }
+    let mut experiment = drop_experiment::prepare_wheel(rate, 30_000.0);
     while !experiment.is_ready() {
         experiment.prepare_step()?;
     }
     Ok(experiment.tyre)
-}
-
-pub fn unloaded_radius(tyre: &ElasticTyre) -> f64 {
-    -tyre
-        .positions()
-        .iter()
-        .map(|p| p.y)
-        .fold(f64::INFINITY, f64::min)
 }
 
 /// The fixture guides the rim along Y and allows spin about X.

@@ -3,7 +3,7 @@ use std::{error::Error, time::Duration};
 use avian3d::prelude::*;
 use bevy::{math::DVec3, prelude::*, time::TimeUpdateStrategy};
 use vehicle_physics::{
-    avian_suspension::{AvianSuspensionPlugin, CornerConfig, Suspension, WheelCorner},
+    avian_suspension::{AvianSuspensionPlugin, CornerConfig, WheelCorner},
     avian_tyre::{AvianTyre, AvianTyrePlugin},
     elastic_tyre::ElasticTyre,
     kerb::Kerb,
@@ -17,14 +17,8 @@ use crate::{
     },
 };
 
-pub const SUSPENSION: Suspension = Suspension {
-    stiffness_n_per_m: 30_000.0,
-    damping_ns_per_m: 2_000.0,
-    free_length_m: 0.25,
-    min_length_m: 0.06,
-    max_length_m: 0.29,
-};
-pub const SAG_M: f64 = 230.0 * G / 30_000.0;
+use vehicle_physics::reference_car::spawn_chassis;
+pub use vehicle_physics::reference_car::{SAG_M, SUSPENSION};
 pub const BODY_MOUNT_DROP_M: f32 = 0.28;
 pub const STEP_Z_M: f64 = 3.5;
 pub const STEP_RISE_M: f64 = 0.02;
@@ -50,21 +44,6 @@ pub(crate) fn physics_app(rate: u32) -> App {
     app.cleanup();
     app.update();
     app
-}
-
-pub(crate) fn spawn_chassis(world: &mut World, mass_kg: f32, centre: Vec3, size: Vec3) -> Entity {
-    let squared = size * size;
-    let inertia = (Vec3::splat(squared.element_sum()) - squared) * (mass_kg / 12.0);
-    world
-        .spawn((
-            RigidBody::Dynamic,
-            SleepingDisabled,
-            Position(centre),
-            Rotation(Quat::IDENTITY),
-            Mass(mass_kg),
-            AngularInertia::new(inertia),
-        ))
-        .id()
 }
 
 fn attach(

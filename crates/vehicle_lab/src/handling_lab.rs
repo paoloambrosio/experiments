@@ -1,4 +1,5 @@
 use std::f32::consts::FRAC_PI_2;
+use vehicle_physics::reference_car::ReferenceTyre;
 
 use bevy::{
     ecs::change_detection::{NonSend, NonSendMut},
@@ -9,7 +10,7 @@ use vehicle_physics::avian_tyre::AvianTyre;
 
 use crate::{
     BEAM_STYLES, OrbitCamera, OrbitHome,
-    elastic_experiment::{Experiment, TICKS_PER_SECOND},
+    elastic_experiment::TICKS_PER_SECOND,
     handling_experiment::{
         BODY_SIZE, CASES, COM_HEIGHT, HandlingRun, MOUNTS, Phase, Sample, WHEEL_NAMES,
     },
@@ -27,7 +28,7 @@ enum Action {
 }
 
 struct Replay {
-    preparation: Experiment,
+    preparation: ReferenceTyre,
     run: Option<HandlingRun>,
     selected: usize,
     path: Vec<(Vec3, Phase)>,
@@ -54,7 +55,7 @@ pub fn run(window: WindowOptions) -> AppExit {
         .add_systems(FixedUpdate, advance)
         .add_systems(Update, (draw, orbit_camera).chain());
     app.world_mut().insert_non_send(Replay {
-        preparation: loaded_tyre::preparation(RATES[0], true),
+        preparation: ReferenceTyre::new(RATES[0]),
         run: None,
         selected: if window.benchmark { CASES.len() - 1 } else { 0 },
         path: Vec::new(),
@@ -179,7 +180,7 @@ fn advance(mut replay: NonSendMut<Replay>) {
     match std::mem::take(&mut replay.action) {
         Action::Reset => {
             if !replay.preparation.is_ready() {
-                replay.preparation = loaded_tyre::preparation(RATES[0], true);
+                replay.preparation = ReferenceTyre::new(RATES[0]);
             }
             replay.run = None;
             replay.path.clear();
@@ -202,8 +203,8 @@ fn advance(mut replay: NonSendMut<Replay>) {
         return;
     }
     if !replay.preparation.is_ready() {
-        for _ in 0..replay.preparation.substeps_per_tick() {
-            if let Err(error) = replay.preparation.prepare_step() {
+        for _ in 0..(RATES[0] / TICKS_PER_SECOND) {
+            if let Err(error) = replay.preparation.advance() {
                 replay.error = Some(error.to_string());
                 break;
             }

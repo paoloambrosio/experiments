@@ -12,3 +12,7 @@ pub mod pressure;
 pub mod puncture;
 pub mod tread_reinforcement;
 pub mod tyre;
+
+pub mod inflation;
+#[cfg(feature = "avian")]
+pub mod reference_car;

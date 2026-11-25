@@ -3,34 +3,23 @@ use std::error::Error;
 use avian3d::{dynamics::solver::schedule::SolverSystems, prelude::*};
 use bevy::{math::DVec3, prelude::*};
 use vehicle_physics::{
-    avian_suspension::{CornerConfig, WheelControl, WheelCorner, ackermann_steer},
+    avian_suspension::{WheelControl, WheelCorner, ackermann_steer},
     avian_tyre::{AvianTyre, TyreSubstepComplete},
     elastic_tyre::ElasticTyre,
-    mounted_tyre::{MountedTyre, RimMotion},
+    reference_car::ReferenceCar,
 };
 
 use crate::{
-    corner_experiment::{SAG_M, SETTLE_TICKS, SUSPENSION, physics_app, spawn_chassis},
+    corner_experiment::{SETTLE_TICKS, SUSPENSION, physics_app},
     elastic_experiment::TICKS_PER_SECOND as HZ,
-    loaded_tyre::{self, BARE_RIM_KG, BEAD_RADIUS_M, UPRIGHT_KG},
+    loaded_tyre::BEAD_RADIUS_M,
 };
 
-pub const BODY_SIZE: Vec3 = Vec3::new(1.5, 0.5, 3.6);
-pub const COM_HEIGHT: f32 = 0.50;
-pub const WHEELBASE: f32 = 2.5;
-pub const TRACK: f32 = 1.5;
-pub const WHEEL_NAMES: [&str; 4] = ["FL", "FR", "RL", "RR"];
-// The 008 nominal-load static fixture puts the axle at about 326.14 mm.
-const MOUNT_Y: f32 = 0.32614 + SUSPENSION.free_length_m - SAG_M as f32 - COM_HEIGHT;
+pub use vehicle_physics::reference_car::{
+    BODY_SIZE, COM_HEIGHT, MOUNTS, TRACK, WHEEL_NAMES, WHEELBASE,
+};
 const DT: f64 = 1.0 / HZ as f64;
 const DEADLINE: u32 = 30 * HZ;
-
-pub const MOUNTS: [Vec3; 4] = [
-    Vec3::new(TRACK / 2.0, MOUNT_Y, WHEELBASE / 2.0),
-    Vec3::new(-TRACK / 2.0, MOUNT_Y, WHEELBASE / 2.0),
-    Vec3::new(TRACK / 2.0, MOUNT_Y, -WHEELBASE / 2.0),
-    Vec3::new(-TRACK / 2.0, MOUNT_Y, -WHEELBASE / 2.0),
-];
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum Brake {
@@ -284,36 +273,10 @@ impl HandlingRun {
         app.add_systems(PhysicsSchedule, reset_road.before(SolverSystems::Substep))
             .add_systems(SubstepSchedule, gather_road.after(TyreSubstepComplete));
         let world = app.world_mut();
-        let start_height = loaded_tyre::unloaded_radius(tyre) as f32 + SUSPENSION.free_length_m
-            - SAG_M as f32
-            - MOUNT_Y;
-        let chassis = spawn_chassis(world, 920.0, Vec3::Y * start_height, BODY_SIZE);
-        let wheels = MOUNTS
-            .into_iter()
-            .map(|mount| {
-                let centre = Vec3::Y * start_height + mount
-                    - Vec3::Y * (SUSPENSION.free_length_m - SAG_M as f32);
-                let motion = RimMotion {
-                    centre: centre.as_dvec3(),
-                    ..default()
-                };
-                let tyre = MountedTyre::new(tyre.clone(), motion, Some(loaded_tyre::floor(true)))?;
-                let corner = WheelCorner::spawn(
-                    world,
-                    chassis,
-                    tyre,
-                    CornerConfig {
-                        mount,
-                        suspension: SUSPENSION,
-                        upright_mass_kg: UPRIGHT_KG,
-                        bare_rim_mass_kg: BARE_RIM_KG,
-                    },
-                )?;
-                world.entity_mut(corner.rim).insert(TickRoad::default());
-                Ok::<_, Box<dyn Error>>(corner)
-            })
-            .collect::<Result<Vec<_>, _>>()?;
-        let wheels: [WheelCorner; 4] = wheels.try_into().unwrap();
+        let ReferenceCar { chassis, wheels } = ReferenceCar::spawn(world, tyre)?;
+        for wheel in &wheels {
+            world.entity_mut(wheel.rim).insert(TickRoad::default());
+        }
         Ok(Self {
             app,
             chassis,

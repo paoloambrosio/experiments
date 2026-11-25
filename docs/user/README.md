@@ -1,5 +1,22 @@
 # Vehicle physics user guide
 
+## Spawn the reference assembly
+
+Enable the core crate's `avian` feature. Install Avian's `PhysicsPlugins`, `AvianTyrePlugin`, and `AvianSuspensionPlugin`. The reference uses gravity along −Y at 9.81 m/s², a 60 Hz fixed clock, and 64 substeps per tick. Prepare the sealed tyre at the matching substep rate and cache it for resets.
+
+```rust
+use vehicle_physics::reference_car::{ReferenceCar, ReferenceTyre};
+
+let mut prepared = ReferenceTyre::new(3840);
+while !prepared.advance()? {}
+let car = ReferenceCar::spawn(world, &prepared.tyre)?;
+// car.wheels is ordered front left, front right, rear left, rear right.
+// To reset, remove the assembly and spawn again with the cached tyre.
+car.despawn(world);
+```
+
+The chassis starts at the origin in X and Z with +Y up, +Z forward, and +X to the left. Each wheel has its own deformable tyre and gas charge. [Wheel steering and torque commands](#steer-drive-and-brake-the-wheels)
+
 ## Run the lab
 
 Install a Rust toolchain and the native build and graphics prerequisites for Bevy. This workspace uses Bevy 0.20.1 and Avian 0.8.0. [Bevy setup guide](https://bevy.org/learn/quick-start/getting-started/setup/)

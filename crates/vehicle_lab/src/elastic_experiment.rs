@@ -22,8 +22,7 @@ pub struct Experiment {
     external_forces: Vec<DVec3>,
     baseline: Option<ElasticTyre>,
     target_pressure_pa: Option<f64>,
-    preparation_steps: u32,
-    slow_steps: u32,
+    inflation: vehicle_physics::inflation::Inflation,
 }
 
 impl Experiment {
@@ -122,8 +121,7 @@ impl Experiment {
             external_forces,
             baseline,
             target_pressure_pa,
-            preparation_steps: 0,
-            slow_steps: 0,
+            inflation: vehicle_physics::inflation::Inflation::new(substeps_per_second),
         }
     }
 
@@ -146,7 +144,7 @@ impl Experiment {
     }
 
     pub fn preparation_seconds(&self) -> f64 {
-        f64::from(self.preparation_steps) / f64::from(self.substeps_per_second)
+        self.inflation.seconds()
     }
 
     pub fn patch_reference_positions(&self) -> Option<[DVec3; 3]> {
@@ -157,50 +155,11 @@ impl Experiment {
 
     pub fn prepare_step(&mut self) -> Result<(), Box<dyn std::error::Error>> {
         let target = self.target_pressure_pa.expect("positive-pressure preset");
-        let next = self.preparation_steps + 1;
-        let fraction =
-            f64::from(next.min(self.substeps_per_second)) / f64::from(self.substeps_per_second);
-        // The valve regulates pressure during the step. Restore the setpoint at the new
-        // volume as well, so the displayed pressure and the final sealed charge agree.
-        self.tyre.set_gauge_pressure(target * fraction)?;
-        self.tyre.step(
-            1.0 / f64::from(self.substeps_per_second),
-            &self.external_forces,
-        )?;
-        self.tyre.set_gauge_pressure(target * fraction)?;
-        self.preparation_steps = next;
-
-        // The fixed beads' velocities are zero, so they don't affect this test.
-        if next >= self.substeps_per_second
-            && self
-                .tyre
-                .velocities()
-                .iter()
-                .all(|velocity| velocity.length_squared() < 0.0001_f64.powi(2))
+        if self
+            .inflation
+            .advance(&mut self.tyre, target, &self.external_forces)?
         {
-            self.slow_steps += 1;
-        } else {
-            self.slow_steps = 0;
-        }
-        if self.slow_steps >= self.substeps_per_second / 4 {
-            let actual = self
-                .tyre
-                .chamber_reading()
-                .expect("sealed chamber")
-                .gauge_pressure_pa;
-            if (actual - target).abs() > 100.0 {
-                return Err(format!(
-                    "sealed pressure {actual:.0} Pa missed the {target:.0} Pa target"
-                )
-                .into());
-            }
             self.baseline = Some(self.tyre.clone());
-        } else if next >= 30 * self.substeps_per_second {
-            return Err(format!(
-                "tyre at {:.0} kPa failed to settle within 30 s",
-                target / 1000.0
-            )
-            .into());
         }
         Ok(())
     }
@@ -375,7 +334,9 @@ mod tests {
             let reading = experiment.tyre.chamber_reading().unwrap();
             let seconds = experiment.preparation_seconds();
             assert!((reading.gauge_pressure_pa - 30_000.0 * seconds.min(1.0)).abs() < 1e-9);
-            if experiment.preparation_steps.is_multiple_of(32) {
+            if ((seconds * f64::from(REFERENCE_SUBSTEPS_PER_SECOND)).round() as u32)
+                .is_multiple_of(32)
+            {
                 println!(
                     "TRACE {:.6} {:.6} {:.6}",
                     seconds,

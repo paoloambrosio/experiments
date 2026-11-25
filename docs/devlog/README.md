@@ -1,6 +1,6 @@
 # Devlog
 
-Each entry documents one development step. Supporting diagrams, media, and deep dives live beside the corresponding entry.
+Each entry documents a development step in the `vehicle_physics` core crate. Supporting diagrams, media, and deep dives live beside the corresponding entry.
 
 ## Completed
 
@@ -14,8 +14,9 @@ Each entry documents one development step. Supporting diagrams, media, and deep 
 - [008 — Loaded wheel and suspension](008-loaded-wheel-and-suspension/README.md) tests the tyre under a 1,000 kg car's corner load and measures suspension travel over a rounded step.
 - [009 — Loaded tyre grip](009-loaded-tyre-grip/README.md) measures longitudinal, lateral, and combined slip at three loads and two speeds.
 - [010 — Scripted whole-car handling](010-scripted-whole-car-handling/README.md) measures launch, turns, stopping distances, load transfer, and wheel lock with four live deformable tyres.
+- [011 — Reference car assembly](011-reference-car-assembly/README.md) extracts the sealed reference tyre and four-corner chassis assembly into the core crate and checks them against the loaded-wheel and whole-car baselines.
 
 ## Roadmap
 
-1. **Driving controls.** Add human input using the scripted handling baseline.
+The next core milestone is open.
 
