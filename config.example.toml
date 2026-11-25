@@ -1,0 +1,7 @@
+[assets]
+terrain = 'path/to/CM 0.5.zip'
+vehicle = 'path/to/accord23.zip'
+
+# Use the full entry name printed by vehicle_drive to select it directly.
+# terrain_entry = 'CM.terrn2'
+# vehicle_entry = 'accord.truck'

@@ -1,5 +1,19 @@
 # Vehicle physics user guide
 
+## Select a terrain and vehicle
+
+Copy the workspace-root `config.example.toml` to `config.toml` and set the two ZIP paths under `[assets]`. TOML single-quoted paths can contain Windows backslashes directly. Git ignores the local `config.toml`.
+
+Run from the workspace root.
+
+```sh
+cargo run -p vehicle_drive
+```
+
+A ZIP with a single matching definition selects it automatically. In a terminal, use the numbered menu when a ZIP has multiple definitions. For a repeatable selection, add `vehicle_entry = 'accord.truck'` under `[assets]`. Use `terrain_entry` the same way. Copy the full entry name from the menu, including any directories and the original spelling. An unattended run with multiple candidates lists them and asks for an explicit entry in the config.
+
+Use `--config <path>` to select a different TOML file. Relative ZIP paths are interpreted from the directory containing that file. On success the command prints each ZIP path and the selected definition. [Drive roadmap](../drive-roadmap.md)
+
 ## Use imported asset geometry
 
 Use the `vehicle_assets` crate to represent terrain meshes, height samples, and vehicle and wheel geometry in memory. Call `TerrainAsset::validate()` or `VehicleAsset::validate()` before consuming these values. Validation errors identify the field and any relevant element indices. Positions and dimensions use metres, with +Y up, +Z forward, and +X to vehicle left. [Imported terrain and vehicle roadmap](../drive-roadmap.md)

@@ -4,6 +4,7 @@
 //! +Z forward and +X to vehicle left. Converters resolve source coordinates
 //! and references before handing these types to an application.
 
+pub mod ror;
 mod validation;
 
 use bevy_math::{Quat, Vec2, Vec3};

@@ -5,3 +5,7 @@ edition.workspace = true
 
 [dependencies]
 bevy_math.workspace = true
+zip.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
