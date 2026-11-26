@@ -1,7 +1,8 @@
 use bevy::prelude::*;
+use vehicle_physics::vehicle_assembly::WHEEL_NAMES;
 
 use crate::{
-    drive::{DriveSession, DriverInput, TICKS_PER_SECOND},
+    drive::{DriveSession, DriveSetup, DriverInput, TICKS_PER_SECOND},
     placement,
 };
 
@@ -12,7 +13,7 @@ const DRIVE: DriverInput = DriverInput {
 };
 
 pub(crate) fn run(mut run: DriveSession) -> Result<(), String> {
-    let mut clearance = settle(&mut run)?;
+    let mut clearance = settle(&mut run)?.clearance_m;
     let forward = run.setup.start.rotation * Vec3::Z;
     let speed = |run: &DriveSession| run.chassis().2.with_y(0.0).length();
     let tick_seconds = 1.0 / TICKS_PER_SECOND as f32;
@@ -108,8 +109,15 @@ pub(crate) fn run(mut run: DriveSession) -> Result<(), String> {
     Ok(())
 }
 
-fn settle(run: &mut DriveSession) -> Result<f32, String> {
+struct Settled {
+    clearance_m: f32,
+    load_centres_m: [Option<f64>; 4],
+}
+
+fn settle(run: &mut DriveSession) -> Result<Settled, String> {
     let mut mean = [0.0; 4];
+    let mut normal = [0.0; 4];
+    let mut moment = [0.0; 4];
     let mut clearance = f32::INFINITY;
     for tick in 0..(5 * TICKS_PER_SECOND) {
         run.step(DriverInput {
@@ -118,8 +126,13 @@ fn settle(run: &mut DriveSession) -> Result<f32, String> {
         })?;
         clearance = clearance.min(run.clearance_m());
         if tick >= 4 * TICKS_PER_SECOND {
-            for (sum, sample) in mean.iter_mut().zip(run.support()) {
-                *sum += sample / f64::from(TICKS_PER_SECOND);
+            for (i, reaction) in run.reactions().into_iter().enumerate() {
+                let load = reaction.normal_force.y;
+                mean[i] += (load + reaction.tangential_force.y) / f64::from(TICKS_PER_SECOND);
+                if let Some(centre) = reaction.lateral_load_centre_m {
+                    normal[i] += load;
+                    moment[i] += load * centre;
+                }
             }
         }
     }
@@ -138,7 +151,104 @@ fn settle(run: &mut DriveSession) -> Result<f32, String> {
     println!(
         "Settled: support {mean:.1?} N, total {support:.1} / {weight:.1} N, rim clearance {clearance:.3} m"
     );
-    Ok(clearance)
+    Ok(Settled {
+        clearance_m: clearance,
+        load_centres_m: std::array::from_fn(|i| (normal[i] > 0.0).then(|| moment[i] / normal[i])),
+    })
+}
+
+pub(crate) fn compare_alignment(upright: DriveSetup, authored: DriveSetup) -> Result<(), String> {
+    let (upright_centres, upright_scrub) = sample_alignment("Upright", upright)?;
+    let alignments = authored.alignments();
+    let (authored_centres, authored_scrub) = sample_alignment("Authored", authored)?;
+    println!(
+        "Load offset is positive toward vehicle left. Positive camber leans outward and positive toe points inward."
+    );
+    println!(
+        "        Authored camber/toe           Load centre (mm)       Mean |lateral force| (N)"
+    );
+    println!(
+        "Wheel      camber°      toe°        upright    authored           upright    authored"
+    );
+
+    for (i, name) in WHEEL_NAMES.into_iter().enumerate() {
+        let side = if i % 2 == 0 { 1.0 } else { -1.0 };
+        let axle = alignments[i].rotation() * Vec3::X;
+        let camber = (-side * axle.y.atan2(axle.x.hypot(axle.z))).to_degrees();
+        let toe = (side * axle.z.atan2(axle.x)).to_degrees();
+        let centre_mm = |offset: Option<f64>| {
+            offset.map_or_else(|| "unloaded".to_owned(), |m| format!("{:+.2}", 1000.0 * m))
+        };
+        println!(
+            "{name:5} {camber:12.3} {toe:9.3} {:>13} {:>11} {:17.2} {:11.2}",
+            centre_mm(upright_centres[i]),
+            centre_mm(authored_centres[i]),
+            upright_scrub[i],
+            authored_scrub[i],
+        );
+    }
+    Ok(())
+}
+
+fn sample_alignment(
+    label: &str,
+    setup: DriveSetup,
+) -> Result<([Option<f64>; 4], [f64; 4]), String> {
+    const MIN_SPEED_MPS: f32 = 2.0;
+    const MAX_SPEED_MPS: f32 = 4.0;
+    const LEVEL_TOLERANCE_M: f32 = 0.005;
+
+    let lateral = setup.start.rotation * Vec3::X;
+    let forward = setup.start.rotation * Vec3::Z;
+    let mut run = DriveSession::new(setup)?;
+    let road_heights = |run: &DriveSession| {
+        run.rims().map(|rim| {
+            placement::support_below(&run.setup.collision.triangles, rim.centre.as_vec3())
+        })
+    };
+    let error = || format!("{label} alignment report requires a level start and straight approach");
+    let floor = road_heights(&run)[0].ok_or_else(error)?;
+    let check_level = |run: &DriveSession| {
+        road_heights(run)
+            .into_iter()
+            .all(|height| height.is_some_and(|height| (height - floor).abs() <= LEVEL_TOLERANCE_M))
+    };
+    if !check_level(&run) {
+        return Err(error());
+    }
+
+    println!("{label} alignment");
+    let settled = settle(&mut run)?;
+    let mut forces = [0.0; 4];
+    let mut count = 0;
+    for _ in 0..8 * TICKS_PER_SECOND {
+        run.step(DRIVE)?;
+        if !check_level(&run) {
+            return Err(error());
+        }
+        let speed = run.chassis().2.dot(forward);
+        if speed > MAX_SPEED_MPS {
+            if count == 0 {
+                return Err(format!(
+                    "{label} alignment skipped the rolling speed window"
+                ));
+            }
+            println!("Rolling at {MIN_SPEED_MPS:.0}–{MAX_SPEED_MPS:.0} m/s, {count} samples");
+            return Ok((
+                settled.load_centres_m,
+                forces.map(|force| force / f64::from(count)),
+            ));
+        }
+        if speed >= MIN_SPEED_MPS {
+            for (force, reaction) in forces.iter_mut().zip(run.reactions()) {
+                *force += reaction.tangential_force.dot(lateral.as_dvec3()).abs();
+            }
+            count += 1;
+        }
+    }
+    Err(format!(
+        "{label} alignment did not reach {MAX_SPEED_MPS} m/s in 8 s"
+    ))
 }
 
 fn bounds(triangles: &[[Vec3; 3]]) -> (Vec3, Vec3) {
@@ -155,7 +265,7 @@ fn check_ramp(
     name: &str,
     heading_deg: f32,
 ) -> Result<(), String> {
-    let mut clearance = settle(run)?;
+    let mut clearance = settle(run)?.clearance_m;
     let base = run.rims().map(|wheel| wheel.centre.y);
     let mut on_ramp = [false; 4];
     let mut rise = [0.0_f64; 4];

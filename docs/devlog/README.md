@@ -17,9 +17,6 @@ Each entry documents a development step in the `vehicle_physics` core crate. Sup
 - [011 — Reference car assembly](011-reference-car-assembly/README.md) extracts the sealed reference tyre and four-corner chassis assembly into the core crate and checks them against the loaded-wheel and whole-car baselines.
 - [012 — Tyre contact on driving surfaces](012-tyre-contact-on-driving-surfaces/README.md) adds static triangle roads and measures a loaded wheel crossing a coplanar seam and climbing a ramp.
 - [013 — Data-driven rigid vehicle assembly](013-data-driven-rigid-vehicle-assembly/README.md) uses one assembly path for the reference car and a second car with staggered tyres and axle tracks.
-
-## Roadmap
-
-- **014 · Authored wheel alignment** follows the first imported drive. Preserve rest camber and toe, compose steering with that alignment, and measure tread loading and straight-line scrub against the upright baseline.
+- [014 — Authored wheel alignment](014-authored-wheel-alignment/README.md) preserves rest camber and toe and measures their effect on tread loading and straight-line lateral forces.
 
 These core milestones support the [imported terrain and vehicle roadmap](../drive-roadmap.md).

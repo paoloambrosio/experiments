@@ -404,6 +404,16 @@ impl ElasticTyre {
             .map(|(_, states)| states.as_slice())
     }
 
+    pub(crate) fn tread_nodes(&self) -> std::ops::Range<usize> {
+        let segments = self.positions.len() / 5;
+        segments..4 * segments
+    }
+
+    #[cfg(feature = "avian")]
+    pub(crate) fn tread_positions_m(&self) -> &[DVec3] {
+        &self.positions[self.tread_nodes()]
+    }
+
     /// Current node positions in tyre-local metres.
     pub fn positions(&self) -> &[DVec3] {
         &self.positions

@@ -17,6 +17,32 @@ use crate::{
     mounted_tyre::{MountedTyre, RimMotion},
 };
 
+/// Rest orientation from wheel coordinates to chassis coordinates.
+///
+/// Wheel-local +X is the spin axis pointing toward vehicle left. Wheel-local +Y
+/// is the projection of chassis up onto the wheel plane before the rim spins.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct WheelAlignment(Quat);
+
+impl WheelAlignment {
+    /// Construct from a chassis-local unit axle with positive X.
+    pub fn from_axle(axle: Vec3) -> Option<Self> {
+        if !axle.is_normalized() || axle.x <= 0.0 {
+            return None;
+        }
+        let axle = axle.normalize();
+        let forward = axle.cross(Vec3::Y).try_normalize()?;
+        let up = forward.cross(axle);
+        Some(Self(
+            Quat::from_mat3(&Mat3::from_cols(axle, up, forward)).normalize(),
+        ))
+    }
+
+    pub fn rotation(self) -> Quat {
+        self.0
+    }
+}
+
 /// Chassis-local vertical suspension, with length measured down from the mount.
 #[derive(Clone, Copy, Debug)]
 pub struct Suspension {
@@ -178,7 +204,13 @@ impl WheelCorner {
         if world.get::<RigidBody>(chassis).is_none() {
             return Err(CornerError::MissingChassis);
         }
-        Ok(Self::prepare(tyre, config)?.spawn(world, chassis))
+        let hub_rotation = tyre.rim().rotation.as_quat();
+        Ok(Self::prepare(tyre, config)?.spawn(
+            world,
+            chassis,
+            hub_rotation,
+            WheelAlignment::default(),
+        ))
     }
 
     pub(crate) fn prepare(
@@ -206,7 +238,13 @@ pub(crate) struct PreparedCorner<B> {
 }
 
 impl<B: Bundle> PreparedCorner<B> {
-    pub(crate) fn spawn(self, world: &mut World, chassis: Entity) -> WheelCorner {
+    pub(crate) fn spawn(
+        self,
+        world: &mut World,
+        chassis: Entity,
+        hub_rotation: Quat,
+        alignment: WheelAlignment,
+    ) -> WheelCorner {
         let Self {
             rim_bundle,
             motion,
@@ -219,7 +257,7 @@ impl<B: Bundle> PreparedCorner<B> {
                 RigidBody::Dynamic,
                 SleepingDisabled,
                 Position(motion.centre.as_vec3()),
-                Rotation(motion.rotation.as_quat()),
+                Rotation(hub_rotation),
                 LinearVelocity(motion.linear_velocity.as_vec3()),
                 Mass(config.upright_mass_kg),
                 AngularInertia::new(Vec3::splat(config.upright_mass_kg * 0.02)),
@@ -240,11 +278,15 @@ impl<B: Bundle> PreparedCorner<B> {
             .id();
         let spin_joint = world
             .spawn((
-                RevoluteJoint::new(hub, rim).with_hinge_axis(Vec3::X),
+                RevoluteJoint::new(hub, rim)
+                    .with_hinge_axis(Vec3::X)
+                    .with_local_basis1(alignment.rotation())
+                    .with_local_basis2(Quat::IDENTITY),
                 WheelControl::default(),
                 WheelActuator {
                     chassis,
                     suspension_joint,
+                    alignment,
                 },
             ))
             .id();
@@ -257,10 +299,16 @@ impl<B: Bundle> PreparedCorner<B> {
     }
 }
 
-fn steer_wheels(mut wheels: Query<(&WheelControl, &mut RevoluteJoint), Changed<WheelControl>>) {
-    for (control, mut joint) in &mut wheels {
+fn steer_wheels(
+    mut wheels: Query<
+        (&WheelControl, Option<&WheelActuator>, &mut RevoluteJoint),
+        Changed<WheelControl>,
+    >,
+) {
+    for (control, actuator, mut joint) in &mut wheels {
         if control.steer_rad.is_finite() {
-            let basis = Quat::from_rotation_y(control.steer_rad);
+            let rest = actuator.map_or(Quat::IDENTITY, |wheel| wheel.alignment.rotation());
+            let basis = Quat::from_rotation_y(control.steer_rad) * rest;
             if joint.local_basis1() != Some(basis) {
                 joint.frame1.basis = JointBasis::Local(basis);
             }
@@ -272,6 +320,7 @@ fn steer_wheels(mut wheels: Query<(&WheelControl, &mut RevoluteJoint), Changed<W
 struct WheelActuator {
     chassis: Entity,
     suspension_joint: Entity,
+    alignment: WheelAlignment,
 }
 
 fn apply_wheel_torque(
@@ -484,6 +533,7 @@ mod tests {
             WheelActuator {
                 chassis,
                 suspension_joint,
+                alignment: WheelAlignment::default(),
             },
             WheelControl {
                 drive_nm: 12.0,

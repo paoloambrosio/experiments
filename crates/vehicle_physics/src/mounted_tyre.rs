@@ -238,6 +238,9 @@ pub struct TriangleReaction {
     pub tangential_force: DVec3,
     /// Maximum penetration below a selected face, measured along its normal in metres.
     pub penetration_m: f64,
+    /// Normal-force-weighted distance along rim-local +X from the wheel centre.
+    /// In metres. None when the tread carries no normal load.
+    pub lateral_load_centre_m: Option<f64>,
 }
 
 /// Reuses the elastic carcass in world space. The rigid rim includes both bead rings' mass.
@@ -264,8 +267,7 @@ impl MountedTyre {
     ) -> Result<Self, ElasticTyreError> {
         rim.validate()?;
         let node_count = tyre.positions().len();
-        let segments = node_count / 5;
-        let tread_nodes = segments..4 * segments;
+        let tread_nodes = tyre.tread_nodes();
         let tread_triangles = triangulate(tyre.topology())
             .into_iter()
             .filter(|face| face.nodes.iter().all(|index| tread_nodes.contains(index)))
@@ -458,6 +460,9 @@ impl MountedTyre {
             Some(self.rim.centre),
             |positions, velocities, forces| {
                 if let Some((road, contact)) = triangle_road {
+                    let axle = self.rim.rotation * DVec3::X;
+                    let mut normal_load = 0.0;
+                    let mut lateral_load_moment = 0.0;
                     for index in tread_nodes {
                         let Some(hit) = road.contact(positions[index]) else {
                             continue;
@@ -472,14 +477,23 @@ impl MountedTyre {
                         let tangent = contact.friction_force(normal, slip, dt_over_mass);
                         forces[index] += normal_force + tangent;
                         triangle_reaction.normal_force += normal_force;
+                        normal_load += normal;
+                        lateral_load_moment +=
+                            normal * (positions[index] - self.rim.centre).dot(axle);
                         triangle_reaction.tangential_force += tangent;
                         triangle_reaction.penetration_m =
                             triangle_reaction.penetration_m.max(depth);
                     }
                     if !triangle_reaction.normal_force.is_finite()
                         || !triangle_reaction.tangential_force.is_finite()
+                        || !normal_load.is_finite()
+                        || !lateral_load_moment.is_finite()
                     {
                         return Err(ElasticTyreError::NonFiniteStep);
+                    }
+                    if normal_load > 0.0 {
+                        triangle_reaction.lateral_load_centre_m =
+                            Some(lateral_load_moment / normal_load);
                     }
                     return Ok(());
                 }
@@ -807,6 +821,76 @@ mod tests {
     }
 
     #[test]
+    fn camber_shifts_settled_load_and_toe_causes_lateral_scrub() {
+        let vertices = [
+            DVec3::new(-2.0, 0.0, -2.0),
+            DVec3::new(2.0, 0.0, -2.0),
+            DVec3::new(2.0, 0.0, 5.0),
+            DVec3::new(-2.0, 0.0, 5.0),
+        ];
+        let road = Arc::new(TriangleRoad::new(&vertices, &[[0, 1, 2], [0, 2, 3]], 0.05).unwrap());
+        let contact = ContactParameters::new(100_000.0, 150.0)
+            .unwrap()
+            .with_friction(0.8, 0.1)
+            .unwrap();
+        let measure = |alignment: DQuat, rolling: bool| {
+            const RATE: u32 = 3840;
+            let dt = 1.0 / f64::from(RATE);
+            let mut rim = RimMotion {
+                centre: DVec3::Y * 0.30,
+                rotation: alignment,
+                ..Default::default()
+            };
+            let mut tyre = MountedTyre::new(rest_tyre(), rim, None).unwrap();
+            tyre.set_triangle_road(Arc::clone(&road), contact);
+            let mut lateral_moment = 0.0;
+            let mut normal = 0.0;
+            let mut lateral_force = 0.0;
+            for tick in 0..RATE + RATE / 2 {
+                let t = f64::from(tick) * dt;
+                let speed = if rolling {
+                    2.0 * (t / 0.5).min(1.0)
+                } else {
+                    0.0
+                };
+                let spin = speed / 0.30;
+                rim.linear_velocity = speed * DVec3::Z;
+                rim.angular_velocity = (alignment * DVec3::X) * spin;
+                rim.centre += rim.linear_velocity * dt;
+                rim.rotation = (rim.rotation * DQuat::from_rotation_x(spin * dt)).normalize();
+                tyre.sync_rim(rim).unwrap();
+                tyre.step(dt, DVec3::NEG_Y * 9.81).unwrap();
+                if tick >= RATE {
+                    let reaction = tyre.triangle_reaction();
+                    if let Some(centre) = reaction.lateral_load_centre_m {
+                        lateral_moment += centre * reaction.normal_force.y;
+                        normal += reaction.normal_force.y;
+                    }
+                    lateral_force += reaction.tangential_force.x;
+                }
+            }
+            assert!(normal > 0.0);
+            (lateral_moment / normal, lateral_force / f64::from(RATE / 2))
+        };
+        let (upright_load, _) = measure(DQuat::IDENTITY, false);
+        let (_, upright_force) = measure(DQuat::IDENTITY, true);
+        let (camber, _) = measure(DQuat::from_rotation_z(0.10), false);
+        let (opposite_camber, _) = measure(DQuat::from_rotation_z(-0.10), false);
+        let (_, toe) = measure(DQuat::from_rotation_y(0.08), true);
+        let (_, opposite_toe) = measure(DQuat::from_rotation_y(-0.08), true);
+        let load_tolerance = upright_load.abs() + 0.001;
+        let force_tolerance = upright_force.abs() + 1.0;
+        assert!(
+            camber < -load_tolerance && opposite_camber > load_tolerance,
+            "load centres upright {upright_load}, cambered {camber}, mirrored {opposite_camber}"
+        );
+        assert!(
+            toe > force_tolerance && opposite_toe < -force_tolerance,
+            "lateral forces upright {upright_force}, toe {toe}, mirrored {opposite_toe}"
+        );
+    }
+
+    #[test]
     fn triangle_contact_follows_the_ramp_normal_and_releases() {
         let vertices = [
             DVec3::new(-1.0, -0.1, -1.0),
@@ -848,5 +932,6 @@ mod tests {
         assert!(reaction.penetration_m > 0.0);
         assert_eq!(reaction.normal_force, DVec3::ZERO);
         assert_eq!(reaction.tangential_force, DVec3::ZERO);
+        assert_eq!(reaction.lateral_load_centre_m, None);
     }
 }

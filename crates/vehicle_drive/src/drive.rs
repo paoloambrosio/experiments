@@ -9,12 +9,12 @@ use vehicle_assets::{
 use vehicle_physics::{
     avian_suspension::{AvianSuspensionPlugin, Suspension, WheelControl},
     avian_tyre::{AvianTyre, AvianTyrePlugin},
-    mounted_tyre::{ContactParameters, RimMotion},
+    mounted_tyre::{ContactParameters, RimMotion, TriangleReaction},
     reference_car::{self, G},
     triangle_road::TriangleRoad,
     vehicle_assembly::{
         ChassisSpec, PreparedVehicle, VehicleAssembly, VehiclePose, VehicleRoad, VehicleSpec,
-        WHEEL_NAMES, WheelSpec,
+        WHEEL_NAMES, WheelAlignment, WheelSpec,
     },
 };
 
@@ -38,9 +38,16 @@ const ROAD_TRANSITION_SPEED_MPS: f64 = 0.1;
 const ROAD_CONTACT_DEPTH_M: f64 = 0.05;
 
 #[derive(Clone, Copy)]
+pub(crate) enum AlignmentMode {
+    Authored,
+    Upright,
+}
+
+#[derive(Clone, Copy)]
 struct WheelInput {
     geometry_index: usize,
     data: WheelPhysics,
+    alignment: WheelAlignment,
     spec: WheelSpec,
     drive_nm: f32,
     brake_nm: f32,
@@ -61,12 +68,13 @@ impl DriveSetup {
         report_ramp: Option<RampApproach>,
         terrain: &TerrainImport,
         vehicle: &VehicleImport,
+        alignment: AlignmentMode,
     ) -> Result<Self, String> {
         let asset = &vehicle.vehicle;
         let chassis = asset.physics.chassis.ok_or_else(|| {
             format!("{}: missing rigid chassis properties from the authored nodes, beams, globals, and body mesh", vehicle.entry)
         })?;
-        let wheels = resolve_wheels(&asset.wheels, &asset.physics.wheels)
+        let wheels = resolve_wheels(&asset.wheels, &asset.physics.wheels, alignment)
             .map_err(|error| format!("{}: {error}", vehicle.entry))?;
         let specification = VehicleSpec {
             chassis: ChassisSpec {
@@ -78,7 +86,8 @@ impl DriveSetup {
         };
         let prepared = specification
             .prepare(TICKS_PER_SECOND * SUBSTEPS)
-            .map_err(|error| format!("cannot prepare physics for {}: {error}", vehicle.entry))?;
+            .map_err(|error| format!("cannot prepare physics for {}: {error}", vehicle.entry))?
+            .with_wheel_alignments(wheels.map(|wheel| wheel.alignment));
         if prepared
             .geometry()
             .front_steer(MAX_STEER_DEG.to_radians())
@@ -115,7 +124,7 @@ impl DriveSetup {
             placement::start_hint(terrain)?,
             Quat::IDENTITY,
             specification.wheels.map(Option::unwrap),
-            prepared.unloaded_radii_m(),
+            &prepared,
         )
         .map_err(|error| format!("{} terrain start: {error}", terrain.terrain.name))?;
         Ok(Self {
@@ -135,7 +144,7 @@ impl DriveSetup {
             hint,
             rotation,
             self.specification.wheels.map(Option::unwrap),
-            self.prepared.unloaded_radii_m(),
+            &self.prepared,
         )
     }
 
@@ -158,6 +167,10 @@ impl DriveSetup {
             })
             .sum::<f64>();
         (f64::from(self.specification.chassis.mass_kg) + total) * G
+    }
+
+    pub(crate) fn alignments(&self) -> [WheelAlignment; 4] {
+        self.prepared.wheel_alignments()
     }
 
     pub(crate) fn report_ramp(&self) -> Option<&RampApproach> {
@@ -251,6 +264,7 @@ impl DriveSetup {
 fn resolve_wheels(
     geometry: &[WheelGeometry],
     details: &[WheelPhysics],
+    alignment: AlignmentMode,
 ) -> Result<[WheelInput; 4], String> {
     if geometry.len() != 4 || details.len() != 4 {
         return Err("driving requires four meshwheels2 wheels".into());
@@ -274,7 +288,7 @@ fn resolve_wheels(
     }
     let [fl, fr, rl, rr] = std::array::from_fn(|position| {
         let index = ordered[position];
-        build_wheel(index, &geometry[index], details[index])
+        build_wheel(index, &geometry[index], details[index], alignment)
             .map_err(|error| format!("{}: {error}", WHEEL_NAMES[position]))
     });
     Ok([fl?, fr?, rl?, rr?])
@@ -284,6 +298,7 @@ fn build_wheel(
     geometry_index: usize,
     geometry: &WheelGeometry,
     data: WheelPhysics,
+    mode: AlignmentMode,
 ) -> Result<WheelInput, &'static str> {
     let mass = data.mass_kg.ok_or("missing positive authored wheel mass")?;
     let upright_mass_kg = data
@@ -299,6 +314,11 @@ fn build_wheel(
         .brake_torque_nm
         .ok_or("missing supported service-brake torque")?;
     let bead = geometry.rim_radius.ok_or("missing authored rim radius")?;
+    let alignment = match mode {
+        AlignmentMode::Authored => WheelAlignment::from_axle(geometry.axle)
+            .ok_or("expected an authored unit axle pointing to vehicle left")?,
+        AlignmentMode::Upright => WheelAlignment::default(),
+    };
     let mut tyre = reference_car::tyre_spec();
     tyre.geometry.bead_radius = bead;
     tyre.geometry.tread_radius = geometry.outer_radius;
@@ -313,6 +333,7 @@ fn build_wheel(
         data,
         drive_nm,
         brake_nm,
+        alignment,
         spec: WheelSpec {
             centre_m: geometry.centre,
             initial_length_m: suspension.initial_length_m,
@@ -335,13 +356,16 @@ fn spawn_pose(
     hint: Vec3,
     rotation: Quat,
     wheels: [WheelSpec; 4],
-    radii: [f64; 4],
+    prepared: &PreparedVehicle,
 ) -> Result<VehiclePose, String> {
     let mut lift = f32::NEG_INFINITY;
-    for (i, wheel) in wheels.into_iter().enumerate() {
-        for side in [-0.5, 0.0, 0.5] {
-            let point = wheel.centre_m + Vec3::X * side * wheel.tyre.geometry.shoulder_width;
-            let sample = rotation * point + hint.with_y(0.0);
+    let treads = prepared.unloaded_tread_positions_m();
+    let alignments = prepared.wheel_alignments();
+    for (i, (wheel, tread)) in wheels.into_iter().zip(treads).enumerate() {
+        let centre = rotation * wheel.centre_m + hint.with_y(0.0);
+        let wheel_rotation = rotation * alignments[i].rotation();
+        for &node in tread {
+            let sample = centre + wheel_rotation * node.as_vec3();
             let support =
                 placement::support_below(triangles, sample.with_y(hint.y)).ok_or_else(|| {
                     format!(
@@ -349,7 +373,7 @@ fn spawn_pose(
                         WHEEL_NAMES[i], sample.x, sample.z
                     )
                 })?;
-            lift = lift.max(support + radii[i] as f32 - sample.y);
+            lift = lift.max(support - sample.y);
         }
     }
     Ok(VehiclePose {
@@ -479,17 +503,20 @@ impl DriveSession {
         })
     }
 
-    pub(crate) fn support(&self) -> [f64; 4] {
+    pub(crate) fn reactions(&self) -> [TriangleReaction; 4] {
         self.car.wheels.map(|wheel| {
-            let reaction = self
-                .app
+            self.app
                 .world()
                 .get::<AvianTyre>(wheel.rim)
                 .unwrap()
                 .tyre()
-                .triangle_reaction();
-            reaction.normal_force.y + reaction.tangential_force.y
+                .triangle_reaction()
         })
+    }
+
+    pub(crate) fn support(&self) -> [f64; 4] {
+        self.reactions()
+            .map(|reaction| reaction.normal_force.y + reaction.tangential_force.y)
     }
 
     pub(crate) fn clearance_m(&self) -> f32 {
@@ -498,10 +525,12 @@ impl DriveSession {
             .zip(self.specification_wheels())
             .map(|(rim, wheel)| {
                 let centre = rim.centre.as_vec3();
+                let axle_y = (rim.rotation * DVec3::X).y.abs().min(1.0) as f32;
+                let geometry = wheel.tyre.geometry;
+                let extent = geometry.bead_radius * (1.0 - axle_y * axle_y).sqrt()
+                    + 0.5 * geometry.bead_width * axle_y;
                 placement::support_below(&self.setup.collision.triangles, centre)
-                    .map_or(f32::NEG_INFINITY, |height| {
-                        centre.y - height - wheel.tyre.geometry.bead_radius
-                    })
+                    .map_or(f32::NEG_INFINITY, |height| centre.y - height - extent)
             })
             .fold(f32::INFINITY, f32::min)
     }
@@ -525,7 +554,7 @@ mod tests {
         let wheels = points
             .map(|(x, z)| WheelGeometry {
                 centre: Vec3::new(x, if z > 0.0 { 0.27 } else { 0.20 }, z),
-                axle: Vec3::X,
+                axle: Vec3::new(1.0, x * 0.06, -x * 0.03).normalize(),
                 width: 0.205,
                 outer_radius: 0.31,
                 rim_radius: Some(0.19),
@@ -623,7 +652,7 @@ mod tests {
     fn shuffled_wheels_share_transformed_road_and_reset_cleanly() {
         let mut vehicle = fixture_vehicle();
         let terrain = fixture_terrain();
-        let setup = DriveSetup::new(None, &terrain, &vehicle).unwrap();
+        let setup = DriveSetup::new(None, &terrain, &vehicle, AlignmentMode::Authored).unwrap();
         assert_eq!(setup.wheel_visuals().map(|(i, _)| i), [1, 3, 2, 0]);
         for (i, spec) in setup
             .specification
@@ -651,9 +680,31 @@ mod tests {
                 .unwrap_err()
                 .contains("FL")
         );
+        let lowest = setup
+            .prepared
+            .unloaded_tread_positions_m()
+            .into_iter()
+            .zip(setup.wheels)
+            .flat_map(|(tread, wheel)| {
+                tread.iter().map(move |node| {
+                    (wheel.spec.centre_m + wheel.alignment.rotation() * node.as_vec3()).y
+                })
+            })
+            .fold(f32::INFINITY, f32::min);
+        assert!((setup.start.origin_m.y + lowest - 2.0 - SPAWN_CLEARANCE_M).abs() < 1e-5);
         let mut run = DriveSession::new(setup).unwrap();
         let count = run.app.world().entities().count_spawned();
         let original = run.chassis().0;
+        let initial_rims = run.rims();
+        for ((rim, alignment), index) in initial_rims
+            .into_iter()
+            .zip(run.setup.alignments())
+            .zip([1, 3, 2, 0])
+        {
+            let axle = vehicle.vehicle.wheels[index].axle;
+            assert!((alignment.rotation() * Vec3::X).abs_diff_eq(axle, 1e-6));
+            assert!((rim.rotation * DVec3::X).abs_diff_eq(axle.as_dvec3(), 1e-6));
+        }
         for _ in 0..3 {
             for _ in 0..15 {
                 run.step(DriverInput {
@@ -675,6 +726,10 @@ mod tests {
             run.reset(run.setup.start).unwrap();
             assert_eq!(run.app.world().entities().count_spawned(), count);
             assert_eq!(run.chassis().0, original);
+            for (rim, initial) in run.rims().into_iter().zip(initial_rims) {
+                assert_eq!(rim.centre, initial.centre);
+                assert_eq!(rim.rotation, initial.rotation);
+            }
             assert_eq!(run.chassis().2, Vec3::ZERO);
             assert!(
                 run.rims()
@@ -683,6 +738,13 @@ mod tests {
             );
         }
         vehicle.vehicle.physics.wheels[0].side = WheelSide::Left;
-        assert!(resolve_wheels(&vehicle.vehicle.wheels, &vehicle.vehicle.physics.wheels).is_err());
+        assert!(
+            resolve_wheels(
+                &vehicle.vehicle.wheels,
+                &vehicle.vehicle.physics.wheels,
+                AlignmentMode::Authored
+            )
+            .is_err()
+        );
     }
 }

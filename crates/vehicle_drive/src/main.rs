@@ -58,14 +58,27 @@ fn main() -> ExitCode {
                 .conflicts_with_all(["view-terrain", "view-vehicle"])
                 .help("Run the imported driving checks without opening a window"),
         )
+        .arg(
+            Arg::new("alignment-report")
+                .long("alignment-report")
+                .action(ArgAction::SetTrue)
+                .conflicts_with_all(["view-terrain", "view-vehicle", "drive", "drive-report"])
+                .help("Compare authored and upright wheel alignment on level terrain"),
+        )
         .get_matches();
     let path = args
         .get_one::<PathBuf>("config")
         .expect("config has a default");
 
-    let report = args.get_flag("drive-report");
-    if args.get_flag("drive") || report {
-        return match start_drive(path, report) {
+    let mode = if args.get_flag("drive-report") {
+        Some(DriveMode::Report)
+    } else if args.get_flag("alignment-report") {
+        Some(DriveMode::AlignmentReport)
+    } else {
+        args.get_flag("drive").then_some(DriveMode::Interactive)
+    };
+    if let Some(mode) = mode {
+        return match start_drive(path, mode) {
             Ok(true) => ExitCode::SUCCESS,
             Ok(false) => ExitCode::FAILURE,
             Err(error) => {
@@ -180,9 +193,15 @@ fn import_scene(
     Ok((terrain, selected, vehicle))
 }
 
-fn start_drive(path: &Path, report: bool) -> Result<bool, String> {
+enum DriveMode {
+    Interactive,
+    Report,
+    AlignmentReport,
+}
+
+fn start_drive(path: &Path, mode: DriveMode) -> Result<bool, String> {
     let mut config = Config::read(path)?;
-    let ramp = if report {
+    let ramp = if matches!(mode, DriveMode::Report) {
         config
             .drive
             .take()
@@ -202,15 +221,26 @@ fn start_drive(path: &Path, report: bool) -> Result<bool, String> {
     let vehicle = vehicle.expect("drive imports a vehicle");
     print_import_summary(&terrain);
     print_vehicle_summary(&vehicle);
-    let setup = drive::DriveSetup::new(ramp, &terrain, &vehicle)
+    let setup = drive::DriveSetup::new(ramp, &terrain, &vehicle, drive::AlignmentMode::Authored)
         .map_err(|error| format!("config {}: {terrain_entry}: {error}", path.display()))?;
     setup.print_setup(&vehicle.entry, &terrain_entry);
-    let session = drive::DriveSession::new(setup)?;
-    if report {
-        drive_report::run(session)?;
-        Ok(true)
-    } else {
-        Ok(drive_view::run(session, terrain, vehicle))
+    match mode {
+        DriveMode::Interactive => Ok(drive_view::run(
+            drive::DriveSession::new(setup)?,
+            terrain,
+            vehicle,
+        )),
+        DriveMode::Report => {
+            drive_report::run(drive::DriveSession::new(setup)?)?;
+            Ok(true)
+        }
+        DriveMode::AlignmentReport => {
+            let upright =
+                drive::DriveSetup::new(None, &terrain, &vehicle, drive::AlignmentMode::Upright)
+                    .map_err(|error| format!("upright comparison: {terrain_entry}: {error}"))?;
+            drive_report::compare_alignment(upright, setup)?;
+            Ok(true)
+        }
     }
 }
 

@@ -63,9 +63,10 @@ Point `[assets]` in your local `config.toml` at the terrain and vehicle ZIPs. Fo
 ```sh
 cargo run -p vehicle_drive -- --drive
 cargo run -p vehicle_drive -- --drive-report
+cargo run -p vehicle_drive -- --alignment-report
 ```
 
-Both commands use the same imported vehicle and collision road. `--drive` opens the chase view with a speed readout. `--drive-report` checks settling, acceleration, steering, and braking without a window. To also cross a ramp, enable the optional `[drive.report_ramp]` table in the example config. The example approaches CMRamp1 from X = 265.1 m and Z = 192 m, facing +Z. The Y value bounds the search for the road beneath the wheels.
+The drive and reports use the same imported vehicle and collision road. The simulated wheels use the axle directions authored in the truck file. Steering turns each front wheel from its authored camber and toe. `--drive` opens the chase view with a speed readout. `--drive-report` checks settling, acceleration, steering, and braking without a window. To also cross a ramp, enable the optional `[drive.report_ramp]` table in the example config. The example approaches CMRamp1 from X = 265.1 m and Z = 192 m, facing +Z. The Y value bounds the search for the road beneath the wheels.
 
 | Key | Action |
 | --- | --- |
@@ -78,6 +79,10 @@ Both commands use the same imported vehicle and collision road. `--drive` opens 
 The RoR importer derives chassis mass and centre of mass from the authored node loads and supported beams, with the axle nodes assigned to the uprights. Body mesh bounds set the chassis inertia box. A single supported shock near each wheel supplies the vertical spring, damper, and travel through a linear projection at the authored pose. The chassis is collider-free. Only the tyres contact the road.
 
 The current drive uses fixed first-gear torque split across the driven wheels and each eligible wheel's authored service-brake limit. It uses the reference tyre material, 150 kPa gauge pressure, a 22% tyre share of wheel mass, 28° equivalent front steer, and uniform road contact settings. The report prints the effective values and their sources. A vehicle with incomplete physics properties can still be opened with `--view-vehicle`. [Drive roadmap](../drive-roadmap.md)
+
+### Compare wheel alignment
+
+`--alignment-report` repeats the level-road drive with upright and authored alignment. It measures the lateral centre of normal load across each tread during the last second of settling, then reports mean absolute lateral friction force per wheel from 2 to 4 m/s with the steering centred. Offset is positive toward vehicle left. Positive camber leans the wheel top outward and positive toe points the wheel inward. The comparison uses the terrain start and needs a level stretch of road ahead. [Core 014 results](../devlog/014-authored-wheel-alignment/README.md)
 
 ## Use imported asset geometry
 
@@ -120,7 +125,7 @@ let [left, right] = car.geometry.front_steer(0.1).expect("valid steering angle")
 car.despawn(world);
 ```
 
-The pose places the vehicle-local origin. The chassis entity sits at the transformed centre of mass, and each wheel starts at its transformed local centre. The caller supplies the start height, accounting for the road and the four inflated radii from `prepared.unloaded_radii_m()`. Mount offsets come from the wheel centres and initial suspension lengths. Use `VehicleRoad::Triangles` to share a static triangle road across the four tyres. Reuse the prepared specification across spawns. [Triangle road setup](#use-a-static-triangle-road)
+The pose places the vehicle-local origin. The chassis entity sits at the transformed centre of mass, and each wheel starts at its transformed local centre. Create each `WheelAlignment` from a unit vehicle-local axle pointing left and pass the array to `prepared.with_wheel_alignments()` in FL, FR, RL, RR order. Preparation defaults to upright wheels. The caller sets the start height using the road and inflated tyres. For tilted wheels, transform the tyre-local nodes from `prepared.unloaded_tread_positions_m()` by the wheel and vehicle rotations before checking road clearance. Mount offsets come from the wheel centres and initial suspension lengths. Use `VehicleRoad::Triangles` to share a static triangle road across the four tyres. Reuse the prepared specification across spawns. [Triangle road setup](#use-a-static-triangle-road)
 
 ## Run the lab
 

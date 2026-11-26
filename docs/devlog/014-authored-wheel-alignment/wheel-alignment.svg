@@ -1,0 +1,55 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 740 318" role="img" aria-labelledby="title desc">
+  <title id="title">Camber and toe of the left wheel</title>
+  <desc id="desc">Viewed from behind, positive camber tilts the wheel top outward. Viewed from above, positive toe points the wheel forward direction inward. Both examples use the same leftward axle convention.</desc>
+  <defs>
+    <marker id="axis" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
+      <path d="M0 0L8 4L0 8Z" fill="#62748b"/>
+    </marker>
+    <marker id="wheel" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
+      <path d="M0 0L8 4L0 8Z" fill="#087c79"/>
+    </marker>
+  </defs>
+  <rect width="740" height="318" rx="12" fill="#f7f9fc"/>
+  <g fill="none" stroke="#d4dce6">
+    <rect x="16" y="16" width="346" height="286" rx="8"/>
+    <rect x="378" y="16" width="346" height="286" rx="8"/>
+  </g>
+  <g font-family="system-ui, sans-serif" fill="#203448">
+    <g font-size="18" font-weight="600">
+      <text x="36" y="48">Rear view · left wheel</text>
+      <text x="398" y="48">Top view · left wheel</text>
+    </g>
+    <g font-size="13" fill="#4c6077">
+      <text x="36" y="70">Positive camber leans outward</text>
+      <text x="398" y="70">Positive toe points inward</text>
+    </g>
+    <g font-size="14">
+      <text x="178" y="101">+Y up</text>
+      <text x="257" y="175">+X left</text>
+      <text x="540" y="101">+Z forward</text>
+      <text x="618" y="175">+X left</text>
+    </g>
+  </g>
+  <g stroke="#62748b" stroke-dasharray="4 5" stroke-width="1.5" fill="none" marker-end="url(#axis)">
+    <path d="M144 244V98"/>
+    <path d="M90 179H303"/>
+    <path d="M506 244V98"/>
+    <path d="M452 179H665"/>
+  </g>
+  <g fill="#d1efed" fill-opacity=".7" stroke="#087c79" stroke-width="2">
+    <rect x="132" y="119" width="24" height="120" rx="5" transform="rotate(17 144 179)"/>
+    <rect x="494" y="119" width="24" height="120" rx="5" transform="rotate(-17 506 179)"/>
+  </g>
+  <g fill="none" stroke="#087c79" stroke-width="2" marker-end="url(#wheel)">
+    <path d="M144 179L268 217"/>
+    <path d="M506 179L630 141"/>
+  </g>
+  <g fill="#087c79" font-family="system-ui, sans-serif" font-size="14">
+    <text x="229" y="240">Wheel axle</text>
+    <text x="597" y="130">Wheel axle</text>
+  </g>
+  <g fill="#4c6077" font-family="system-ui, sans-serif" font-size="13">
+    <text x="36" y="279">The outer shoulder sits lower here.</text>
+    <text x="398" y="279">The wheel rolls at an angle to +Z.</text>
+  </g>
+</svg>
