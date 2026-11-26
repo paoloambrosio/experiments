@@ -1,4 +1,7 @@
 mod config;
+mod drive;
+mod drive_report;
+mod drive_view;
 mod placement;
 mod view;
 
@@ -41,10 +44,36 @@ fn main() -> ExitCode {
                 .conflicts_with("view-terrain")
                 .help("Inspect the selected vehicle on the selected terrain"),
         )
+        .arg(
+            Arg::new("drive")
+                .long("drive")
+                .action(ArgAction::SetTrue)
+                .conflicts_with_all(["view-terrain", "view-vehicle", "drive-report"])
+                .help("Drive the selected vehicle on imported collision geometry"),
+        )
+        .arg(
+            Arg::new("drive-report")
+                .long("drive-report")
+                .action(ArgAction::SetTrue)
+                .conflicts_with_all(["view-terrain", "view-vehicle"])
+                .help("Run the imported driving checks without opening a window"),
+        )
         .get_matches();
     let path = args
         .get_one::<PathBuf>("config")
         .expect("config has a default");
+
+    let report = args.get_flag("drive-report");
+    if args.get_flag("drive") || report {
+        return match start_drive(path, report) {
+            Ok(true) => ExitCode::SUCCESS,
+            Ok(false) => ExitCode::FAILURE,
+            Err(error) => {
+                eprintln!("{error}");
+                ExitCode::FAILURE
+            }
+        };
+    }
 
     let result = {
         let stdin = io::stdin();
@@ -53,7 +82,31 @@ fn main() -> ExitCode {
         let mut diagnostics = stderr.lock();
         let show_vehicle = args.get_flag("view-vehicle");
         if show_vehicle || args.get_flag("view-terrain") {
-            import_for_view(path, show_vehicle, input.as_mut(), &mut diagnostics).map(Some)
+            Config::read(path).and_then(|config| {
+                let (terrain, _, vehicle) = import_scene(
+                    path,
+                    &config,
+                    show_vehicle,
+                    input.as_mut(),
+                    &mut diagnostics,
+                )?;
+                let vehicle = vehicle
+                    .map(|import| {
+                        let translation =
+                            placement::park(&terrain, &import.vehicle).map_err(|error| {
+                                format!(
+                                    "cannot park {} in {}: {error}",
+                                    import.vehicle.name, terrain.terrain.name
+                                )
+                            })?;
+                        Ok::<_, String>(view::ParkedVehicle {
+                            import,
+                            translation,
+                        })
+                    })
+                    .transpose()?;
+                Ok(Some(view::Scene { terrain, vehicle }))
+            })
         } else {
             run(
                 path,
@@ -84,13 +137,13 @@ fn main() -> ExitCode {
     }
 }
 
-fn import_for_view(
+fn import_scene(
     path: &Path,
+    config: &Config,
     show_vehicle: bool,
     mut input: Option<&mut impl BufRead>,
     diagnostics: &mut impl Write,
-) -> Result<view::Scene, String> {
-    let config = Config::read(path)?;
+) -> Result<(TerrainImport, String, Option<VehicleImport>), String> {
     let vehicle_archive =
         if show_vehicle {
             Some(
@@ -120,21 +173,45 @@ fn import_for_view(
             input,
             diagnostics,
         )?;
-        let import = load_vehicle(archive, &selected).map_err(|error| error.to_string())?;
-        let translation = placement::park(&terrain, &import.vehicle).map_err(|error| {
-            format!(
-                "cannot park {} in {}: {error}",
-                import.vehicle.name, terrain.terrain.name
-            )
-        })?;
-        Some(view::ParkedVehicle {
-            import,
-            translation,
-        })
+        Some(load_vehicle(archive, &selected).map_err(|error| error.to_string())?)
     } else {
         None
     };
-    Ok(view::Scene { terrain, vehicle })
+    Ok((terrain, selected, vehicle))
+}
+
+fn start_drive(path: &Path, report: bool) -> Result<bool, String> {
+    let mut config = Config::read(path)?;
+    let ramp = if report {
+        config
+            .drive
+            .take()
+            .and_then(|drive| drive.report_ramp)
+            .map(config::RampApproach::validate)
+            .transpose()
+            .map_err(|error| format!("config {}: {error}", path.display()))?
+    } else {
+        None
+    };
+    let (terrain, terrain_entry, vehicle) = {
+        let stdin = io::stdin();
+        let stderr = io::stderr();
+        let mut input = (stdin.is_terminal() && stderr.is_terminal()).then(|| stdin.lock());
+        import_scene(path, &config, true, input.as_mut(), &mut stderr.lock())?
+    };
+    let vehicle = vehicle.expect("drive imports a vehicle");
+    print_import_summary(&terrain);
+    print_vehicle_summary(&vehicle);
+    let setup = drive::DriveSetup::new(ramp, &terrain, &vehicle)
+        .map_err(|error| format!("config {}: {terrain_entry}: {error}", path.display()))?;
+    setup.print_setup(&vehicle.entry, &terrain_entry);
+    let session = drive::DriveSession::new(setup)?;
+    if report {
+        drive_report::run(session)?;
+        Ok(true)
+    } else {
+        Ok(drive_view::run(session, terrain, vehicle))
+    }
 }
 
 fn choose_asset(

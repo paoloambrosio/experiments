@@ -56,9 +56,32 @@ The car is parked facing +Z at the terrain's authored start. The viewer uses the
 
 The structural view shows nodes, beams, wheel outlines, axle directions, and a forward arrow. The startup report lists the selected truck entry, authored wheel geometry, and skipped features. Glass retains its diffuse alpha. Dashboard instruments use a flat material in the parked preview. [Drive roadmap](../drive-roadmap.md)
 
+## Drive on imported terrain
+
+Point `[assets]` in your local `config.toml` at the terrain and vehicle ZIPs. For the reference drive, use `CM 0.5.zip` with `terrain_entry = "CM.terrn2"` and `accord23.zip` with `vehicle_entry = "accord.truck"`.
+
+```sh
+cargo run -p vehicle_drive -- --drive
+cargo run -p vehicle_drive -- --drive-report
+```
+
+Both commands use the same imported vehicle and collision road. `--drive` opens the chase view with a speed readout. `--drive-report` checks settling, acceleration, steering, and braking without a window. To also cross a ramp, enable the optional `[drive.report_ramp]` table in the example config. The example approaches CMRamp1 from X = 265.1 m and Z = 192 m, facing +Z. The Y value bounds the search for the road beneath the wheels.
+
+| Key | Action |
+| --- | --- |
+| **W** | Apply forward throttle |
+| **S** | Apply service brake |
+| **A / D** | Steer left / right |
+| **R** | Return to the terrain start |
+| **C** | Toggle the terrain collision overlay |
+
+The RoR importer derives chassis mass and centre of mass from the authored node loads and supported beams, with the axle nodes assigned to the uprights. Body mesh bounds set the chassis inertia box. A single supported shock near each wheel supplies the vertical spring, damper, and travel through a linear projection at the authored pose. The chassis is collider-free. Only the tyres contact the road.
+
+The current drive uses fixed first-gear torque split across the driven wheels and each eligible wheel's authored service-brake limit. It uses the reference tyre material, 150 kPa gauge pressure, a 22% tyre share of wheel mass, 28° equivalent front steer, and uniform road contact settings. The report prints the effective values and their sources. A vehicle with incomplete physics properties can still be opened with `--view-vehicle`. [Drive roadmap](../drive-roadmap.md)
+
 ## Use imported asset geometry
 
-Use the `vehicle_assets` crate to represent terrain meshes, height samples, and vehicle and wheel geometry in memory. Call `TerrainAsset::validate()` or `VehicleAsset::validate()` before consuming these values. Validation errors identify the field and any relevant element indices. Positions and dimensions use metres, with +Y up, +Z forward, and +X to vehicle left. [Imported terrain and vehicle roadmap](../drive-roadmap.md)
+Use the `vehicle_assets` crate to represent terrain meshes, height samples, and vehicle and wheel geometry in memory. `VehicleAsset::physics` exposes supported rigid-body inputs in SI units. An absent value means the importer could not supply it. Call `TerrainAsset::validate()` or `VehicleAsset::validate()` before consuming these values. Validation errors identify the field and any relevant element indices. Positions and dimensions use metres, with +Y up, +Z forward, and +X to vehicle left. [Imported terrain and vehicle roadmap](../drive-roadmap.md)
 
 ## Spawn the reference assembly
 

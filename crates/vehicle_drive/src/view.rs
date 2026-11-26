@@ -31,14 +31,14 @@ pub(crate) struct ParkedVehicle {
 }
 
 #[derive(SystemParam)]
-struct MeshAssets<'w> {
+pub(crate) struct MeshAssets<'w> {
     meshes: ResMut<'w, Assets<Mesh>>,
     materials: ResMut<'w, Assets<StandardMaterial>>,
     images: ResMut<'w, Assets<Image>>,
 }
 
 #[derive(Resource)]
-struct CollisionOverlay {
+pub(crate) struct CollisionOverlay {
     edges: Vec<[Vec3; 2]>,
     visible: bool,
 }
@@ -82,32 +82,14 @@ fn setup(
     mut assets: MeshAssets,
     mut gizmo_config: ResMut<GizmoConfigStore>,
 ) {
-    let TerrainImport {
-        terrain,
-        appearance,
-        ..
-    } = &source.terrain;
-    spawn_meshes(
+    setup_terrain(
         &mut commands,
+        &source.terrain,
         &mut assets,
-        appearance,
-        &terrain.meshes,
-        &terrain.objects,
-        None,
+        &mut gizmo_config,
+        source.vehicle.is_some(),
     );
-    if let Some(grid) = &terrain.heightfield {
-        let terrain_mesh = triangulate(grid);
-        commands.spawn((
-            Name::new("Heightfield"),
-            Mesh3d(
-                assets
-                    .meshes
-                    .add(to_bevy_mesh(&terrain_mesh, &terrain_mesh.triangles, false)),
-            ),
-            MeshMaterial3d(assets.materials.add(Color::srgb(0.35, 0.39, 0.34))),
-        ));
-    }
-
+    let terrain = &source.terrain.terrain;
     if let Some(parked) = &source.vehicle {
         setup_vehicle(&mut commands, parked, &mut assets);
     } else {
@@ -125,6 +107,41 @@ fn setup(
             },
         ));
     }
+    commands.remove_resource::<Scene>();
+}
+
+pub(crate) fn setup_terrain(
+    commands: &mut Commands,
+    source: &TerrainImport,
+    assets: &mut MeshAssets,
+    gizmo_config: &mut GizmoConfigStore,
+    shadows: bool,
+) {
+    let TerrainImport {
+        terrain,
+        appearance,
+        ..
+    } = source;
+    spawn_meshes(
+        commands,
+        assets,
+        appearance,
+        &terrain.meshes,
+        terrain.objects.iter().map(|object| (object, None)),
+    );
+    if let Some(grid) = &terrain.heightfield {
+        let terrain_mesh = triangulate(grid);
+        commands.spawn((
+            Name::new("Heightfield"),
+            Mesh3d(
+                assets
+                    .meshes
+                    .add(to_bevy_mesh(&terrain_mesh, &terrain_mesh.triangles, false)),
+            ),
+            MeshMaterial3d(assets.materials.add(Color::srgb(0.35, 0.39, 0.34))),
+        ));
+    }
+
     commands.insert_resource(GlobalAmbientLight {
         brightness: 700.0,
         ..default()
@@ -132,7 +149,7 @@ fn setup(
     commands.spawn((
         DirectionalLight {
             illuminance: 9300.0,
-            shadow_maps_enabled: source.vehicle.is_some(),
+            shadow_maps_enabled: shadows,
             ..default()
         },
         Transform::from_xyz(1.0, 2.0, 1.5).looking_at(Vec3::ZERO, Vec3::Y),
@@ -146,16 +163,14 @@ fn setup(
         edges: edges(terrain),
         visible: false,
     });
-    commands.remove_resource::<Scene>();
 }
 
-fn spawn_meshes(
+pub(crate) fn spawn_meshes<'a>(
     commands: &mut Commands,
     assets: &mut MeshAssets,
     appearance: &MeshAppearance,
     geometry: &[TriangleMesh],
-    instances: &[MeshInstance],
-    parent: Option<Entity>,
+    instances: impl IntoIterator<Item = (&'a MeshInstance, Option<Entity>)>,
 ) {
     let MeshAssets {
         meshes,
@@ -189,7 +204,7 @@ fn spawn_meshes(
         .collect();
 
     let mut rendered = HashMap::new();
-    for instance in instances {
+    for (instance, parent) in instances {
         let Some(id) = instance.visual_mesh else {
             continue;
         };
@@ -268,8 +283,7 @@ fn setup_vehicle(commands: &mut Commands, parked: &ParkedVehicle, assets: &mut M
         assets,
         &parked.import.appearance,
         &vehicle.meshes,
-        &vehicle.objects,
-        Some(root),
+        vehicle.objects.iter().map(|object| (object, Some(root))),
     );
 
     let (mut min, mut max) = (Vec3::splat(f32::INFINITY), Vec3::splat(f32::NEG_INFINITY));
@@ -541,7 +555,7 @@ fn edges(terrain: &TerrainAsset) -> Vec<[Vec3; 2]> {
     edges
 }
 
-fn collision_overlay(
+pub(crate) fn collision_overlay(
     mut gizmos: Gizmos,
     keys: Res<ButtonInput<KeyCode>>,
     mut overlay: ResMut<CollisionOverlay>,

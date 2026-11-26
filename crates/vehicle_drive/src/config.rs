@@ -8,6 +8,7 @@ use serde::Deserialize;
 #[derive(Deserialize)]
 pub(crate) struct Config {
     pub(crate) assets: Assets,
+    pub(crate) drive: Option<DriveConfig>,
 }
 
 #[derive(Deserialize)]
@@ -49,5 +50,61 @@ impl Config {
             }
         }
         Ok(config)
+    }
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct DriveConfig {
+    pub report_ramp: Option<RampApproach>,
+}
+
+#[derive(Clone, Deserialize, Debug)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct RampApproach {
+    pub object: String,
+    pub start_m: [f32; 3],
+    pub heading_deg: f32,
+}
+
+impl RampApproach {
+    pub(crate) fn validate(self) -> Result<Self, String> {
+        if self.object.trim().is_empty() {
+            return Err("invalid [drive.report_ramp].object".into());
+        }
+        if !self.start_m.into_iter().all(f32::is_finite) {
+            return Err("invalid [drive.report_ramp].start_m".into());
+        }
+        if !self.heading_deg.is_finite() {
+            return Err("invalid [drive.report_ramp].heading_deg".into());
+        }
+        Ok(self)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn drive_accepts_assets_only_and_an_optional_ramp() {
+        let example = include_str!("../../../config.example.toml");
+        let config = toml::from_str::<Config>(example).unwrap();
+        assert!(config.drive.is_none());
+        let ramp = format!(
+            "{example}\n[drive.report_ramp]\nobject = 'Ramp'\nstart_m = [1.0, 2.0, 3.0]\nheading_deg = 0.0\n"
+        );
+        let config = toml::from_str::<Config>(&ramp).unwrap();
+        assert_eq!(
+            config
+                .drive
+                .unwrap()
+                .report_ramp
+                .unwrap()
+                .validate()
+                .unwrap()
+                .object,
+            "Ramp"
+        );
     }
 }

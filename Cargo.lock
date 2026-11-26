@@ -6015,6 +6015,7 @@ dependencies = [
 name = "vehicle_drive"
 version = "0.1.0"
 dependencies = [
+ "avian3d",
  "bevy",
  "clap",
  "image",
@@ -6022,6 +6023,7 @@ dependencies = [
  "tempfile",
  "toml",
  "vehicle_assets",
+ "vehicle_physics",
  "zip",
 ]
 

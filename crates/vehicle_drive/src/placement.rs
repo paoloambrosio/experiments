@@ -1,48 +1,14 @@
 use bevy::prelude::Vec3;
-use vehicle_assets::{Heightfield, TriangleMesh, VehicleAsset, ror::TerrainImport};
+use std::ops::Range;
+
+use vehicle_assets::{Heightfield, TerrainAsset, TriangleMesh, VehicleAsset, ror::TerrainImport};
 
 /// Positions a vehicle root at a terrain start with its authored rest pose intact.
 pub(crate) fn park(terrain: &TerrainImport, vehicle: &VehicleAsset) -> Result<Vec3, String> {
-    let hint = if let Some(hint) = terrain.start_position {
-        hint
-    } else {
-        let grid = terrain
-            .terrain
-            .heightfield
-            .as_ref()
-            .ok_or("terrain has neither a start position nor a heightfield centre")?;
-        grid.origin
-            + Vec3::new(
-                (grid.samples_x - 1) as f32 * grid.spacing_x * 0.5,
-                f32::INFINITY,
-                (grid.samples_z - 1) as f32 * grid.spacing_z * 0.5,
-            )
-    };
-    let ground = terrain.terrain.heightfield.as_ref().map(triangulate);
-    let mut triangles = Vec::new();
-    if let Some(mesh) = &ground {
-        triangles.extend(
-            mesh.triangles
-                .iter()
-                .map(|indices| indices.map(|id| mesh.vertices[id as usize])),
-        );
-    }
-    for instance in &terrain.terrain.objects {
-        if let Some(id) = instance.collision_mesh {
-            let mesh = &terrain.terrain.meshes[id.0];
-            triangles.extend(mesh.triangles.iter().map(|indices| {
-                indices.map(|id| instance.transform_point(mesh.vertices[id as usize]))
-            }));
-        }
-    }
+    let hint = start_hint(terrain)?;
+    let geometry = collision_geometry(&terrain.terrain);
 
-    let support = |point: Vec3| {
-        triangles
-            .iter()
-            .filter_map(|triangle| height_at(*triangle, point))
-            .filter(|height| *height <= hint.y)
-            .max_by(f32::total_cmp)
-    };
+    let support = |point: Vec3| support_below(&geometry.triangles, point.with_y(hint.y));
     support(hint).ok_or_else(|| {
         format!(
             "no supporting surface at terrain start ({:.3}, {:.3})",
@@ -70,7 +36,63 @@ pub(crate) fn park(terrain: &TerrainImport, vehicle: &VehicleAsset) -> Result<Ve
     Ok(Vec3::new(origin.x, lift, origin.z))
 }
 
-fn height_at([a, b, c]: [Vec3; 3], point: Vec3) -> Option<f32> {
+pub(crate) fn start_hint(terrain: &TerrainImport) -> Result<Vec3, String> {
+    Ok(if let Some(hint) = terrain.start_position {
+        hint
+    } else {
+        let grid = terrain
+            .terrain
+            .heightfield
+            .as_ref()
+            .ok_or("terrain has neither a start position nor a heightfield centre")?;
+        grid.origin
+            + Vec3::new(
+                (grid.samples_x - 1) as f32 * grid.spacing_x * 0.5,
+                f32::INFINITY,
+                (grid.samples_z - 1) as f32 * grid.spacing_z * 0.5,
+            )
+    })
+}
+
+pub(crate) struct CollisionGeometry {
+    pub triangles: Vec<[Vec3; 3]>,
+    pub objects: Vec<(String, Range<usize>)>,
+}
+
+pub(crate) fn collision_geometry(terrain: &TerrainAsset) -> CollisionGeometry {
+    let ground = terrain.heightfield.as_ref().map(triangulate);
+    let mut triangles = Vec::new();
+    if let Some(mesh) = &ground {
+        triangles.extend(
+            mesh.triangles
+                .iter()
+                .map(|indices| indices.map(|id| mesh.vertices[id as usize])),
+        );
+    }
+    let mut objects = Vec::new();
+    for instance in &terrain.objects {
+        if let Some(id) = instance.collision_mesh {
+            let mesh = &terrain.meshes[id.0];
+            let start = triangles.len();
+            triangles.extend(mesh.triangles.iter().map(|indices| {
+                indices.map(|id| instance.transform_point(mesh.vertices[id as usize]))
+            }));
+            objects.push((instance.name.clone(), start..triangles.len()));
+        }
+    }
+
+    CollisionGeometry { triangles, objects }
+}
+
+pub(crate) fn support_below(triangles: &[[Vec3; 3]], point: Vec3) -> Option<f32> {
+    triangles
+        .iter()
+        .filter_map(|triangle| height_at(*triangle, point))
+        .filter(|height| *height <= point.y)
+        .max_by(f32::total_cmp)
+}
+
+pub(crate) fn height_at([a, b, c]: [Vec3; 3], point: Vec3) -> Option<f32> {
     let cross_xz = |u: Vec3, v: Vec3| u.x * v.z - u.z * v.x;
     let (ab, ac, ap) = (b - a, c - a, point - a);
     let det = cross_xz(ab, ac);
@@ -116,7 +138,7 @@ pub(crate) fn triangulate(grid: &Heightfield) -> TriangleMesh {
 #[cfg(test)]
 mod tests {
     use bevy::prelude::Quat;
-    use vehicle_assets::{MeshAppearance, MeshId, MeshInstance, TerrainAsset, WheelGeometry};
+    use vehicle_assets::{MeshAppearance, MeshId, MeshInstance, WheelGeometry};
 
     use super::*;
 
@@ -160,12 +182,12 @@ mod tests {
             warnings: Vec::new(),
         };
         let vehicle = VehicleAsset {
+            physics: Default::default(),
             name: "fixture".into(),
             meshes: Vec::new(),
             objects: Vec::new(),
             nodes: vec![Vec3::new(0.1, 1.0, 0.2)],
             edges: Vec::new(),
-            physics: Default::default(),
             wheels: vec![WheelGeometry {
                 centre: Vec3::new(0.5, 1.0, 0.25),
                 axle: Vec3::X,
