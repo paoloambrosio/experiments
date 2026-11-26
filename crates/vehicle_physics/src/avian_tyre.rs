@@ -17,7 +17,9 @@ use bevy::{math::DVec3, prelude::*};
 
 use crate::{
     elastic_tyre::ElasticTyreError,
-    mounted_tyre::{ContactParameters, FlatFloor, MountedStep, MountedTyre, RimMotion},
+    mounted_tyre::{
+        ContactParameters, FlatFloor, MountedStep, MountedTyre, RimMotion, RimObstacleSweep,
+    },
     triangle_road::TriangleRoad,
 };
 
@@ -88,8 +90,27 @@ impl AvianTyre {
         self.error
     }
 
-    pub(crate) fn sync_motion(&mut self, rim: RimMotion) -> Result<(), ElasticTyreError> {
-        self.tyre.sync_rim(rim)
+    pub(crate) fn sweep_coupled_rim(
+        &mut self,
+        sweep: RimObstacleSweep<'_>,
+        free_impulses: &mut [DVec3],
+    ) -> Result<Option<(DVec3, DVec3)>, ElasticTyreError> {
+        let dt = sweep.dt;
+        let impulse = self.tyre.sweep_coupled_rim(sweep, free_impulses)?;
+        if let Some((linear, angular)) = impulse {
+            self.last_step.rim_force += linear / dt;
+            self.last_step.rim_torque += angular / dt;
+        }
+        Ok(impulse)
+    }
+
+    pub(crate) fn sync_motion(
+        &mut self,
+        rim: RimMotion,
+        free_impulses: &[DVec3],
+        dt: f64,
+    ) -> Result<(), ElasticTyreError> {
+        self.tyre.sync_with_impulses(rim, free_impulses, dt)
     }
 }
 

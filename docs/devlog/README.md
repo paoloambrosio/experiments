@@ -21,5 +21,6 @@ Each entry documents a development step in the `vehicle_physics` core crate. Sup
 - [015 — Soft-body chassis impacts](015-soft-body-chassis-impacts/README.md) measures elastic rebound, permanent nose crush, and captured wall impulse in full-width and offset strikes.
 - [016 — Soft-body contact with static obstacles](016-static-world-contact/README.md) measures panel contact with a narrow post and a wheel-first side impact on a loaded tread.
 - [017 — Deformable chassis and suspension](017-deformable-chassis-suspension/README.md) couples four live wheels to a structural frame and measures how impacts travel through its mounts.
+- [018 — Sustained tyre contact with static obstacles](018-sustained-tyre-contact/README.md) follows a wheel-first strike for one second and checks the final bead path after suspension coupling.
 
 These core milestones support the [imported terrain and vehicle roadmap](../drive-roadmap.md).

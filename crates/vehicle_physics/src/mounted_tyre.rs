@@ -2,7 +2,7 @@
 
 use std::sync::Arc;
 
-use bevy_math::{DQuat, DVec3};
+use bevy_math::{DMat3, DQuat, DVec3};
 
 use crate::{
     beam_damage::BeamDamage,
@@ -10,7 +10,7 @@ use crate::{
     kerb::Kerb,
     pressure::{ChamberReading, triangulate},
     puncture::{PunctureReading, TornPanel},
-    static_collision::{CONTACT_GAP_M, Hit, StaticCollisionMesh, StaticReaction},
+    static_collision::{CONTACT_GAP_M, ContactFeature, Hit, StaticCollisionMesh, StaticReaction},
     triangle_road::TriangleRoad,
     tyre::TyreTopology,
 };
@@ -263,6 +263,46 @@ struct TyreSweep<'a> {
     forces: &'a mut [DVec3],
 }
 
+struct ObstacleSweep<'a> {
+    centre: DVec3,
+    dt: f64,
+    dt_over_mass: f64,
+    free: &'a std::ops::Range<usize>,
+    positions: &'a [DVec3],
+    inverse_mass: f64,
+    inverse_inertia: DMat3,
+    clearance_m: f64,
+}
+
+// The swept edge normal and barycentric weights vary with travel. A small
+// distance tolerance lets a resweep converge as the contact point moves.
+const EDGE_CONTACT_TOLERANCE_M: f64 = 1e-9;
+const CONTACT_SOLVE_PASSES: usize = 64;
+
+#[cfg(feature = "avian")]
+pub(crate) struct RimObstacleSweep<'a> {
+    pub previous: &'a MountedTyre,
+    pub rim: RimMotion,
+    pub dt: f64,
+    pub inverse_mass: f64,
+    pub inverse_inertia: DMat3,
+}
+
+struct ObstacleConstraint {
+    hit: Hit,
+    start_gap_m: f64,
+    travel_per_impulse: f64,
+    rim_travel_per_impulse: DVec3,
+    rim_turn_per_impulse: DVec3,
+    impulse_ns: f64,
+}
+
+impl ObstacleConstraint {
+    fn gap(&self, travel: &[DVec3]) -> f64 {
+        self.start_gap_m + self.hit.interpolate(travel).dot(self.hit.contact.normal)
+    }
+}
+
 impl TyreObstacles {
     fn apply(
         &self,
@@ -278,45 +318,103 @@ impl TyreObstacles {
             velocities,
             forces,
         } = step;
-        let mut reaction = StaticReaction::default();
         let mut travel = vec![DVec3::ZERO; positions.len()];
-        let mut contacts = Vec::<Hit>::new();
-        let apply_inverse_inertia = |axis: DVec3| {
-            rim.rotation * (self.inverse_rim_inertia * (rim.rotation.conjugate() * axis))
-        };
+        let rotation = DMat3::from_quat(rim.rotation);
+        let inverse_inertia =
+            rotation * DMat3::from_diagonal(self.inverse_rim_inertia) * rotation.transpose();
         let mut rim_force = DVec3::ZERO;
         let mut rim_torque = DVec3::ZERO;
         for (i, &force) in forces.iter().enumerate().filter(|(i, _)| !free.contains(i)) {
             rim_force += force;
             rim_torque += (positions[i] - rim.centre).cross(force);
         }
-        let mut rim_velocity_delta = rim_force * (dt * self.inverse_rim_mass);
-        let mut rim_spin_delta = dt * apply_inverse_inertia(rim_torque);
-        for _ in 0..(2 * self.nodes.len()).max(128) {
-            for (i, delta) in travel.iter_mut().enumerate() {
-                let change = if free.contains(&i) {
-                    dt_over_mass * forces[i]
-                } else {
-                    rim_velocity_delta + rim_spin_delta.cross(positions[i] - rim.centre)
-                };
-                *delta = dt * (velocities[i] + change);
-                if !delta.is_finite() || !(positions[i] + *delta).is_finite() {
+        let rim_velocity_delta = rim_force * (dt * self.inverse_rim_mass);
+        let rim_spin_delta = dt * (inverse_inertia * rim_torque);
+        for (i, delta) in travel.iter_mut().enumerate() {
+            let change = if free.contains(&i) {
+                dt_over_mass * forces[i]
+            } else {
+                rim_velocity_delta + rim_spin_delta.cross(positions[i] - rim.centre)
+            };
+            *delta = dt * (velocities[i] + change);
+        }
+        self.solve(
+            ObstacleSweep {
+                centre: rim.centre,
+                dt,
+                dt_over_mass,
+                free,
+                positions,
+                inverse_mass: self.inverse_rim_mass,
+                inverse_inertia,
+                clearance_m: CONTACT_GAP_M,
+            },
+            &mut travel,
+            |i, impulse| forces[i] += impulse / dt,
+            road_owns,
+        )
+    }
+
+    fn solve(
+        &self,
+        sweep: ObstacleSweep<'_>,
+        travel: &mut [DVec3],
+        mut apply_impulse: impl FnMut(usize, DVec3),
+        road_owns: impl Fn(DVec3, DVec3) -> bool,
+    ) -> Result<StaticReaction, ElasticTyreError> {
+        let ObstacleSweep {
+            centre,
+            dt,
+            dt_over_mass,
+            free,
+            positions,
+            inverse_mass,
+            inverse_inertia,
+            clearance_m,
+        } = sweep;
+        let mut contacts = Vec::<ObstacleConstraint>::new();
+        let beads = (0..free.start).chain(free.end..positions.len());
+        let limit = self.nodes.len().saturating_mul(2).max(128);
+        loop {
+            for (&position, &delta) in positions.iter().zip(travel.iter()) {
+                if !delta.is_finite() || !(position + delta).is_finite() {
                     return Err(ElasticTyreError::NonFiniteStep);
                 }
             }
             let Some(hit) =
                 self.world
-                    .first_hit(positions, &travel, &self.nodes, &self.panels, |hit| {
-                        !road_owns(hit.contact.position_m, hit.contact.normal)
+                    .first_hit(positions, travel, &self.nodes, &self.panels, |hit| {
+                        let inward_m =
+                            -(1.0 - hit.time) * hit.interpolate(travel).dot(hit.contact.normal);
+                        // Node sweeps against a fixed face have a fixed normal.
+                        // Keep those strict, even when the crossing is tiny.
+                        (matches!(hit.contact.feature, ContactFeature::Node(_))
+                            || inward_m > EDGE_CONTACT_TOLERANCE_M)
+                            && !road_owns(hit.contact.position_m, hit.contact.normal)
                     })
             else {
-                for hit in contacts {
-                    let endpoint = hit.interpolate(positions) + hit.interpolate(&travel);
-                    let depth = (hit.contact.position_m - endpoint).dot(hit.contact.normal);
-                    reaction.max_residual_depth_m = reaction.max_residual_depth_m.max(depth);
+                let mut reaction = StaticReaction::default();
+                for contact in contacts {
+                    if contact.impulse_ns > 0.0 {
+                        reaction.max_residual_depth_m =
+                            reaction.max_residual_depth_m.max(-contact.gap(travel));
+                        let impulse = contact.impulse_ns * contact.hit.contact.normal;
+                        for (i, weight) in contact.hit.weights() {
+                            apply_impulse(i, impulse * weight);
+                        }
+                        reaction.first.get_or_insert(contact.hit.contact);
+                        reaction.contacts += 1;
+                        reaction.impulse_ns += impulse;
+                    }
+                }
+                if !reaction.impulse_ns.is_finite() {
+                    return Err(ElasticTyreError::NonFiniteStep);
                 }
                 return Ok(reaction);
             };
+            if contacts.len() == limit {
+                return Err(ElasticTyreError::ContactLimit);
+            }
             let normal = hit.contact.normal;
             let mut free_inverse_mass = 0.0;
             let mut bead_weight = 0.0;
@@ -326,34 +424,78 @@ impl TyreObstacles {
                     free_inverse_mass += weight * weight * (dt_over_mass / dt);
                 } else {
                     bead_weight += weight;
-                    bead_arm += weight * (positions[i] - rim.centre);
+                    bead_arm += weight * (positions[i] - centre);
                 }
             }
             let angular_axis = bead_arm.cross(normal);
-            let angular_response = apply_inverse_inertia(angular_axis);
-            let inverse_mass = free_inverse_mass
-                + bead_weight * bead_weight * self.inverse_rim_mass
+            let angular_response = inverse_inertia * angular_axis;
+            let effective_inverse_mass = free_inverse_mass
+                + bead_weight * bead_weight * inverse_mass
                 + angular_axis.dot(angular_response);
-            // Remove the inward travel after impact using a substep-average
-            // force. The beads share the velocity response of one rim.
-            let normal_travel = hit.interpolate(&travel).dot(normal);
-            let magnitude =
-                (-normal_travel * (1.0 - hit.time) + CONTACT_GAP_M) / (dt * inverse_mass);
-            let impulse = magnitude * normal;
-            for (i, weight) in hit.weights() {
-                forces[i] += impulse * (weight / dt);
-            }
-            rim_velocity_delta += bead_weight * self.inverse_rim_mass * impulse;
-            rim_spin_delta += magnitude * angular_response;
-            reaction.first.get_or_insert(hit.contact);
-            reaction.contacts += 1;
-            reaction.impulse_ns += impulse;
-            if !reaction.impulse_ns.is_finite() {
+            let travel_per_impulse = dt * effective_inverse_mass;
+            if !(travel_per_impulse.is_finite() && travel_per_impulse > 0.0) {
                 return Err(ElasticTyreError::NonFiniteStep);
             }
-            contacts.push(hit);
+            contacts.push(ObstacleConstraint {
+                hit,
+                start_gap_m: (hit.interpolate(positions) - hit.contact.position_m).dot(normal),
+                travel_per_impulse,
+                rim_travel_per_impulse: dt * bead_weight * inverse_mass * normal,
+                rim_turn_per_impulse: dt * angular_response,
+                impulse_ns: 0.0,
+            });
+            // Solve accumulated normal impulses together before sweeping again.
+            // A correction can remove a prior impulse, but cannot pull on the tyre.
+            for _ in 0..CONTACT_SOLVE_PASSES {
+                let mut max_change_m: f64 = 0.0;
+                for contact in &mut contacts {
+                    let old = contact.impulse_ns;
+                    let change = (clearance_m - contact.gap(travel)) / contact.travel_per_impulse;
+                    let next = old + change;
+                    if !next.is_finite() {
+                        return Err(ElasticTyreError::NonFiniteStep);
+                    }
+                    contact.impulse_ns = next.max(0.0);
+                    let applied = contact.impulse_ns - old;
+                    if applied == 0.0 {
+                        continue;
+                    }
+                    max_change_m = max_change_m.max(applied.abs() * contact.travel_per_impulse);
+                    for (i, weight) in contact.hit.weights().filter(|(i, _)| free.contains(i)) {
+                        travel[i] += (applied * dt_over_mass * weight) * contact.hit.contact.normal;
+                    }
+                    if contact.rim_travel_per_impulse != DVec3::ZERO {
+                        let translation = applied * contact.rim_travel_per_impulse;
+                        let rotation = applied * contact.rim_turn_per_impulse;
+                        for i in beads.clone() {
+                            travel[i] += translation + rotation.cross(positions[i] - centre);
+                        }
+                    }
+                }
+                if max_change_m < CONTACT_GAP_M / 4.0 {
+                    break;
+                }
+            }
         }
-        Err(ElasticTyreError::ContactLimit)
+    }
+}
+
+fn road_owns(
+    triangle_road: Option<&(Arc<TriangleRoad>, ContactParameters)>,
+    floor: Option<FlatFloor>,
+    point: DVec3,
+    normal: DVec3,
+) -> bool {
+    // Keep the existing support law for coplanar faces in the obstacle mesh.
+    if let Some((road, _)) = triangle_road {
+        road.contact(point - CONTACT_GAP_M * DVec3::Y)
+            .is_some_and(|hit| {
+                hit.depth() <= 2.0 * CONTACT_GAP_M && hit.normal.dot(normal).abs() > 1.0 - 1e-8
+            })
+    } else {
+        floor.is_some_and(|floor| {
+            (point.y - floor.height_m()).abs() <= CONTACT_GAP_M && normal.y.abs() > 1.0 - 1e-8
+        })
     }
 }
 
@@ -570,13 +712,32 @@ impl MountedTyre {
     /// Update the prescribed bead positions and point velocities from the rigid rim.
     /// Free nodes keep their world-space motion. A failed update preserves the prior state.
     pub fn sync_rim(&mut self, rim: RimMotion) -> Result<(), ElasticTyreError> {
-        if rim == self.rim {
+        self.sync_with_impulses(rim, &[], 0.0)
+    }
+
+    pub(crate) fn sync_with_impulses(
+        &mut self,
+        rim: RimMotion,
+        impulses: &[DVec3],
+        dt: f64,
+    ) -> Result<(), ElasticTyreError> {
+        if rim == self.rim && impulses.is_empty() {
             return Ok(());
         }
         rim.validate()?;
         let tyre = &mut self.tyre;
         tyre.next_positions.copy_from_slice(&tyre.positions);
         tyre.next_velocities.copy_from_slice(&tyre.velocities);
+        if !impulses.is_empty() {
+            for i in self.tread_nodes.clone() {
+                let dv = impulses[i] / tyre.node_mass;
+                tyre.next_positions[i] += dt * dv;
+                tyre.next_velocities[i] += dv;
+                if !tyre.next_positions[i].is_finite() || !tyre.next_velocities[i].is_finite() {
+                    return Err(ElasticTyreError::NonFiniteStep);
+                }
+            }
+        }
         for &index in &tyre.bead_nodes {
             let (position, velocity) = rim.point(tyre.rest_positions[index], DVec3::ZERO);
             if !position.is_finite() || !velocity.is_finite() {
@@ -588,6 +749,76 @@ impl MountedTyre {
         tyre.commit_next()?;
         self.rim = rim;
         Ok(())
+    }
+
+    #[cfg(feature = "avian")]
+    pub(crate) fn sweep_coupled_rim(
+        &mut self,
+        sweep: RimObstacleSweep<'_>,
+        free_impulses: &mut [DVec3],
+    ) -> Result<Option<(DVec3, DVec3)>, ElasticTyreError> {
+        let Some(obstacles) = &self.obstacles else {
+            return Ok(None);
+        };
+        let RimObstacleSweep {
+            previous,
+            rim,
+            dt,
+            inverse_mass,
+            inverse_inertia,
+        } = sweep;
+        let positions = previous.positions();
+        let centre = rim.centre;
+        let dt_over_mass = dt / self.tyre.node_mass;
+        let mut travel: Vec<_> = positions
+            .iter()
+            .enumerate()
+            .map(|(i, &start)| {
+                let end = if self.tread_nodes.contains(&i) {
+                    self.positions()[i] + dt_over_mass * free_impulses[i]
+                } else {
+                    rim.point(self.tyre.rest_positions[i], DVec3::ZERO).0
+                };
+                end - start
+            })
+            .collect();
+        let mut linear = DVec3::ZERO;
+        let mut angular = DVec3::ZERO;
+        let reaction = obstacles.solve(
+            ObstacleSweep {
+                centre: previous.rim.centre,
+                dt,
+                dt_over_mass,
+                free: &self.tread_nodes,
+                positions,
+                inverse_mass,
+                inverse_inertia,
+                // Solver transforms are f32. Leave room for roundoff when
+                // writing the corrected bead position back to Avian.
+                clearance_m: 4.0 * f64::from(f32::EPSILON) * centre.abs().max_element().max(1.0),
+            },
+            &mut travel,
+            |i, impulse| {
+                if self.tread_nodes.contains(&i) {
+                    free_impulses[i] += impulse;
+                } else {
+                    linear += impulse;
+                    angular += (positions[i] - previous.rim.centre).cross(impulse);
+                }
+            },
+            |point, normal| road_owns(self.triangle_road.as_ref(), self.floor, point, normal),
+        )?;
+        let Some(first) = reaction.first else {
+            return Ok(None);
+        };
+        self.obstacle_reaction.first.get_or_insert(first);
+        self.obstacle_reaction.contacts += reaction.contacts;
+        self.obstacle_reaction.impulse_ns += reaction.impulse_ns;
+        self.obstacle_reaction.max_residual_depth_m = self
+            .obstacle_reaction
+            .max_residual_depth_m
+            .max(reaction.max_residual_depth_m);
+        Ok(Some((linear, angular)))
     }
 
     /// Advance the free nodes with gravity (world m/s²) and road contact.
@@ -629,23 +860,7 @@ impl MountedTyre {
                                 velocities,
                                 forces,
                             },
-                            |point, normal| {
-                                if let Some((road, _)) = triangle_road {
-                                    // Keep the existing support law for a coplanar
-                                    // face also present in the obstacle mesh.
-                                    road.contact(point - CONTACT_GAP_M * DVec3::Y).is_some_and(
-                                        |hit| {
-                                            hit.depth() <= 2.0 * CONTACT_GAP_M
-                                                && hit.normal.dot(normal).abs() > 1.0 - 1e-8
-                                        },
-                                    )
-                                } else {
-                                    floor.is_some_and(|floor| {
-                                        (point.y - floor.height_m()).abs() <= CONTACT_GAP_M
-                                            && normal.y.abs() > 1.0 - 1e-8
-                                    })
-                                }
-                            },
+                            |point, normal| road_owns(triangle_road, floor, point, normal),
                         )?;
                     }
                     Ok(())

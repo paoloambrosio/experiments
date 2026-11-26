@@ -25,7 +25,7 @@ use crate::{
     avian_tyre::{AvianTyre, TyreSubstepComplete, TyreWrenchApplied, rim_motion},
     chassis::{Chassis, ChassisBeamSpec, ChassisCollision, ChassisError, ChassisNode},
     elastic_tyre::{ElasticTyre, ElasticTyreError},
-    mounted_tyre::{MountedTyre, RimMotion},
+    mounted_tyre::{MountedTyre, RimMotion, RimObstacleSweep},
     static_collision::{StaticCollisionMesh, StaticReaction},
     structural_mount::{Mount, Patch, outer, point_inertia},
     vehicle_assembly::{
@@ -659,10 +659,46 @@ impl DeformableBody {
         }
         let mut final_bodies = [const { (SolverBody::DUMMY, SolverBody::DUMMY) }; 4];
         for i in 0..4 {
-            let (wheel, ..) = &trials[i];
-            final_bodies[i] = wheel
-                .finish(dt)
-                .ok_or(DeformableError::InvalidWheelState(i))?;
+            let (wheel, _, _, rim_pos, rim_rot) = &mut trials[i];
+            let mut tyre = tyres
+                .get_mut(self.corners[i].wheel.rim)
+                .map_err(|_| DeformableError::InvalidWheelState(i))?;
+            let mut free_impulses = Vec::new();
+            if self.obstacles.is_some() {
+                free_impulses.resize(tyre.tyre().positions().len(), DVec3::ZERO);
+            }
+            // Mount and hinge impulses change the bead trajectory after the
+            // initial tyre solve. Check the resulting path before committing.
+            for pass in 0..=8 {
+                let states = wheel
+                    .finish(dt)
+                    .ok_or(DeformableError::InvalidWheelState(i))?;
+                let rim = rim_motion(rim_pos, rim_rot, &states.1);
+                if !free_impulses.is_empty()
+                    && let Some((linear, angular)) = tyre
+                        .sweep_coupled_rim(
+                            RimObstacleSweep {
+                                previous: snapshots[i].tyre.tyre(),
+                                rim,
+                                dt,
+                                inverse_mass: wheel.inverse_mass,
+                                inverse_inertia: wheel.rim_inverse_inertia(),
+                            },
+                            &mut free_impulses,
+                        )
+                        .map_err(|error| DeformableError::Tyre(i, error))?
+                {
+                    if pass == 8 {
+                        return Err(DeformableError::Tyre(i, ElasticTyreError::ContactLimit));
+                    }
+                    wheel.apply_obstacle_impulse(linear, angular);
+                    continue;
+                }
+                tyre.sync_motion(rim, &free_impulses, dt)
+                    .map_err(|error| DeformableError::Tyre(i, error))?;
+                final_bodies[i] = states;
+                break;
+            }
             reactions[i] = wheel.reaction;
         }
         let contact = self.chassis.complete_loaded_step(
@@ -678,11 +714,6 @@ impl DeformableBody {
                         .ok_or(DeformableError::InvalidMount(i))?;
                     let (_, _, _, rim_pos, rim_rot) = trials[i];
                     let motion = rim_motion(rim_pos, rim_rot, &final_bodies[i].1);
-                    tyres
-                        .get_mut(corner.wheel.rim)
-                        .map_err(|_| DeformableError::InvalidWheelState(i))?
-                        .sync_motion(motion)
-                        .map_err(|error| DeformableError::Tyre(i, error))?;
                     reactions[i].length_m =
                         (patch.anchor - motion.centre).dot(patch.rotation * DVec3::Y);
                 }
@@ -710,6 +741,7 @@ struct WheelTrial {
     inverse_spin_inertia: f64,
     dv: DVec3,
     dw: DVec3,
+    obstacle_spin_delta: f64,
     reaction: MountReaction,
 }
 
@@ -741,8 +773,29 @@ impl WheelTrial {
             inverse_mass: mass.total.recip(),
             dv: DVec3::ZERO,
             dw: DVec3::ZERO,
+            obstacle_spin_delta: 0.0,
             reaction: MountReaction::default(),
         }
+    }
+
+    fn rim_inverse_inertia(&self) -> DMat3 {
+        // The hinge couples rotation perpendicular to the axle. Torque along
+        // the axle also changes the rim's free spin.
+        let spin_projection = DMat3::IDENTITY
+            - DMat3::from_cols(
+                self.axis * self.spin_momentum_axis.x,
+                self.axis * self.spin_momentum_axis.y,
+                self.axis * self.spin_momentum_axis.z,
+            ) * self.inverse_spin_inertia;
+        spin_projection * self.inverse_inertia * spin_projection.transpose()
+            + outer(self.axis) * self.inverse_spin_inertia
+    }
+
+    fn apply_obstacle_impulse(&mut self, linear: DVec3, angular: DVec3) {
+        self.dv += self.inverse_mass * linear;
+        let spin_delta = self.axis.dot(angular) * self.inverse_spin_inertia;
+        self.dw += self.inverse_inertia * (angular - self.spin_momentum_axis * spin_delta);
+        self.obstacle_spin_delta += spin_delta;
     }
 
     fn impulse(&mut self, nodes: &mut [ChassisNode], patch: &Patch, j: DVec3, angular: DVec3) {
@@ -821,7 +874,9 @@ impl WheelTrial {
 
     fn finish(&self, dt: f64) -> Option<(SolverBody, SolverBody)> {
         let rim_dw = self.dw
-            - self.axis * (self.spin_momentum_axis.dot(self.dw) * self.inverse_spin_inertia);
+            + self.axis
+                * (self.obstacle_spin_delta
+                    - self.spin_momentum_axis.dot(self.dw) * self.inverse_spin_inertia);
         let update = |mut body: SolverBody, dw: DVec3| {
             body.linear_velocity += self.dv.as_vec3();
             body.delta_position += (self.dv * dt).as_vec3();

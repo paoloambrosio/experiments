@@ -22,6 +22,7 @@ use vehicle_physics::{
 use crate::corner_experiment::physics_app_with;
 
 const FACE: [[usize; 3]; 2] = [[0, 1, 2], [0, 2, 3]];
+const BODY_PANELS: [[usize; 3]; 4] = [[0, 1, 3], [0, 3, 2], [12, 14, 15], [12, 15, 13]];
 const HZ: usize = 60;
 const RATES: [u32; 2] = [3840, 7680];
 const MASS_KG: f64 = 920.0;
@@ -41,6 +42,7 @@ pub fn report() -> Result<(), Box<dyn Error>> {
             );
         }
         let mut bench = Bench::new(rate);
+        wheel_first(&mut bench, &vehicle, &prepared, &road, rate)?;
         bench.spawn(&vehicle, &prepared, &road, DVec3::ZERO, None)?;
         let result = handling(&mut bench)?;
         println!(
@@ -58,7 +60,7 @@ pub fn report() -> Result<(), Box<dyn Error>> {
         baseline = Some(result);
         if rate == RATES[0] {
             alignment(&mut bench, &prepared, &road)?;
-            impacts(&mut bench, &vehicle, &prepared, &road)?;
+            bumper_first(&mut bench, &vehicle, &prepared, &road)?;
         }
     }
     Ok(())
@@ -131,7 +133,7 @@ fn fixture(alignment: [WheelAlignment; 4]) -> Result<PreparedDeformableVehicle, 
             beams,
             mounts,
             collision_nodes: (0..16).collect(),
-            collision_panels: vec![[0, 1, 3], [0, 3, 2], [12, 14, 15], [12, 15, 13]],
+            collision_panels: BODY_PANELS.to_vec(),
         },
         alignment,
     )?)
@@ -259,6 +261,59 @@ struct Trace {
     wheel_transfer: Option<(f64, f64)>,
     body_transfer: Option<(usize, f64, f64)>,
     front_speed_mps: Option<f64>,
+    side_wall: Option<WallMeasurement>,
+}
+
+struct WallMeasurement {
+    bounds: [DVec3; 2],
+    tyre_panels: Vec<[usize; 3]>,
+    depth_m: f64,
+    impulse_ns: DVec3,
+    last_wheel_step: usize,
+}
+
+impl WallMeasurement {
+    // Find the furthest endpoint behind the X plane within the wall's YZ
+    // footprint, including points on tyre panels clipped by the wall edges.
+    fn depth(&self, panels: impl IntoIterator<Item = [DVec3; 3]>) -> f64 {
+        let [lo, hi] = self.bounds;
+        let mut depth: f64 = 0.0;
+        for triangle in panels {
+            let min = triangle.into_iter().reduce(DVec3::min).unwrap();
+            let max = triangle.into_iter().reduce(DVec3::max).unwrap();
+            if max.x <= lo.x || max.y < lo.y || min.y > hi.y || max.z < lo.z || min.z > hi.z {
+                continue;
+            }
+            let mut polygon = triangle.to_vec();
+            for (axis, limit, sign) in [
+                (1, lo.y, 1.0),
+                (1, hi.y, -1.0),
+                (2, lo.z, 1.0),
+                (2, hi.z, -1.0),
+            ] {
+                let Some(&last) = polygon.last() else { break };
+                let distance = |point: DVec3| sign * (point[axis] - limit);
+                let mut clipped = Vec::new();
+                let mut a = last;
+                for b in polygon {
+                    let da = distance(a);
+                    let db = distance(b);
+                    if (da >= 0.0) != (db >= 0.0) {
+                        clipped.push(a.lerp(b, da / (da - db)));
+                    }
+                    if db >= 0.0 {
+                        clipped.push(b);
+                    }
+                    a = b;
+                }
+                polygon = clipped;
+            }
+            for point in polygon {
+                depth = depth.max(point.x - lo.x);
+            }
+        }
+        depth
+    }
 }
 
 fn measure(
@@ -282,6 +337,20 @@ fn measure(
     trace.steps += 1;
     let step = trace.steps;
     trace.obstacle_impulse_ns += chassis_hit.impulse_ns;
+    if let Some(wall) = &mut trace.side_wall {
+        wall.impulse_ns += chassis_hit.impulse_ns;
+        let nodes = body.chassis().nodes();
+        wall.depth_m = wall
+            .depth_m
+            .max(wall.depth(BODY_PANELS.map(|panel| panel.map(|i| nodes[i].position_m))));
+        for node in nodes {
+            let [lo, hi] = wall.bounds;
+            let p = node.position_m;
+            if (lo.y..=hi.y).contains(&p.y) && (lo.z..=hi.z).contains(&p.z) {
+                wall.depth_m = wall.depth_m.max(p.x - lo.x);
+            }
+        }
+    }
     let mut front_speed = 0.0;
     for (i, rim) in rims.into_iter().enumerate() {
         let tyre = tyres.get(rim).unwrap().tyre();
@@ -292,7 +361,22 @@ fn measure(
         trace.peak_travel = trace
             .peak_travel
             .max((mounts[i].length_m - (f64::from(SUSPENSION.free_length_m) - SAG_M)).abs());
-        if tyre.obstacle_reaction().first.is_some() {
+        let tyre_hit = tyre.obstacle_reaction();
+        if let Some(wall) = &mut trace.side_wall {
+            wall.impulse_ns += tyre_hit.impulse_ns;
+            if tyre_hit.first.is_some() {
+                wall.last_wheel_step = step;
+            }
+            let points = tyre.positions();
+            wall.depth_m = wall.depth_m.max(
+                wall.depth(
+                    wall.tyre_panels
+                        .iter()
+                        .map(|panel| panel.map(|i| points[i])),
+                ),
+            );
+        }
+        if tyre_hit.first.is_some() {
             let floor_load = trace.road_n[i];
             trace.first_wheel.get_or_insert((step, i, floor_load));
         }
@@ -499,39 +583,87 @@ fn rectangle(points: [DVec3; 4]) -> Result<Arc<StaticCollisionMesh>, Box<dyn Err
     Ok(Arc::new(StaticCollisionMesh::new(&points, &FACE)?))
 }
 
-fn impacts(
+fn wheel_first(
+    bench: &mut Bench,
+    vehicle: &PreparedDeformableVehicle,
+    tyre: &ReferenceTyre,
+    road: &VehicleRoad,
+    rate: u32,
+) -> Result<(), Box<dyn Error>> {
+    let lo = DVec3::new(0.877, 0.08, 0.85);
+    let hi = DVec3::new(0.877, 0.65, 1.65);
+    let wall = rectangle([
+        lo,
+        DVec3::new(lo.x, lo.y, hi.z),
+        hi,
+        DVec3::new(lo.x, hi.y, lo.z),
+    ])?;
+    let mut replay = None::<((usize, usize, Option<usize>, usize), DVec3)>;
+    for _ in 0..2 {
+        bench.spawn(vehicle, tyre, road, 2.5 * DVec3::X, Some(wall.clone()))?;
+        bench.app.world_mut().resource_mut::<Trace>().side_wall = Some(WallMeasurement {
+            bounds: [lo, hi],
+            tyre_panels: tyre
+                .tyre
+                .pressure_triangles()
+                .iter()
+                .map(|face| face.nodes)
+                .collect(),
+            depth_m: 0.0,
+            impulse_ns: DVec3::ZERO,
+            last_wheel_step: 0,
+        });
+        for _ in 0..HZ {
+            bench.step(0.0, 0.0, 0.0)?;
+        }
+        let trace = bench.trace();
+        let wall = trace.side_wall.as_ref().unwrap();
+        let (wheel_step, wheel, load) = trace.first_wheel.ok_or("wheel missed the side wall")?;
+        let (mount, delta_p) = trace
+            .wheel_transfer
+            .ok_or("wheel strike did not transfer momentum before chassis contact")?;
+        let chassis_step = trace.first_chassis.map(|(step, _)| step);
+        if trace.steps != rate as usize
+            || wheel != 0
+            || !load.is_finite()
+            || load <= 0.0
+            || trace.max_balance_ns > 1e-7
+            || wall.depth_m > 0.002
+            || !wall.impulse_ns.is_finite()
+            || wall.impulse_ns.x >= 0.0
+            || wall.last_wheel_step <= (0.026 * f64::from(rate)) as usize
+        {
+            return Err(format!(
+                "{rate} Hz side strike at {} substeps: wheel {wheel} at {wheel_step}, floor {load:.1} N, last tyre contact {}, wall depth {:.4} mm, impulse {:.4?} N·s, balance {:.2e} N·s",
+                trace.steps, wall.last_wheel_step, wall.depth_m * 1000.0, wall.impulse_ns, trace.max_balance_ns
+            )
+            .into());
+        }
+        let order = (wheel_step, wheel, chassis_step, wall.last_wheel_step);
+        if let Some((previous_order, previous_impulse)) = replay {
+            if order != previous_order || !wall.impulse_ns.abs_diff_eq(previous_impulse, 1e-7) {
+                return Err(format!("side strike replay diverged at {rate} Hz").into());
+            }
+        } else {
+            println!(
+                "{rate} Hz wheel-first strike | FL at step {wheel_step} | floor {load:.1} N | mount {mount:.3} N·s | chassis Δp {delta_p:.3} N·s | last tyre contact {:.2} ms | wall depth {:.4} mm | wall impulse {:.2?} N·s | balance {:.2e} N·s",
+                wall.last_wheel_step as f64 * 1000.0 / f64::from(rate),
+                wall.depth_m * 1000.0,
+                wall.impulse_ns.to_array(),
+                trace.max_balance_ns,
+            );
+        }
+        replay = Some((order, wall.impulse_ns));
+    }
+    Ok(())
+}
+
+fn bumper_first(
     bench: &mut Bench,
     vehicle: &PreparedDeformableVehicle,
     tyre: &ReferenceTyre,
     road: &VehicleRoad,
 ) -> Result<(), Box<dyn Error>> {
-    let wall = rectangle([
-        DVec3::new(0.877, 0.08, 0.85),
-        DVec3::new(0.877, 0.08, 1.65),
-        DVec3::new(0.877, 0.65, 1.65),
-        DVec3::new(0.877, 0.65, 0.85),
-    ])?;
-    bench.spawn(vehicle, tyre, road, 2.5 * DVec3::X, Some(wall))?;
-    bench.step(0.0, 0.0, 0.0)?;
-    let trace = bench.trace();
-    let (wheel_step, wheel, load) = trace
-        .first_wheel
-        .ok_or("wheel missed the side wall in its first tick")?;
-    let (mount, delta_p) = trace
-        .wheel_transfer
-        .ok_or("wheel strike did not transfer momentum before chassis contact")?;
-    if load <= 0.0 || trace.max_balance_ns > 1e-7 {
-        return Err(format!(
-            "side strike lost support or impulse balance: {load} N, {} N·s",
-            trace.max_balance_ns
-        )
-        .into());
-    }
-    println!(
-        "Wheel-first strike | corner {} at step {wheel_step} | floor {load:.1} N | mount {mount:.3} N·s | chassis Δp {delta_p:.3} N·s | balance {:.2e} N·s",
-        wheel + 1,
-        trace.max_balance_ns
-    );
     let post = |x: f64| {
         rectangle([
             DVec3::new(x - 0.06, 0.0, 1.98),

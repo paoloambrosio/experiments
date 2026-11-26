@@ -100,7 +100,7 @@ Run the static contact report to test a narrow post striking the bumper between 
 cargo run -p vehicle_lab -- --static-contact-report
 ```
 
-Run the coupled chassis report for a reference car with a deformable frame and four live wheels. It measures settled load and sag, driving and braking at two solver rates, and impact transfer in both directions through the suspension. [Core 017 fixtures and measurements](../devlog/017-deformable-chassis-suspension/README.md)
+Run the coupled chassis report for a reference car with a deformable frame and four live wheels. It measures settled load and sag, driving and braking at two solver rates, and impact transfer in both directions through the suspension. It also replays a one-second lateral wall strike at each rate and measures penetration directly from the deformed tyre and chassis geometry. [Coupled chassis fixtures](../devlog/017-deformable-chassis-suspension/README.md) and [sustained wall contact measurements](../devlog/018-sustained-tyre-contact/README.md).
 
 ```sh
 cargo run -p vehicle_lab -- --coupled-chassis-report
