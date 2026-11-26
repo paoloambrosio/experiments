@@ -6,12 +6,16 @@ pub mod avian_suspension;
 pub mod avian_tyre;
 pub mod beam_damage;
 pub mod chassis;
+#[cfg(feature = "avian")]
+pub mod deformable_vehicle;
 pub mod elastic_tyre;
 pub mod kerb;
 pub mod mounted_tyre;
 pub mod pressure;
 pub mod puncture;
 pub mod static_collision;
+#[cfg(feature = "avian")]
+mod structural_mount;
 pub mod tread_reinforcement;
 pub mod triangle_road;
 pub mod tyre;

@@ -100,6 +100,12 @@ Run the static contact report to test a narrow post striking the bumper between 
 cargo run -p vehicle_lab -- --static-contact-report
 ```
 
+Run the coupled chassis report for a reference car with a deformable frame and four live wheels. It measures settled load and sag, driving and braking at two solver rates, and impact transfer in both directions through the suspension. [Core 017 fixtures and measurements](../devlog/017-deformable-chassis-suspension/README.md)
+
+```sh
+cargo run -p vehicle_lab -- --coupled-chassis-report
+```
+
 ## Use imported asset geometry
 
 Use the `vehicle_assets` crate to represent terrain meshes, height samples, and vehicle and wheel geometry in memory. `VehicleAsset::physics` exposes optional rigid-body and structural inputs in SI units. Call `TerrainAsset::validate()` or `VehicleAsset::validate()` before consuming these values. Validation errors identify the field and any relevant element indices. Positions and dimensions use metres, with +Y up, +Z forward, and +X to vehicle left. [Imported terrain and vehicle roadmap](../drive-roadmap.md)

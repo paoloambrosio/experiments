@@ -84,6 +84,10 @@ impl CornerRoad {
 }
 
 pub(crate) fn physics_app(rate: u32) -> App {
+    physics_app_with(rate, |_| {})
+}
+
+pub(crate) fn physics_app_with(rate: u32, configure: impl FnOnce(&mut App)) -> App {
     let mut app = App::new();
     app.add_plugins((
         MinimalPlugins,
@@ -98,6 +102,7 @@ pub(crate) fn physics_app(rate: u32) -> App {
     .insert_resource(Time::<Fixed>::from_hz(f64::from(TICKS_PER_SECOND)))
     .insert_resource(SubstepCount(rate / TICKS_PER_SECOND))
     .insert_resource(Gravity(Vec3::NEG_Y * G as f32));
+    configure(&mut app);
     app.finish();
     app.cleanup();
     app.update();

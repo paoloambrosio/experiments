@@ -21,7 +21,7 @@ use crate::{
 ///
 /// Wheel-local +X is the spin axis pointing toward vehicle left. Wheel-local +Y
 /// is the projection of chassis up onto the wheel plane before the rim spins.
-#[derive(Clone, Copy, Debug, Default)]
+#[derive(Component, Clone, Copy, Debug, Default)]
 pub struct WheelAlignment(Quat);
 
 impl WheelAlignment {
@@ -176,6 +176,9 @@ impl Error for CornerError {
 /// Apply suspension impulses on Avian's substep clock. Install after PhysicsPlugins.
 pub struct AvianSuspensionPlugin;
 
+#[derive(SystemSet, Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub(crate) struct RigidSuspensionApplied;
+
 impl Plugin for AvianSuspensionPlugin {
     fn build(&self, app: &mut App) {
         app.add_systems(
@@ -186,6 +189,7 @@ impl Plugin for AvianSuspensionPlugin {
             SubstepSchedule,
             (apply_suspension, apply_wheel_torque)
                 .chain()
+                .in_set(RigidSuspensionApplied)
                 .after(TyreWrenchApplied)
                 .before(IntegrationSystems::Velocity),
         );
@@ -245,24 +249,9 @@ impl<B: Bundle> PreparedCorner<B> {
         hub_rotation: Quat,
         alignment: WheelAlignment,
     ) -> WheelCorner {
-        let Self {
-            rim_bundle,
-            motion,
-            config,
-        } = self;
+        let config = self.config;
+        let (hub, rim, spin_joint) = self.spawn_pair(world, hub_rotation, alignment);
         let suspension = config.suspension;
-        let rim = world.spawn(rim_bundle).id();
-        let hub = world
-            .spawn((
-                RigidBody::Dynamic,
-                SleepingDisabled,
-                Position(motion.centre.as_vec3()),
-                Rotation(hub_rotation),
-                LinearVelocity(motion.linear_velocity.as_vec3()),
-                Mass(config.upright_mass_kg),
-                AngularInertia::new(Vec3::splat(config.upright_mass_kg * 0.02)),
-            ))
-            .id();
         let suspension_joint = world
             .spawn((
                 PrismaticJoint::new(chassis, hub)
@@ -276,20 +265,10 @@ impl<B: Bundle> PreparedCorner<B> {
                 },
             ))
             .id();
-        let spin_joint = world
-            .spawn((
-                RevoluteJoint::new(hub, rim)
-                    .with_hinge_axis(Vec3::X)
-                    .with_local_basis1(alignment.rotation())
-                    .with_local_basis2(Quat::IDENTITY),
-                WheelControl::default(),
-                WheelActuator {
-                    chassis,
-                    suspension_joint,
-                    alignment,
-                },
-            ))
-            .id();
+        world.entity_mut(spin_joint).insert(WheelActuator {
+            chassis,
+            suspension_joint,
+        });
         WheelCorner {
             rim,
             hub,
@@ -297,17 +276,48 @@ impl<B: Bundle> PreparedCorner<B> {
             spin_joint,
         }
     }
+
+    pub(crate) fn spawn_pair(
+        self,
+        world: &mut World,
+        hub_rotation: Quat,
+        alignment: WheelAlignment,
+    ) -> (Entity, Entity, Entity) {
+        let hub = world
+            .spawn((
+                RigidBody::Dynamic,
+                SleepingDisabled,
+                Position(self.motion.centre.as_vec3()),
+                Rotation(hub_rotation),
+                LinearVelocity(self.motion.linear_velocity.as_vec3()),
+                Mass(self.config.upright_mass_kg),
+                AngularInertia::new(Vec3::splat(self.config.upright_mass_kg * 0.02)),
+            ))
+            .id();
+        let rim = world.spawn(self.rim_bundle).id();
+        let spin_joint = world
+            .spawn((
+                RevoluteJoint::new(hub, rim)
+                    .with_hinge_axis(Vec3::X)
+                    .with_local_basis1(alignment.rotation())
+                    .with_local_basis2(Quat::IDENTITY),
+                WheelControl::default(),
+                alignment,
+            ))
+            .id();
+        (hub, rim, spin_joint)
+    }
 }
 
 fn steer_wheels(
     mut wheels: Query<
-        (&WheelControl, Option<&WheelActuator>, &mut RevoluteJoint),
+        (&WheelControl, Option<&WheelAlignment>, &mut RevoluteJoint),
         Changed<WheelControl>,
     >,
 ) {
-    for (control, actuator, mut joint) in &mut wheels {
+    for (control, alignment, mut joint) in &mut wheels {
         if control.steer_rad.is_finite() {
-            let rest = actuator.map_or(Quat::IDENTITY, |wheel| wheel.alignment.rotation());
+            let rest = alignment.map_or(Quat::IDENTITY, |wheel| wheel.rotation());
             let basis = Quat::from_rotation_y(control.steer_rad) * rest;
             if joint.local_basis1() != Some(basis) {
                 joint.frame1.basis = JointBasis::Local(basis);
@@ -320,7 +330,6 @@ fn steer_wheels(
 struct WheelActuator {
     chassis: Entity,
     suspension_joint: Entity,
-    alignment: WheelAlignment,
 }
 
 fn apply_wheel_torque(
@@ -392,7 +401,12 @@ fn apply_wheel_torque(
     }
 }
 
-fn wheel_impulse(spin: f32, inverse_inertia: f32, control: WheelControl, dt: f32) -> f32 {
+pub(crate) fn wheel_impulse(
+    spin: f32,
+    inverse_inertia: f32,
+    control: WheelControl,
+    dt: f32,
+) -> f32 {
     let drive = control.drive_nm * dt;
     let brake = control.brake_nm.max(0.0) * dt;
     let cancel_spin = -(spin / inverse_inertia + drive);
@@ -533,7 +547,6 @@ mod tests {
             WheelActuator {
                 chassis,
                 suspension_joint,
-                alignment: WheelAlignment::default(),
             },
             WheelControl {
                 drive_nm: 12.0,

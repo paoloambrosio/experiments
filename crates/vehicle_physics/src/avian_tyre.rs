@@ -22,7 +22,7 @@ use crate::{
 };
 
 /// Insert with [Self::rim_bundle] on the same entity. The rim centre is the centre of mass.
-#[derive(Component)]
+#[derive(Component, Clone)]
 pub struct AvianTyre {
     tyre: MountedTyre,
     last_step: MountedStep,
@@ -87,6 +87,10 @@ impl AvianTyre {
     pub fn error(&self) -> Option<ElasticTyreError> {
         self.error
     }
+
+    pub(crate) fn sync_motion(&mut self, rim: RimMotion) -> Result<(), ElasticTyreError> {
+        self.tyre.sync_rim(rim)
+    }
 }
 
 /// Order measurements after the beads have been synchronized to the end of the substep.
@@ -116,7 +120,11 @@ impl Plugin for AvianTyrePlugin {
     }
 }
 
-fn rim_motion(position: &Position, rotation: &Rotation, solver: &SolverBody) -> RimMotion {
+pub(crate) fn rim_motion(
+    position: &Position,
+    rotation: &Rotation,
+    solver: &SolverBody,
+) -> RimMotion {
     RimMotion {
         centre: DVec3::from(position.0) + solver.delta_position.as_dvec3(),
         rotation: (solver.delta_rotation * rotation.0).as_dquat().normalize(),

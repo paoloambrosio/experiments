@@ -41,7 +41,7 @@ pub struct WheelSpec {
 }
 
 impl WheelSpec {
-    fn corner_config(self, centre_of_mass_m: Vec3) -> CornerConfig {
+    pub(crate) fn corner_config(self, centre_of_mass_m: Vec3) -> CornerConfig {
         CornerConfig {
             mount: self.centre_m + Vec3::Y * self.initial_length_m - centre_of_mass_m,
             suspension: self.suspension,
@@ -147,6 +147,10 @@ pub struct PreparedVehicle {
 }
 
 impl VehicleSpec {
+    pub(crate) fn validated_geometry(self) -> Result<VehicleGeometry, AssemblyError> {
+        self.layout().map(|layout| layout.geometry)
+    }
+
     /// Validate the layout and prepare each distinct tyre once at the given substeps per second.
     pub fn prepare(self, rate: u32) -> Result<PreparedVehicle, AssemblyError> {
         let layout = self.layout()?;

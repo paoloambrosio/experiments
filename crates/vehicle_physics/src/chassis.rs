@@ -246,7 +246,7 @@ impl Chassis {
         dt_seconds: f64,
         wall: Option<&WallFace>,
     ) -> Result<WallReaction, ChassisError> {
-        self.predict(dt_seconds)?;
+        self.predict(dt_seconds, DVec3::ZERO)?;
         let mut reaction = WallReaction::default();
         if let Some(wall) = wall {
             for (previous, next) in self.nodes.iter().zip(&mut self.next_nodes) {
@@ -275,25 +275,41 @@ impl Chassis {
         surface: &ChassisCollision,
         world: &StaticCollisionMesh,
     ) -> Result<StaticReaction, ChassisError> {
-        if surface.node_count != self.nodes.len() {
-            return Err(ChassisError::CollisionNodeCount);
+        self.predict(dt_seconds, DVec3::ZERO)?;
+        self.complete_loaded_step(dt_seconds, Some((surface, world)), |_| {
+            Ok::<_, ChassisError>(())
+        })
+    }
+
+    pub(crate) fn complete_loaded_step<E: From<ChassisError>>(
+        &mut self,
+        dt_seconds: f64,
+        world: Option<(&ChassisCollision, &StaticCollisionMesh)>,
+        validate: impl FnOnce(&[ChassisNode]) -> Result<(), E>,
+    ) -> Result<StaticReaction, E> {
+        if world.is_some_and(|(surface, _)| surface.node_count != self.nodes.len()) {
+            return Err(ChassisError::CollisionNodeCount.into());
         }
-        self.predict(dt_seconds)?;
         let mut positions: Vec<_> = self.nodes.iter().map(|node| node.position_m).collect();
         let mut travel = vec![DVec3::ZERO; positions.len()];
         let mut reaction = StaticReaction::default();
         let mut remaining = dt_seconds;
         // A hard cap bounds work in a jammed set of contacts. The caller can
         // retry a smaller substep without replaying beam damage or impulses.
-        for _ in 0..surface.nodes.len().saturating_mul(2).max(128) {
+        let limit = world.map_or(1, |(surface, _)| {
+            surface.nodes.len().saturating_mul(2).max(128)
+        });
+        for _ in 0..limit {
             for (delta, next) in travel.iter_mut().zip(&self.next_nodes) {
                 *delta = next.velocity_mps * remaining;
                 if !delta.is_finite() {
-                    return Err(ChassisError::NonFiniteStep);
+                    return Err(ChassisError::NonFiniteStep.into());
                 }
             }
-            let hit = world.first_hit(&positions, &travel, &surface.nodes, &surface.panels, |_| {
-                true
+            let hit = world.and_then(|(surface, world)| {
+                world.first_hit(&positions, &travel, &surface.nodes, &surface.panels, |_| {
+                    true
+                })
             });
             let fraction = hit.map_or(1.0, |hit| hit.time);
             for (point, &delta) in positions.iter_mut().zip(&travel) {
@@ -303,6 +319,7 @@ impl Chassis {
                 for (node, point) in self.next_nodes.iter_mut().zip(positions) {
                     node.position_m = point;
                 }
+                validate(&self.next_nodes)?;
                 self.finish_step()?;
                 return Ok(reaction);
             };
@@ -324,7 +341,7 @@ impl Chassis {
                 self.next_nodes[i].velocity_mps += factor * impulse;
                 positions[i] += factor * correction;
                 if !self.next_nodes[i].velocity_mps.is_finite() || !positions[i].is_finite() {
-                    return Err(ChassisError::NonFiniteStep);
+                    return Err(ChassisError::NonFiniteStep.into());
                 }
             }
             let residual = (hit.contact.position_m - hit.interpolate(&positions)).dot(normal);
@@ -333,14 +350,27 @@ impl Chassis {
             reaction.impulse_ns += impulse;
             reaction.max_residual_depth_m = reaction.max_residual_depth_m.max(residual);
             if !reaction.impulse_ns.is_finite() {
-                return Err(ChassisError::NonFiniteStep);
+                return Err(ChassisError::NonFiniteStep.into());
             }
             remaining *= 1.0 - fraction;
         }
-        Err(ChassisError::ContactLimit)
+        Err(ChassisError::ContactLimit.into())
     }
 
-    fn predict(&mut self, dt_seconds: f64) -> Result<(), ChassisError> {
+    #[cfg(feature = "avian")]
+    pub(crate) fn stage_loaded_step(
+        &mut self,
+        dt_seconds: f64,
+        gravity: DVec3,
+    ) -> Result<&mut [ChassisNode], ChassisError> {
+        self.predict(dt_seconds, gravity)?;
+        for (trial, previous) in self.next_nodes.iter_mut().zip(&self.nodes) {
+            trial.position_m = previous.position_m;
+        }
+        Ok(&mut self.next_nodes)
+    }
+
+    fn predict(&mut self, dt_seconds: f64, gravity: DVec3) -> Result<(), ChassisError> {
         if !dt_seconds.is_finite() || dt_seconds <= 0.0 {
             return Err(ChassisError::InvalidTimestep);
         }
@@ -367,7 +397,8 @@ impl Chassis {
             .zip(&self.nodes)
             .zip(&self.forces)
         {
-            let velocity = previous.velocity_mps + (*force / previous.mass_kg) * dt_seconds;
+            let velocity =
+                previous.velocity_mps + (gravity + *force / previous.mass_kg) * dt_seconds;
             let travel = velocity * dt_seconds;
             let position = previous.position_m + travel;
             if !velocity.is_finite() || !travel.is_finite() || !position.is_finite() {

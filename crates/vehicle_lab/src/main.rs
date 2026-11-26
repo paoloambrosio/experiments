@@ -2,6 +2,7 @@ mod assembly_report;
 mod chassis_crash_report;
 mod corner_experiment;
 mod corner_lab;
+mod coupled_chassis_report;
 mod drop_experiment;
 mod drop_lab;
 mod drop_report;
@@ -168,6 +169,8 @@ fn main() -> AppExit {
             assembly_report::report()
         } else if argument == "--chassis-crash-report" {
             chassis_crash_report::report()
+        } else if argument == "--coupled-chassis-report" {
+            coupled_chassis_report::report()
         } else if argument == "--static-contact-report" {
             static_contact_report::report()
         } else if argument == "--handling-report" {

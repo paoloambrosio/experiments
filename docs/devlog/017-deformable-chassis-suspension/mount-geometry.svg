@@ -1,0 +1,37 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="790" height="320" viewBox="0 0 790 320" role="img" aria-labelledby="title description">
+  <title id="title">Reference structure and suspension mount</title>
+  <desc id="description">Top view shows the four frame stations and wheel positions. The front-left mount detail shows three nodes and the offset to a vertical slider above the hub.</desc>
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0 10 5 0 10Z" fill="#1662a4"/>
+    </marker>
+  </defs>
+  <rect width="790" height="320" rx="12" fill="#f4f7fa"/>
+  <path d="M380 25V295" stroke="#c8d5df"/>
+  <g font-family="sans-serif" font-size="14" fill="#213244">
+    <text x="28" y="34" font-size="19" font-weight="bold">Frame · top view</text>
+    <text x="409" y="34" font-size="19" font-weight="bold">Front-left mount · end view</text>
+    <text x="251" y="66">Z = +1.80 m</text>
+    <text x="251" y="117">Z = +1.25 m</text>
+    <text x="251" y="218">Z = −1.25 m</text>
+    <text x="251" y="269">Z = −1.80 m</text>
+    <text x="415" y="213">Node 6</text>
+    <text x="603" y="214">Node 4</text>
+    <text x="596" y="96">Node 5</text>
+    <text x="676" y="142">Mount</text>
+    <text x="676" y="239">Upright</text>
+    <text x="477" y="285">Scene uses +X toward vehicle left and +Y up</text>
+  </g>
+  <path d="M106 63H211L218 113V214L211 264H106L99 214V113Z" fill="#e3ebf3" stroke="#526c80" stroke-width="2"/>
+  <path d="M99 113H218M99 214H218M211 63L99 113 218 214 106 264M106 63l112 50L99 214l112 50" fill="none" stroke="#9bb1c2" stroke-width="2"/>
+  <path d="M73 96v35m171-35v35M73 197v35m171-35v35" stroke="#18374f" stroke-width="10" stroke-linecap="round"/>
+  <path d="M158 97V54" stroke="#1662a4" stroke-width="2" marker-end="url(#arrow)"/>
+  <path d="M455 185 586 185 586 93Z" fill="#d0e1ef" stroke="#526c80" stroke-width="2"/>
+  <circle cx="455" cy="185" r="5" fill="#18374f"/>
+  <circle cx="586" cy="185" r="5" fill="#18374f"/>
+  <circle cx="586" cy="93" r="5" fill="#18374f"/>
+  <path d="M590 181 655 143" stroke="#1662a4" stroke-width="2" marker-end="url(#arrow)"/>
+  <circle cx="660" cy="140" r="6" fill="#1662a4"/>
+  <path d="M660 150v80" stroke="#1662a4" stroke-width="3" marker-end="url(#arrow)"/>
+  <circle cx="660" cy="237" r="7" fill="#18374f"/>
+</svg>
