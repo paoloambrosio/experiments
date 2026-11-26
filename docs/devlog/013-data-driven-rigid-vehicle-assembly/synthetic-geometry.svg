@@ -1,0 +1,58 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 760 332" role="img" aria-labelledby="title desc">
+  <title id="title">Synthetic vehicle wheel centres and tyre rest dimensions</title>
+  <desc id="desc">Plan view shows a 2.80 metre wheelbase with a 1.55 metre front track and 1.68 metre rear track. Side view shows a 0.31 metre front tyre radius and 0.35 metre rear radius, with the rear wheel centre 40 millimetres higher.</desc>
+  <defs>
+    <marker id="arrow" viewBox="0 0 8 8" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto-start-reverse">
+      <path d="M0 0L8 4L0 8Z" fill="#51647a"/>
+    </marker>
+  </defs>
+  <rect width="760" height="332" rx="12" fill="#f8fafc"/>
+  <g font-family="system-ui, sans-serif" fill="#172c43">
+    <text x="24" y="34" font-size="18" font-weight="600">Synthetic four-wheel geometry</text>
+    <text x="24" y="64" font-size="13" font-weight="600">Top view</text>
+    <text x="421" y="64" font-size="13" font-weight="600">Side view</text>
+    <path d="M382 60V305" stroke="#d7e0ea"/>
+    <g fill="none" stroke="#b7c6d6" stroke-dasharray="4 4">
+      <path d="M138 104H231M134 272H235M185 82V293"/>
+      <path d="M475 178H692M475 174.9H692"/>
+    </g>
+    <rect x="135" y="68" width="99" height="234" rx="13" fill="#deebf5" fill-opacity=".65" stroke="#9fb4cb"/>
+    <path d="M138 104H231M134 272H235" stroke="#51647a"/>
+    <g fill="#3176a4" stroke="#225978">
+      <rect x="132" y="85" width="12" height="38" rx="4"/>
+      <rect x="225" y="85" width="12" height="38" rx="4"/>
+      <rect x="127" y="251" width="14" height="42" rx="4"/>
+      <rect x="228" y="251" width="14" height="42" rx="4"/>
+      <circle cx="475" cy="174.9" r="27.125" fill="#deebf5"/>
+      <circle cx="692" cy="178" r="24.025" fill="#deebf5"/>
+      <circle cx="475" cy="174.9" r="3"/>
+      <circle cx="692" cy="178" r="3"/>
+    </g>
+    <g stroke="#51647a" fill="none" marker-start="url(#arrow)" marker-end="url(#arrow)">
+      <path d="M144 139H225"/>
+      <path d="M141 238H228"/>
+      <path d="M272 105V271"/>
+    </g>
+    <g stroke="#51647a" fill="none" marker-end="url(#arrow)">
+      <path d="M75 127V91"/>
+      <path d="M75 127H42"/>
+      <path d="M595 128H637"/>
+    </g>
+    <g font-size="12">
+      <text x="75" y="85" text-anchor="middle">+Z</text>
+      <text x="27" y="146">+X</text>
+      <text x="645" y="132">+Z</text>
+      <text x="185" y="157" text-anchor="middle">1.55 m</text>
+      <text x="185" y="226" text-anchor="middle">1.68 m</text>
+      <text x="285" y="191">2.80 m</text>
+      <text x="118" y="108" text-anchor="end">FL</text>
+      <text x="244" y="108">FR</text>
+      <text x="115" y="276" text-anchor="end">RL</text>
+      <text x="249" y="276">RR</text>
+      <text x="475" y="234" text-anchor="middle">Rear Ø 0.70 m</text>
+      <text x="692" y="234" text-anchor="middle">Front Ø 0.62 m</text>
+      <text x="584" y="261" text-anchor="middle">Rear wheel centre is 40 mm higher</text>
+      <text x="584" y="282" text-anchor="middle" fill="#51647a">Radii shown at zero deformation</text>
+    </g>
+  </g>
+</svg>

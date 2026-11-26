@@ -77,6 +77,28 @@ car.despawn(world);
 
 The chassis starts at the origin in X and Z with +Y up, +Z forward, and +X to the left. Each wheel has its own deformable tyre and gas charge. [Wheel steering and torque commands](#steer-drive-and-brake-the-wheels)
 
+## Spawn a configured four-wheel vehicle
+
+Build a `VehicleSpec` with the chassis mass, inertia-box dimensions, centre of mass, and four wheel specifications. Start from the reference specification when you want its parameters as a template.
+
+```rust
+use bevy::prelude::{Quat, Vec3};
+use vehicle_physics::{reference_car, vehicle_assembly::{VehiclePose, VehicleRoad}};
+
+let spec = reference_car::specification();
+let prepared = spec.prepare(3840)?;
+let pose = VehiclePose {
+    origin_m: Vec3::new(5.0, 0.52, -2.0),
+    rotation: Quat::from_rotation_y(0.3),
+};
+let car = prepared.spawn(world, pose, &VehicleRoad::Flat(reference_car::road()))?;
+let [left, right] = car.geometry.front_steer(0.1).expect("valid steering angle");
+// Apply these angles to the front spin joints with WheelControl.
+car.despawn(world);
+```
+
+The pose places the vehicle-local origin. The chassis entity sits at the transformed centre of mass, and each wheel starts at its transformed local centre. The caller supplies the start height, accounting for the road and the four inflated radii from `prepared.unloaded_radii_m()`. Mount offsets come from the wheel centres and initial suspension lengths. Use `VehicleRoad::Triangles` to share a static triangle road across the four tyres. Reuse the prepared specification across spawns. [Triangle road setup](#use-a-static-triangle-road)
+
 ## Run the lab
 
 Install a Rust toolchain and the native build and graphics prerequisites for Bevy. This workspace uses Bevy 0.20.1 and Avian 0.8.0. [Bevy setup guide](https://bevy.org/learn/quick-start/getting-started/setup/)
@@ -486,6 +508,8 @@ let tyre = tyre.with_puncture(PunctureConfig::new(0.001, 0.65)?)?;
 The arguments are the maximum opening as a fraction of a panel's original area and the orifice discharge coefficient. Both are dimensionless. `torn_panels()` identifies the open panels by side and segment and returns their topology node indices and opening areas in m². `puncture_reading()` reports the total area and mass flow in kg/s, with positive flow leaving the tyre. `chamber_air_mass_kg()` also works with a sealed chamber. These readings are available on fixed-bead and mounted tyres. Reinflating changes the air mass and preserves the openings. Resetting the fixed-bead tyre restores the intact sidewalls and initial air charge.
 
 ## Run the headless comparisons
+
+`cargo run -p vehicle_lab -- --assembly-report` compares reference-car loads, sag, and stopping distances with a second four-wheel assembly. The second car uses different tyre sizes and tracks at each axle and drives on a triangle floor.
 
 ```sh
 cargo run -p vehicle_lab -- --handling-report

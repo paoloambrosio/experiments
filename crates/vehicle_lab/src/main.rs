@@ -1,3 +1,4 @@
+mod assembly_report;
 mod corner_experiment;
 mod corner_lab;
 mod drop_experiment;
@@ -161,7 +162,9 @@ fn main() -> AppExit {
     let mut handling_lab = false;
     let mut window = WindowOptions::default();
     for argument in std::env::args_os().skip(1) {
-        let result = if argument == "--handling-report" {
+        let result = if argument == "--assembly-report" {
+            assembly_report::report()
+        } else if argument == "--handling-report" {
             handling_report::report(std::env::args_os().any(|argument| argument == "--samples"))
         } else if argument == "--grip-report" {
             grip_report::report(std::env::args_os().any(|argument| argument == "--samples"))

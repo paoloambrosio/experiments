@@ -75,7 +75,7 @@ pub fn report(samples: bool) -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
-fn run_case(
+pub(crate) fn run_case(
     rate: u32,
     tyre: &ElasticTyre,
     case: Case,

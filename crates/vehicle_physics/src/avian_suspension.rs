@@ -14,7 +14,7 @@ use bevy::prelude::*;
 use crate::{
     avian_tyre::{AvianTyre, TyreWrenchApplied},
     elastic_tyre::ElasticTyreError,
-    mounted_tyre::MountedTyre,
+    mounted_tyre::{MountedTyre, RimMotion},
 };
 
 /// Chassis-local vertical suspension, with length measured down from the mount.
@@ -50,6 +50,41 @@ pub struct CornerConfig {
     /// Hub mass. The adapter uses an isotropic inertia of 0.02 kg·m² per kg of hub mass.
     pub upright_mass_kg: f32,
     pub bare_rim_mass_kg: f64,
+}
+
+impl CornerConfig {
+    pub(crate) fn invalid_field(self) -> Option<&'static str> {
+        let s = self.suspension;
+        [
+            (!self.mount.is_finite(), "mount"),
+            (
+                !self.upright_mass_kg.is_finite() || self.upright_mass_kg * 0.02 <= 0.0,
+                "upright_mass_kg",
+            ),
+            (
+                !s.stiffness_n_per_m.is_finite() || s.stiffness_n_per_m < 0.0,
+                "suspension.stiffness_n_per_m",
+            ),
+            (
+                !s.damping_ns_per_m.is_finite() || s.damping_ns_per_m < 0.0,
+                "suspension.damping_ns_per_m",
+            ),
+            (
+                !s.min_length_m.is_finite() || s.min_length_m < 0.0,
+                "suspension.min_length_m",
+            ),
+            (
+                !s.max_length_m.is_finite() || s.max_length_m <= s.min_length_m,
+                "suspension.max_length_m",
+            ),
+            (
+                !(s.min_length_m..=s.max_length_m).contains(&s.free_length_m),
+                "suspension.free_length_m",
+            ),
+        ]
+        .into_iter()
+        .find_map(|(invalid, field)| invalid.then_some(field))
+    }
 }
 
 /// Commands on [WheelCorner::spin_joint]. Positive steer turns +Z towards +X about the
@@ -143,25 +178,41 @@ impl WheelCorner {
         if world.get::<RigidBody>(chassis).is_none() {
             return Err(CornerError::MissingChassis);
         }
-        let suspension = config.suspension;
-        if !config.mount.is_finite()
-            || !config.upright_mass_kg.is_finite()
-            || config.upright_mass_kg <= 0.0
-            || !suspension.stiffness_n_per_m.is_finite()
-            || suspension.stiffness_n_per_m < 0.0
-            || !suspension.damping_ns_per_m.is_finite()
-            || suspension.damping_ns_per_m < 0.0
-            || !suspension.max_length_m.is_finite()
-            || suspension.min_length_m < 0.0
-            || !(suspension.min_length_m..=suspension.max_length_m)
-                .contains(&suspension.free_length_m)
-            || suspension.min_length_m == suspension.max_length_m
-        {
+        Ok(Self::prepare(tyre, config)?.spawn(world, chassis))
+    }
+
+    pub(crate) fn prepare(
+        tyre: MountedTyre,
+        config: CornerConfig,
+    ) -> Result<PreparedCorner<impl Bundle>, CornerError> {
+        if config.invalid_field().is_some() {
             return Err(CornerError::InvalidConfiguration);
         }
         let motion = tyre.rim();
         let rim_bundle =
             AvianTyre::rim_bundle(tyre, config.bare_rim_mass_kg).map_err(CornerError::Tyre)?;
+        Ok(PreparedCorner {
+            rim_bundle,
+            motion,
+            config,
+        })
+    }
+}
+
+pub(crate) struct PreparedCorner<B> {
+    rim_bundle: B,
+    motion: RimMotion,
+    config: CornerConfig,
+}
+
+impl<B: Bundle> PreparedCorner<B> {
+    pub(crate) fn spawn(self, world: &mut World, chassis: Entity) -> WheelCorner {
+        let Self {
+            rim_bundle,
+            motion,
+            config,
+        } = self;
+        let suspension = config.suspension;
         let rim = world.spawn(rim_bundle).id();
         let hub = world
             .spawn((
@@ -197,12 +248,12 @@ impl WheelCorner {
                 },
             ))
             .id();
-        Ok(Self {
+        WheelCorner {
             rim,
             hub,
             suspension_joint,
             spin_joint,
-        })
+        }
     }
 }
 

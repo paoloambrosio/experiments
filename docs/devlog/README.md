@@ -16,9 +16,10 @@ Each entry documents a development step in the `vehicle_physics` core crate. Sup
 - [010 — Scripted whole-car handling](010-scripted-whole-car-handling/README.md) measures launch, turns, stopping distances, load transfer, and wheel lock with four live deformable tyres.
 - [011 — Reference car assembly](011-reference-car-assembly/README.md) extracts the sealed reference tyre and four-corner chassis assembly into the core crate and checks them against the loaded-wheel and whole-car baselines.
 - [012 — Tyre contact on driving surfaces](012-tyre-contact-on-driving-surfaces/README.md) adds static triangle roads and measures a loaded wheel crossing a coplanar seam and climbing a ramp.
+- [013 — Data-driven rigid vehicle assembly](013-data-driven-rigid-vehicle-assembly/README.md) uses one assembly path for the reference car and a second car with staggered tyres and axle tracks.
 
 ## Roadmap
 
-- **013 · Data-driven rigid vehicle assembly** makes chassis and wheel parameters configurable while preserving the reference car baseline.
+- **014 · Authored wheel alignment** follows the first imported drive. Preserve rest camber and toe, compose steering with that alignment, and measure tread loading and straight-line scrub against the upright baseline.
 
 These core milestones support the [imported terrain and vehicle roadmap](../drive-roadmap.md).

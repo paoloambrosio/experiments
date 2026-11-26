@@ -17,3 +17,5 @@ pub mod tyre;
 pub mod inflation;
 #[cfg(feature = "avian")]
 pub mod reference_car;
+#[cfg(feature = "avian")]
+pub mod vehicle_assembly;

@@ -1,16 +1,20 @@
 //! The 1,000 kg reference car. World +Y is up, +Z forward and +X left.
 //! Lengths are metres, masses kilograms and times seconds.
 use crate::{
-    avian_suspension::{CornerConfig, CornerError, Suspension, WheelCorner},
+    avian_suspension::{CornerError, Suspension, WheelCorner},
     elastic_tyre::{ElasticTyre, ElasticTyreConfig},
-    inflation::Inflation,
-    mounted_tyre::{FlatFloor, MountedTyre, RimMotion},
+    inflation::{TyreInflation, TyreSpec},
+    mounted_tyre::FlatFloor,
     pressure::PressureConfig,
     tread_reinforcement::TreadReinforcementConfig,
-    tyre::{TyreConfig, TyreTopology},
+    tyre::TyreConfig,
+    vehicle_assembly::{
+        self, AssemblyError, ChassisSpec, VehiclePose, VehicleRoad, VehicleSpec, WheelSpec,
+    },
 };
-use avian3d::prelude::*;
-use bevy::{math::DVec3, prelude::*};
+use bevy::prelude::*;
+
+pub use crate::{inflation::unloaded_radius, vehicle_assembly::WHEEL_NAMES};
 pub const G: f64 = 9.81;
 pub const NOMINAL_LOAD_N: f64 = 250.0 * G;
 pub const FRICTION: f64 = 0.8;
@@ -32,7 +36,6 @@ pub const BODY_SIZE: Vec3 = Vec3::new(1.5, 0.5, 3.6);
 pub const COM_HEIGHT: f32 = 0.50;
 pub const WHEELBASE: f32 = 2.5;
 pub const TRACK: f32 = 1.5;
-pub const WHEEL_NAMES: [&str; 4] = ["FL", "FR", "RL", "RR"];
 // The 008 nominal-load static fixture puts the axle at about 326.14 mm.
 const MOUNT_Y: f32 = 0.32614 + SUSPENSION.free_length_m - SAG_M as f32 - COM_HEIGHT;
 
@@ -49,7 +52,8 @@ pub fn road() -> FlatFloor {
         .with_friction(FRICTION, 0.1)
         .unwrap()
 }
-fn tyre_material() -> (ElasticTyreConfig, TreadReinforcementConfig) {
+/// The light-car tyre used in the reference handling and grip measurements.
+pub fn tyre_spec() -> TyreSpec {
     let mut material = ElasticTyreConfig::default();
     material.circumferential.stiffness *= 2.5;
     material.cross_section.stiffness *= 4.0;
@@ -60,69 +64,69 @@ fn tyre_material() -> (ElasticTyreConfig, TreadReinforcementConfig) {
     let mut reinforcement = TreadReinforcementConfig::default();
     reinforcement.hoop_stiffness_multiplier = 16.0;
     reinforcement.crown.stiffness *= 4.0;
-    (material, reinforcement)
+    TyreSpec {
+        geometry: TyreConfig::default(),
+        material,
+        reinforcement,
+        ambient_pressure_pa: PressureConfig::default().ambient_pressure_pa,
+        gauge_pressure_pa: PRESSURE_PA,
+    }
+}
+
+/// Reference geometry with the vehicle origin at the chassis centre of mass.
+pub fn specification() -> VehicleSpec {
+    let initial_length_m = SUSPENSION.free_length_m - SAG_M as f32;
+    VehicleSpec {
+        chassis: ChassisSpec {
+            mass_kg: 920.0,
+            size_m: BODY_SIZE,
+            centre_of_mass_m: Vec3::ZERO,
+        },
+        wheels: MOUNTS.map(|mount| {
+            Some(WheelSpec {
+                centre_m: mount - Vec3::Y * initial_length_m,
+                initial_length_m,
+                suspension: SUSPENSION,
+                upright_mass_kg: UPRIGHT_KG,
+                bare_rim_mass_kg: BARE_RIM_KG,
+                tyre: tyre_spec(),
+            })
+        }),
+    }
 }
 /// Inflate once per solver rate, then reuse the prepared shape for all four wheels and resets.
 pub struct ReferenceTyre {
     pub tyre: ElasticTyre,
-    fill: Inflation,
-    forces: Vec<DVec3>,
-    sealed: bool,
+    fill: TyreInflation,
 }
 impl ReferenceTyre {
     pub fn new(rate: u32) -> Self {
-        let (material, reinforcement) = tyre_material();
-        let topology = TyreTopology::generate(&TyreConfig::default()).unwrap();
-        let forces = vec![DVec3::ZERO; topology.nodes().len()];
-        let tyre = ElasticTyre::new_inflated(topology, material, PressureConfig::default())
-            .unwrap()
-            .with_tread_reinforcement(reinforcement)
-            .unwrap();
-        Self {
-            tyre,
-            fill: Inflation::new(rate),
-            forces,
-            sealed: false,
-        }
+        let (tyre, fill) = tyre_spec()
+            .begin(rate)
+            .expect("valid reference tyre and inflation rate");
+        Self { tyre, fill }
     }
     /// Advance one inflation substep. Returns true once the tyre is ready to mount.
     pub fn advance(&mut self) -> Result<bool, Box<dyn std::error::Error>> {
-        if !self.sealed {
-            self.sealed = self
-                .fill
-                .advance(&mut self.tyre, PRESSURE_PA, &self.forces)?;
-        }
-        Ok(self.sealed)
+        Ok(self.fill.advance(&mut self.tyre)?)
     }
     pub fn is_ready(&self) -> bool {
-        self.sealed
+        self.fill.is_ready()
     }
     pub fn seconds(&self) -> f64 {
         self.fill.seconds()
     }
 }
-pub fn unloaded_radius(tyre: &ElasticTyre) -> f64 {
-    -tyre
-        .positions()
-        .iter()
-        .map(|p| p.y)
-        .fold(f64::INFINITY, f64::min)
-}
 
 /// Spawn an awake rigid chassis with uniform-box inertia. Size is (width, height, length).
 pub fn spawn_chassis(world: &mut World, mass_kg: f32, centre: Vec3, size: Vec3) -> Entity {
-    let squared = size * size;
-    let inertia = (Vec3::splat(squared.element_sum()) - squared) * (mass_kg / 12.0);
-    world
-        .spawn((
-            RigidBody::Dynamic,
-            SleepingDisabled,
-            Position(centre),
-            Rotation(Quat::IDENTITY),
-            Mass(mass_kg),
-            AngularInertia::new(inertia),
-        ))
-        .id()
+    vehicle_assembly::spawn_chassis_body(
+        world,
+        mass_kg,
+        centre,
+        Quat::IDENTITY,
+        vehicle_assembly::box_inertia(mass_kg, size),
+    )
 }
 
 /// Owner of the reference chassis and four suspension assemblies.
@@ -137,64 +141,27 @@ impl ReferenceCar {
     pub fn spawn(world: &mut World, tyre: &ElasticTyre) -> Result<Self, CornerError> {
         let height =
             unloaded_radius(tyre) as f32 + SUSPENSION.free_length_m - SAG_M as f32 - MOUNT_Y;
-        let mounted = MOUNTS.map(|mount| {
-            let centre =
-                Vec3::Y * height + mount - Vec3::Y * (SUSPENSION.free_length_m - SAG_M as f32);
-            MountedTyre::new(
-                tyre.clone(),
-                RimMotion {
-                    centre: centre.as_dvec3(),
-                    ..default()
-                },
-                Some(road()),
-            )
-        });
-        let [a, b, c, d] = mounted.map(|wheel| wheel.map_err(CornerError::Tyre));
-        let mounted = [a?, b?, c?, d?];
-        let chassis = spawn_chassis(world, 920.0, Vec3::Y * height, BODY_SIZE);
-        let mut wheels: Vec<WheelCorner> = Vec::with_capacity(4);
-        for (mount, mounted) in MOUNTS.into_iter().zip(mounted) {
-            match WheelCorner::spawn(
-                world,
-                chassis,
-                mounted,
-                CornerConfig {
-                    mount,
-                    suspension: SUSPENSION,
-                    upright_mass_kg: UPRIGHT_KG,
-                    bare_rim_mass_kg: BARE_RIM_KG,
-                },
-            ) {
-                Ok(wheel) => wheels.push(wheel),
-                Err(error) => {
-                    for wheel in wheels {
-                        remove_corner(world, wheel);
-                    }
-                    world.despawn(chassis);
-                    return Err(error);
+        let pose = VehiclePose {
+            origin_m: Vec3::Y * height,
+            rotation: Quat::IDENTITY,
+        };
+        let assembly = specification()
+            .spawn_with_tyres(world, [tyre; 4], pose, &VehicleRoad::Flat(road()))
+            .map_err(|error| match error {
+                AssemblyError::Corner { source, .. } => source,
+                AssemblyError::InvalidPose(_) => {
+                    CornerError::Tyre(crate::elastic_tyre::ElasticTyreError::InvalidRimMotion)
                 }
-            }
-        }
+                _ => CornerError::InvalidConfiguration,
+            })?;
         Ok(Self {
-            chassis,
-            wheels: wheels.try_into().unwrap(),
+            chassis: assembly.chassis,
+            wheels: assembly.wheels,
         })
     }
+
     /// Remove this assembly, including its joints. Caller-owned visuals can be parented to the bodies.
     pub fn despawn(self, world: &mut World) {
-        for wheel in self.wheels {
-            remove_corner(world, wheel);
-        }
-        world.despawn(self.chassis);
-    }
-}
-fn remove_corner(world: &mut World, wheel: WheelCorner) {
-    for entity in [
-        wheel.spin_joint,
-        wheel.suspension_joint,
-        wheel.rim,
-        wheel.hub,
-    ] {
-        world.despawn(entity);
+        vehicle_assembly::despawn(world, self.chassis, self.wheels);
     }
 }

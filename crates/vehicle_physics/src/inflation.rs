@@ -1,6 +1,155 @@
 //! Fixed-bead inflation used to prepare a sealed tyre before mounting.
-use crate::elastic_tyre::ElasticTyre;
+use std::{error::Error, fmt};
+
 use bevy_math::DVec3;
+
+use crate::{
+    elastic_tyre::{ElasticTyre, ElasticTyreConfig, ElasticTyreError},
+    pressure::PressureConfig,
+    tread_reinforcement::TreadReinforcementConfig,
+    tyre::{TyreConfig, TyreConfigError, TyreTopology},
+};
+
+/// The five-ring rest shape and material of one sealed tyre.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct TyreSpec {
+    pub geometry: TyreConfig,
+    pub material: ElasticTyreConfig,
+    pub reinforcement: TreadReinforcementConfig,
+    /// Ambient absolute pressure in Pa.
+    pub ambient_pressure_pa: f64,
+    /// Target gauge pressure in Pa. Preparation starts at zero gauge pressure.
+    pub gauge_pressure_pa: f64,
+}
+
+#[derive(Debug)]
+pub enum TyrePreparationError {
+    InvalidRate(u32),
+    InvalidAmbientPressure,
+    InvalidGaugePressure,
+    Geometry(TyreConfigError),
+    Material(ElasticTyreError),
+    Reinforcement(ElasticTyreError),
+    Inflation(Box<dyn Error>),
+}
+
+impl fmt::Display for TyrePreparationError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::InvalidRate(rate) => {
+                write!(f, "unsupported tyre inflation rate {rate} substeps/s")
+            }
+            Self::InvalidAmbientPressure => {
+                f.write_str("tyre.ambient_pressure_pa must be positive and finite")
+            }
+            Self::InvalidGaugePressure => f.write_str(
+                "tyre.gauge_pressure_pa must be nonnegative with finite absolute pressure",
+            ),
+            Self::Geometry(error) => write!(f, "tyre.geometry: {error}"),
+            Self::Material(error) => write!(f, "tyre.material or chamber: {error}"),
+            Self::Reinforcement(error) => write!(f, "tyre.reinforcement: {error}"),
+            Self::Inflation(error) => write!(f, "tyre inflation: {error}"),
+        }
+    }
+}
+
+impl Error for TyrePreparationError {
+    fn source(&self) -> Option<&(dyn Error + 'static)> {
+        match self {
+            Self::Geometry(error) => Some(error),
+            Self::Material(error) | Self::Reinforcement(error) => Some(error),
+            Self::Inflation(error) => Some(error.as_ref()),
+            _ => None,
+        }
+    }
+}
+
+impl TyreSpec {
+    /// Inflate at the given substeps per second and return the sealed, fixed-bead tyre.
+    pub fn prepare(self, rate: u32) -> Result<ElasticTyre, TyrePreparationError> {
+        let (mut tyre, mut fill) = self.begin(rate)?;
+        while !fill.advance(&mut tyre)? {}
+        Ok(tyre)
+    }
+
+    pub(crate) fn begin(
+        self,
+        rate: u32,
+    ) -> Result<(ElasticTyre, TyreInflation), TyrePreparationError> {
+        if !SUPPORTED_RATES.contains(&rate) {
+            return Err(TyrePreparationError::InvalidRate(rate));
+        }
+        if !self.ambient_pressure_pa.is_finite() || self.ambient_pressure_pa <= 0.0 {
+            return Err(TyrePreparationError::InvalidAmbientPressure);
+        }
+        if !self.gauge_pressure_pa.is_finite()
+            || self.gauge_pressure_pa < 0.0
+            || !(self.ambient_pressure_pa + self.gauge_pressure_pa).is_finite()
+        {
+            return Err(TyrePreparationError::InvalidGaugePressure);
+        }
+        let topology =
+            TyreTopology::generate(&self.geometry).map_err(TyrePreparationError::Geometry)?;
+        let forces = vec![DVec3::ZERO; topology.nodes().len()];
+        let pressure = PressureConfig {
+            ambient_pressure_pa: self.ambient_pressure_pa,
+            initial_gauge_pressure_pa: 0.0,
+        };
+        let tyre = ElasticTyre::new_inflated(topology, self.material, pressure)
+            .map_err(TyrePreparationError::Material)?
+            .with_tread_reinforcement(self.reinforcement)
+            .map_err(TyrePreparationError::Reinforcement)?;
+        Ok((
+            tyre,
+            TyreInflation {
+                fill: Inflation::new(rate),
+                forces,
+                gauge_pressure_pa: self.gauge_pressure_pa,
+                sealed: false,
+            },
+        ))
+    }
+}
+
+/// Radius in metres along local -Y for a prepared, unloaded upright tyre.
+pub fn unloaded_radius(tyre: &ElasticTyre) -> f64 {
+    -tyre
+        .positions()
+        .iter()
+        .map(|p| p.y)
+        .fold(f64::INFINITY, f64::min)
+}
+
+pub(crate) struct TyreInflation {
+    fill: Inflation,
+    forces: Vec<DVec3>,
+    gauge_pressure_pa: f64,
+    sealed: bool,
+}
+
+impl TyreInflation {
+    pub(crate) fn advance(&mut self, tyre: &mut ElasticTyre) -> Result<bool, TyrePreparationError> {
+        if !self.sealed {
+            self.sealed = self
+                .fill
+                .advance(tyre, self.gauge_pressure_pa, &self.forces)
+                .map_err(TyrePreparationError::Inflation)?;
+        }
+        Ok(self.sealed)
+    }
+
+    #[cfg(feature = "avian")]
+    pub(crate) fn is_ready(&self) -> bool {
+        self.sealed
+    }
+
+    #[cfg(feature = "avian")]
+    pub(crate) fn seconds(&self) -> f64 {
+        self.fill.seconds()
+    }
+}
+
+const SUPPORTED_RATES: std::ops::RangeInclusive<u32> = 4..=u32::MAX / 30;
 
 /// Ramp gauge pressure over one second and hold it until all nodes have settled.
 pub struct Inflation {
@@ -12,7 +161,7 @@ impl Inflation {
     /// Solver rate in substeps per second.
     pub fn new(rate: u32) -> Self {
         assert!(
-            (4..=u32::MAX / 30).contains(&rate),
+            SUPPORTED_RATES.contains(&rate),
             "unsupported inflation rate"
         );
         Self {
