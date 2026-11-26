@@ -8,6 +8,7 @@ cargo run -p vehicle_lab -- --handling-lab
 cargo run -p vehicle_lab -- --handling-report
 cargo run -p vehicle_lab -- --assembly-report
 cargo run -p vehicle_lab -- --chassis-crash-report
+cargo run -p vehicle_lab -- --static-contact-report
 cargo run -p vehicle_drive -- --drive
 cargo run -p vehicle_drive -- --alignment-report
 cargo run -p vehicle_lab -- --grip-lab
@@ -27,7 +28,7 @@ cargo run -p vehicle_lab -- --drop-report
 
 Regular lab builds use compiler optimisations. Add `--no-vsync` to run without the display's refresh cap where supported, or `--benchmark` to time preparation and a real-time replay in the lab window. [Performance controls and measurement](docs/user/README.md#performance)
 
-- `vehicle_physics` advances the tyre on analytic surfaces or static triangle roads with a windowless solver. Its optional Avian integration provides a configurable four-wheel assembly, authored wheel alignment, suspension, steering, drive torque, and braking.
+- `vehicle_physics` advances deformable tyres and chassis with a windowless solver. The core supports analytic surfaces, triangle roads, and swept contact with static obstacles. Its optional Avian integration provides a configurable four-wheel assembly, authored wheel alignment, suspension, steering, drive torque, and braking.
 - `vehicle_lab` runs whole-car handling replays, the loaded suspension corner, wheel drop, moving-belt rig, kerb strike, puncture comparison, and fixed-bead tread press with visual labs and headless reports.
 - `vehicle_assets` defines shared terrain geometry and vehicle assets with rigid-body and soft-body inputs. [Imported terrain and vehicle roadmap](docs/drive-roadmap.md)
 - `vehicle_drive` selects Rigs of Rods definitions from ZIP archives and drives the imported Accord on the facility collision mesh. It also provides terrain and parked vehicle viewers. [Drive setup and controls](docs/user/README.md#drive-on-imported-terrain)

@@ -19,5 +19,6 @@ Each entry documents a development step in the `vehicle_physics` core crate. Sup
 - [013 — Data-driven rigid vehicle assembly](013-data-driven-rigid-vehicle-assembly/README.md) uses one assembly path for the reference car and a second car with staggered tyres and axle tracks.
 - [014 — Authored wheel alignment](014-authored-wheel-alignment/README.md) preserves rest camber and toe and measures their effect on tread loading and straight-line lateral forces.
 - [015 — Soft-body chassis impacts](015-soft-body-chassis-impacts/README.md) measures elastic rebound, permanent nose crush, and captured wall impulse in full-width and offset strikes.
+- [016 — Soft-body contact with static obstacles](016-static-world-contact/README.md) measures panel contact with a narrow post and a wheel-first side impact on a loaded tread.
 
 These core milestones support the [imported terrain and vehicle roadmap](../drive-roadmap.md).

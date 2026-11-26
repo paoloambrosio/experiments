@@ -7,6 +7,7 @@ use bevy_math::DVec3;
 
 use crate::beam_damage::{BeamDamage, BeamDamageConfig};
 pub use crate::elastic_tyre::BeamCoefficients;
+use crate::static_collision::{CONTACT_GAP_M, StaticCollisionMesh, StaticReaction, face_normal};
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct ChassisNode {
@@ -73,12 +74,54 @@ pub struct WallReaction {
     pub max_trial_depth_m: f64,
 }
 
+/// Prepared indices for a chassis collision surface, in chassis node order.
+#[derive(Debug, Clone)]
+pub struct ChassisCollision {
+    node_count: usize,
+    nodes: Vec<usize>,
+    panels: Vec<[usize; 3]>,
+}
+
+impl ChassisCollision {
+    /// Panel corners also participate as collision nodes.
+    pub fn new(
+        chassis: &Chassis,
+        mut nodes: Vec<usize>,
+        panels: Vec<[usize; 3]>,
+    ) -> Result<Self, ChassisError> {
+        let node_count = chassis.nodes.len();
+        if let Some(&index) = nodes.iter().find(|&&index| index >= node_count) {
+            return Err(ChassisError::InvalidCollisionNode(index));
+        }
+        for (index, &panel) in panels.iter().enumerate() {
+            let [Some(a), Some(b), Some(c)] = panel.map(|i| chassis.initial.get(i)) else {
+                return Err(ChassisError::InvalidCollisionPanel(index));
+            };
+            if face_normal([a.position_m, b.position_m, c.position_m]).is_none() {
+                return Err(ChassisError::InvalidCollisionPanel(index));
+            }
+            nodes.extend(panel);
+        }
+        nodes.sort_unstable();
+        nodes.dedup();
+        Ok(Self {
+            node_count,
+            nodes,
+            panels,
+        })
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ChassisError {
     NoNodes,
     InvalidNode(usize),
     InvalidBeam(usize),
     InvalidWall,
+    InvalidCollisionNode(usize),
+    InvalidCollisionPanel(usize),
+    CollisionNodeCount,
+    ContactLimit,
     InvalidTimestep,
     CollapsedBeam(usize),
     NonFiniteStep,
@@ -96,6 +139,14 @@ impl fmt::Display for ChassisError {
             Self::InvalidWall => {
                 f.write_str("the wall needs finite coordinates and positive width and height")
             }
+            Self::InvalidCollisionNode(index) => write!(f, "invalid collision node {index}"),
+            Self::InvalidCollisionPanel(index) => {
+                write!(f, "invalid chassis collision panel {index}")
+            }
+            Self::CollisionNodeCount => {
+                f.write_str("collision surface and chassis node counts differ")
+            }
+            Self::ContactLimit => f.write_str("chassis exceeded the contact iteration limit"),
             Self::InvalidTimestep => f.write_str("the timestep must be positive and finite"),
             Self::CollapsedBeam(index) => {
                 write!(f, "chassis beam {index} collapsed to zero length")
@@ -195,6 +246,101 @@ impl Chassis {
         dt_seconds: f64,
         wall: Option<&WallFace>,
     ) -> Result<WallReaction, ChassisError> {
+        self.predict(dt_seconds)?;
+        let mut reaction = WallReaction::default();
+        if let Some(wall) = wall {
+            for (previous, next) in self.nodes.iter().zip(&mut self.next_nodes) {
+                let travel = next.velocity_mps * dt_seconds;
+                let speed = next.velocity_mps.z;
+                if let Some(depth) = wall.contact(previous.position_m, travel, next) {
+                    reaction.impulse_z_ns -= previous.mass_kg * speed;
+                    reaction.struck_nodes += 1;
+                    reaction.max_trial_depth_m = reaction.max_trial_depth_m.max(depth);
+                }
+            }
+        }
+        if !reaction.impulse_z_ns.is_finite() || !reaction.max_trial_depth_m.is_finite() {
+            return Err(ChassisError::NonFiniteStep);
+        }
+        self.finish_step()?;
+        Ok(reaction)
+    }
+
+    /// Apply beam forces and sweep the chassis surface through a static world
+    /// over one substep. Contact is frictionless with zero normal restitution.
+    /// Errors preserve the last committed motion and beam history.
+    pub fn step_with_static_world(
+        &mut self,
+        dt_seconds: f64,
+        surface: &ChassisCollision,
+        world: &StaticCollisionMesh,
+    ) -> Result<StaticReaction, ChassisError> {
+        if surface.node_count != self.nodes.len() {
+            return Err(ChassisError::CollisionNodeCount);
+        }
+        self.predict(dt_seconds)?;
+        let mut positions: Vec<_> = self.nodes.iter().map(|node| node.position_m).collect();
+        let mut travel = vec![DVec3::ZERO; positions.len()];
+        let mut reaction = StaticReaction::default();
+        let mut remaining = dt_seconds;
+        // A hard cap bounds work in a jammed set of contacts. The caller can
+        // retry a smaller substep without replaying beam damage or impulses.
+        for _ in 0..surface.nodes.len().saturating_mul(2).max(128) {
+            for (delta, next) in travel.iter_mut().zip(&self.next_nodes) {
+                *delta = next.velocity_mps * remaining;
+                if !delta.is_finite() {
+                    return Err(ChassisError::NonFiniteStep);
+                }
+            }
+            let hit = world.first_hit(&positions, &travel, &surface.nodes, &surface.panels, |_| {
+                true
+            });
+            let fraction = hit.map_or(1.0, |hit| hit.time);
+            for (point, &delta) in positions.iter_mut().zip(&travel) {
+                *point += fraction * delta;
+            }
+            let Some(hit) = hit else {
+                for (node, point) in self.next_nodes.iter_mut().zip(positions) {
+                    node.position_m = point;
+                }
+                self.finish_step()?;
+                return Ok(reaction);
+            };
+
+            let normal = hit.contact.normal;
+            let inverse_mass: f64 = hit
+                .weights()
+                .map(|(i, weight)| weight * weight / self.next_nodes[i].mass_kg)
+                .sum();
+            let normal_velocity: f64 = hit
+                .weights()
+                .map(|(i, weight)| weight * self.next_nodes[i].velocity_mps.dot(normal))
+                .sum();
+            let impulse = normal * (-normal_velocity / inverse_mass);
+            let depth = (hit.contact.position_m - hit.interpolate(&positions)).dot(normal);
+            let correction = normal * ((depth + CONTACT_GAP_M).max(0.0) / inverse_mass);
+            for (i, weight) in hit.weights() {
+                let factor = weight / self.next_nodes[i].mass_kg;
+                self.next_nodes[i].velocity_mps += factor * impulse;
+                positions[i] += factor * correction;
+                if !self.next_nodes[i].velocity_mps.is_finite() || !positions[i].is_finite() {
+                    return Err(ChassisError::NonFiniteStep);
+                }
+            }
+            let residual = (hit.contact.position_m - hit.interpolate(&positions)).dot(normal);
+            reaction.first.get_or_insert(hit.contact);
+            reaction.contacts += 1;
+            reaction.impulse_ns += impulse;
+            reaction.max_residual_depth_m = reaction.max_residual_depth_m.max(residual);
+            if !reaction.impulse_ns.is_finite() {
+                return Err(ChassisError::NonFiniteStep);
+            }
+            remaining *= 1.0 - fraction;
+        }
+        Err(ChassisError::ContactLimit)
+    }
+
+    fn predict(&mut self, dt_seconds: f64) -> Result<(), ChassisError> {
         if !dt_seconds.is_finite() || dt_seconds <= 0.0 {
             return Err(ChassisError::InvalidTimestep);
         }
@@ -215,7 +361,6 @@ impl Chassis {
             self.forces[b] -= force;
         }
 
-        let mut reaction = WallReaction::default();
         for ((next, previous), force) in self
             .next_nodes
             .iter_mut()
@@ -233,18 +378,18 @@ impl Chassis {
                 position_m: position,
                 velocity_mps: velocity,
             };
-            if let Some(depth) =
-                wall.and_then(|face| face.contact(previous.position_m, travel, next))
-            {
-                reaction.impulse_z_ns -= previous.mass_kg * velocity.z;
-                reaction.struck_nodes += 1;
-                reaction.max_trial_depth_m = reaction.max_trial_depth_m.max(depth);
-            }
         }
-        if !reaction.impulse_z_ns.is_finite() || !reaction.max_trial_depth_m.is_finite() {
+        Ok(())
+    }
+
+    fn finish_step(&mut self) -> Result<(), ChassisError> {
+        if self
+            .next_nodes
+            .iter()
+            .any(|node| !node.position_m.is_finite())
+        {
             return Err(ChassisError::NonFiniteStep);
         }
-
         for (index, (beam, next)) in self.beams.iter().zip(&mut self.next_damage).enumerate() {
             *next = beam.damage;
             if beam.damage.broken() {
@@ -265,7 +410,7 @@ impl Chassis {
         for (beam, &next) in self.beams.iter_mut().zip(&self.next_damage) {
             beam.damage = next;
         }
-        Ok(reaction)
+        Ok(())
     }
 }
 

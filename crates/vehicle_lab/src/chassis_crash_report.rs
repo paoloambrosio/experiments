@@ -105,7 +105,7 @@ fn replay(impact: Impact) -> Result<CrashResult, Box<dyn Error>> {
     Ok(result)
 }
 
-fn fixture(speed_mps: f64) -> Result<Chassis, Box<dyn Error>> {
+pub(crate) fn fixture(speed_mps: f64) -> Result<Chassis, Box<dyn Error>> {
     // Front to rear. Each section is left lower, left upper, right lower, right upper.
     let sections = [(0.85, 40.0), (0.0, 100.0), (-1.40, 130.0)];
     let nodes = sections

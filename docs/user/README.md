@@ -94,6 +94,12 @@ cargo run -p vehicle_lab -- --chassis-crash-report
 
 The synthetic chassis runs light and hard frontal strikes, then an offset strike from both sides. The report prints nose and cabin shortening in millimetres, rebound speed, yaw at wall release, beam yielding, and wall impulse. It fails if the checks or deterministic reset replay fail. [Core 015 fixture and measurements](../devlog/015-soft-body-chassis-impacts/README.md)
 
+Run the static contact report to test a narrow post striking the bumper between its nodes and a loaded tyre striking a wall before the chassis. The report prints the first contact feature, impulses, residual contact depth, and permanent nose shortening. [Core 016 fixtures and measurements](../devlog/016-static-world-contact/README.md)
+
+```sh
+cargo run -p vehicle_lab -- --static-contact-report
+```
+
 ## Use imported asset geometry
 
 Use the `vehicle_assets` crate to represent terrain meshes, height samples, and vehicle and wheel geometry in memory. `VehicleAsset::physics` exposes optional rigid-body and structural inputs in SI units. Call `TerrainAsset::validate()` or `VehicleAsset::validate()` before consuming these values. Validation errors identify the field and any relevant element indices. Positions and dimensions use metres, with +Y up, +Z forward, and +X to vehicle left. [Imported terrain and vehicle roadmap](../drive-roadmap.md)

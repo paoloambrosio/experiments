@@ -24,6 +24,7 @@ mod radial_report;
 mod rolling_experiment;
 mod rolling_lab;
 mod rolling_report;
+mod static_contact_report;
 mod surface_report;
 
 use std::{collections::BTreeMap, f32::consts::TAU};
@@ -167,6 +168,8 @@ fn main() -> AppExit {
             assembly_report::report()
         } else if argument == "--chassis-crash-report" {
             chassis_crash_report::report()
+        } else if argument == "--static-contact-report" {
+            static_contact_report::report()
         } else if argument == "--handling-report" {
             handling_report::report(std::env::args_os().any(|argument| argument == "--samples"))
         } else if argument == "--grip-report" {

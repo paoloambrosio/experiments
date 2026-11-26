@@ -68,6 +68,7 @@ pub enum ElasticTyreError {
     NonFiniteExternalForce(usize),
     CollapsedBeam(usize),
     NonFiniteStep,
+    ContactLimit,
     VentedTyre,
     InvalidPressure,
     InvalidPressureTriangle(usize),
@@ -101,6 +102,7 @@ impl fmt::Display for ElasticTyreError {
             Self::NonFiniteStep => {
                 f.write_str("step produced non-finite geometry, force, or motion")
             }
+            Self::ContactLimit => f.write_str("tyre exceeded the obstacle contact iteration limit"),
             Self::VentedTyre => f.write_str("a vented tyre has no sealed gas charge"),
             Self::InvalidPressure => f.write_str(
                 "ambient pressure, absolute pressure, and gas charge must be positive and finite",

@@ -10,6 +10,7 @@ use crate::{
     kerb::Kerb,
     pressure::{ChamberReading, triangulate},
     puncture::{PunctureReading, TornPanel},
+    static_collision::{CONTACT_GAP_M, Hit, StaticCollisionMesh, StaticReaction},
     triangle_road::TriangleRoad,
     tyre::TyreTopology,
 };
@@ -243,6 +244,119 @@ pub struct TriangleReaction {
     pub lateral_load_centre_m: Option<f64>,
 }
 
+#[derive(Debug, Clone)]
+struct TyreObstacles {
+    world: Arc<StaticCollisionMesh>,
+    nodes: Vec<usize>,
+    panels: Vec<[usize; 3]>,
+    inverse_rim_mass: f64,
+    inverse_rim_inertia: DVec3,
+}
+
+struct TyreSweep<'a> {
+    rim: RimMotion,
+    dt: f64,
+    dt_over_mass: f64,
+    free: &'a std::ops::Range<usize>,
+    positions: &'a [DVec3],
+    velocities: &'a [DVec3],
+    forces: &'a mut [DVec3],
+}
+
+impl TyreObstacles {
+    fn apply(
+        &self,
+        step: TyreSweep<'_>,
+        road_owns: impl Fn(DVec3, DVec3) -> bool,
+    ) -> Result<StaticReaction, ElasticTyreError> {
+        let TyreSweep {
+            rim,
+            dt,
+            dt_over_mass,
+            free,
+            positions,
+            velocities,
+            forces,
+        } = step;
+        let mut reaction = StaticReaction::default();
+        let mut travel = vec![DVec3::ZERO; positions.len()];
+        let mut contacts = Vec::<Hit>::new();
+        let apply_inverse_inertia = |axis: DVec3| {
+            rim.rotation * (self.inverse_rim_inertia * (rim.rotation.conjugate() * axis))
+        };
+        let mut rim_force = DVec3::ZERO;
+        let mut rim_torque = DVec3::ZERO;
+        for (i, &force) in forces.iter().enumerate().filter(|(i, _)| !free.contains(i)) {
+            rim_force += force;
+            rim_torque += (positions[i] - rim.centre).cross(force);
+        }
+        let mut rim_velocity_delta = rim_force * (dt * self.inverse_rim_mass);
+        let mut rim_spin_delta = dt * apply_inverse_inertia(rim_torque);
+        for _ in 0..(2 * self.nodes.len()).max(128) {
+            for (i, delta) in travel.iter_mut().enumerate() {
+                let change = if free.contains(&i) {
+                    dt_over_mass * forces[i]
+                } else {
+                    rim_velocity_delta + rim_spin_delta.cross(positions[i] - rim.centre)
+                };
+                *delta = dt * (velocities[i] + change);
+                if !delta.is_finite() || !(positions[i] + *delta).is_finite() {
+                    return Err(ElasticTyreError::NonFiniteStep);
+                }
+            }
+            let Some(hit) =
+                self.world
+                    .first_hit(positions, &travel, &self.nodes, &self.panels, |hit| {
+                        !road_owns(hit.contact.position_m, hit.contact.normal)
+                    })
+            else {
+                for hit in contacts {
+                    let endpoint = hit.interpolate(positions) + hit.interpolate(&travel);
+                    let depth = (hit.contact.position_m - endpoint).dot(hit.contact.normal);
+                    reaction.max_residual_depth_m = reaction.max_residual_depth_m.max(depth);
+                }
+                return Ok(reaction);
+            };
+            let normal = hit.contact.normal;
+            let mut free_inverse_mass = 0.0;
+            let mut bead_weight = 0.0;
+            let mut bead_arm = DVec3::ZERO;
+            for (i, weight) in hit.weights() {
+                if free.contains(&i) {
+                    free_inverse_mass += weight * weight * (dt_over_mass / dt);
+                } else {
+                    bead_weight += weight;
+                    bead_arm += weight * (positions[i] - rim.centre);
+                }
+            }
+            let angular_axis = bead_arm.cross(normal);
+            let angular_response = apply_inverse_inertia(angular_axis);
+            let inverse_mass = free_inverse_mass
+                + bead_weight * bead_weight * self.inverse_rim_mass
+                + angular_axis.dot(angular_response);
+            // Remove the inward travel after impact using a substep-average
+            // force. The beads share the velocity response of one rim.
+            let normal_travel = hit.interpolate(&travel).dot(normal);
+            let magnitude =
+                (-normal_travel * (1.0 - hit.time) + CONTACT_GAP_M) / (dt * inverse_mass);
+            let impulse = magnitude * normal;
+            for (i, weight) in hit.weights() {
+                forces[i] += impulse * (weight / dt);
+            }
+            rim_velocity_delta += bead_weight * self.inverse_rim_mass * impulse;
+            rim_spin_delta += magnitude * angular_response;
+            reaction.first.get_or_insert(hit.contact);
+            reaction.contacts += 1;
+            reaction.impulse_ns += impulse;
+            if !reaction.impulse_ns.is_finite() {
+                return Err(ElasticTyreError::NonFiniteStep);
+            }
+            contacts.push(hit);
+        }
+        Err(ElasticTyreError::ContactLimit)
+    }
+}
+
 /// Reuses the elastic carcass in world space. The rigid rim includes both bead rings' mass.
 #[derive(Debug, Clone)]
 pub struct MountedTyre {
@@ -252,6 +366,8 @@ pub struct MountedTyre {
     kerb: Option<Kerb>,
     triangle_road: Option<(Arc<TriangleRoad>, ContactParameters)>,
     triangle_reaction: TriangleReaction,
+    obstacles: Option<TyreObstacles>,
+    obstacle_reaction: StaticReaction,
     tread_nodes: std::ops::Range<usize>,
     tread_triangles: Vec<[usize; 3]>,
     external_forces: Vec<DVec3>,
@@ -289,6 +405,8 @@ impl MountedTyre {
             kerb: None,
             triangle_road: None,
             triangle_reaction: TriangleReaction::default(),
+            obstacles: None,
+            obstacle_reaction: StaticReaction::default(),
             tread_nodes,
             tread_triangles,
             external_forces: vec![DVec3::ZERO; node_count],
@@ -389,6 +507,43 @@ impl MountedTyre {
         self.triangle_reaction
     }
 
+    /// Enable swept, frictionless obstacle contact on the entire tyre surface.
+    /// Mass and principal inertia for the prescribed wheel are computed by
+    /// [Self::rim_mass_properties]. Integrate the returned rim wrench with the
+    /// same mass properties before calling [Self::sync_rim].
+    pub fn set_obstacles(
+        &mut self,
+        world: Arc<StaticCollisionMesh>,
+        bare_rim_mass_kg: f64,
+    ) -> Result<(), ElasticTyreError> {
+        let (mass, inertia) = self.rim_mass_properties(bare_rim_mass_kg)?;
+        if !mass.recip().is_finite() || !inertia.recip().is_finite() {
+            return Err(ElasticTyreError::InvalidMass);
+        }
+        self.obstacles = Some(TyreObstacles {
+            world,
+            nodes: (0..self.positions().len()).collect(),
+            panels: triangulate(self.topology())
+                .into_iter()
+                .map(|face| face.nodes)
+                .collect(),
+            inverse_rim_mass: mass.recip(),
+            inverse_rim_inertia: inertia.recip(),
+        });
+        self.obstacle_reaction = StaticReaction::default();
+        Ok(())
+    }
+
+    pub fn clear_obstacles(&mut self) {
+        self.obstacles = None;
+        self.obstacle_reaction = StaticReaction::default();
+    }
+
+    /// Obstacle impulse over the last successful step, including bead reactions.
+    pub fn obstacle_reaction(&self) -> StaticReaction {
+        self.obstacle_reaction
+    }
+
     /// Total rim mass (kg) and local principal inertia (kg·m²) including both bead rings.
     /// Model the bare rim as a thin hoop at the bead radius and centred between the rings.
     pub fn rim_mass_properties(
@@ -452,18 +607,54 @@ impl MountedTyre {
         let floor = self.floor;
         let kerb = self.kerb;
         let triangle_road = self.triangle_road.as_ref();
+        let obstacles = self.obstacles.as_ref();
+        let rim = self.rim;
         let mut triangle_reaction = TriangleReaction::default();
+        let mut obstacle_reaction = StaticReaction::default();
         let tread_nodes = self.tread_nodes.clone();
         let (rim_force, rim_torque) = self.tyre.advance_with_contact(
             dt_seconds,
             &self.external_forces,
             Some(self.rim.centre),
             |positions, velocities, forces| {
+                let mut solve_obstacles = |forces: &mut [DVec3]| {
+                    if let Some(obstacles) = obstacles {
+                        obstacle_reaction = obstacles.apply(
+                            TyreSweep {
+                                rim,
+                                dt: dt_seconds,
+                                dt_over_mass,
+                                free: &tread_nodes,
+                                positions,
+                                velocities,
+                                forces,
+                            },
+                            |point, normal| {
+                                if let Some((road, _)) = triangle_road {
+                                    // Keep the existing support law for a coplanar
+                                    // face also present in the obstacle mesh.
+                                    road.contact(point - CONTACT_GAP_M * DVec3::Y).is_some_and(
+                                        |hit| {
+                                            hit.depth() <= 2.0 * CONTACT_GAP_M
+                                                && hit.normal.dot(normal).abs() > 1.0 - 1e-8
+                                        },
+                                    )
+                                } else {
+                                    floor.is_some_and(|floor| {
+                                        (point.y - floor.height_m()).abs() <= CONTACT_GAP_M
+                                            && normal.y.abs() > 1.0 - 1e-8
+                                    })
+                                }
+                            },
+                        )?;
+                    }
+                    Ok(())
+                };
                 if let Some((road, contact)) = triangle_road {
                     let axle = self.rim.rotation * DVec3::X;
                     let mut normal_load = 0.0;
                     let mut lateral_load_moment = 0.0;
-                    for index in tread_nodes {
+                    for index in tread_nodes.clone() {
                         let Some(hit) = road.contact(positions[index]) else {
                             continue;
                         };
@@ -495,10 +686,12 @@ impl MountedTyre {
                         triangle_reaction.lateral_load_centre_m =
                             Some(lateral_load_moment / normal_load);
                     }
-                    return Ok(());
+                    return solve_obstacles(forces);
                 }
-                let Some(floor) = floor else { return Ok(()) };
-                for index in tread_nodes {
+                let Some(floor) = floor else {
+                    return solve_obstacles(forces);
+                };
+                for index in tread_nodes.clone() {
                     let predicted_velocity = velocities[index] + forces[index] * dt_over_mass;
                     if let Some((depth, axis)) =
                         kerb.and_then(|kerb| kerb.contact(floor.height_m(), positions[index]))
@@ -528,10 +721,11 @@ impl MountedTyre {
                 {
                     return Err(ElasticTyreError::NonFiniteStep);
                 }
-                Ok(())
+                solve_obstacles(forces)
             },
         )?;
         self.triangle_reaction = triangle_reaction;
+        self.obstacle_reaction = obstacle_reaction;
         Ok(MountedStep {
             rim_force,
             rim_torque,
@@ -683,6 +877,95 @@ mod tests {
             .unwrap();
         assert!((rim_force - force).length() < 1.0e-9);
         assert!((rim_torque - offset.cross(force)).length() < 1.0e-9);
+    }
+
+    #[test]
+    fn an_obstacle_clipping_a_bead_transfers_its_impulse_and_torque_to_the_rim() {
+        use crate::static_collision::ContactFeature;
+
+        let rim = RimMotion {
+            linear_velocity: 4.0 * DVec3::X,
+            ..Default::default()
+        };
+        let mut mounted = MountedTyre::new(rest_tyre(), rim, None).unwrap();
+        let index = 4 * TyreConfig::default().segments;
+        let bead = mounted.positions()[index];
+        let x = bead.x + 0.0005;
+        let mesh = StaticCollisionMesh::new(
+            &[
+                DVec3::new(x, bead.y - 0.005, -0.004),
+                DVec3::new(x, bead.y - 0.005, 0.004),
+                DVec3::new(x, bead.y, 0.0),
+            ],
+            &[[0, 1, 2]],
+        )
+        .unwrap();
+        mounted.set_obstacles(Arc::new(mesh), 16.0).unwrap();
+        let dt = 1.0 / 3840.0;
+        let result = mounted.step(dt, DVec3::ZERO).unwrap();
+        let reaction = mounted.obstacle_reaction();
+        assert_eq!(reaction.first.unwrap().feature, ContactFeature::Node(index));
+        assert_eq!(reaction.contacts, 1);
+        assert!(reaction.impulse_ns.x < -10.0);
+        assert!(
+            reaction
+                .impulse_ns
+                .abs_diff_eq(result.rim_force * dt, 1e-10)
+        );
+        assert!(
+            bead.cross(reaction.impulse_ns)
+                .abs_diff_eq(result.rim_torque * dt, 1e-10)
+        );
+        assert_eq!(mounted.positions()[index], bead);
+        assert_eq!(mounted.rim(), rim);
+    }
+
+    #[test]
+    fn a_small_obstacle_catches_the_sidewall_between_its_nodes() {
+        use crate::static_collision::ContactFeature;
+
+        let rim = RimMotion {
+            linear_velocity: 4.0 * DVec3::X,
+            ..Default::default()
+        };
+        let mut tyre = MountedTyre::new(rest_tyre(), rim, None).unwrap();
+        let panels = triangulate(tyre.topology());
+        let segments = TyreConfig::default().segments;
+        let (panel_index, panel) = panels
+            .iter()
+            .enumerate()
+            .find(|(_, triangle)| {
+                triangle.nodes.iter().all(|&i| i >= 3 * segments)
+                    && triangle.nodes.contains(&(4 * segments))
+            })
+            .unwrap();
+        let centre = panel
+            .nodes
+            .iter()
+            .map(|&i| tyre.positions()[i])
+            .sum::<DVec3>()
+            / 3.0;
+        let p = centre + 0.0005 * DVec3::X;
+        let mesh = StaticCollisionMesh::new(
+            &[p, p + 0.0001 * DVec3::Y, p + 0.0001 * DVec3::Z],
+            &[[0, 1, 2]],
+        )
+        .unwrap();
+        tyre.set_obstacles(Arc::new(mesh), 16.0).unwrap();
+        let result = tyre.step(1.0 / 3840.0, DVec3::ZERO).unwrap();
+        let reaction = tyre.obstacle_reaction();
+        assert_eq!(
+            reaction.first.unwrap().feature,
+            ContactFeature::Panel(panel_index)
+        );
+        assert!(reaction.impulse_ns.x < 0.0);
+        assert!(result.rim_force.x < 0.0);
+        assert!(
+            panel
+                .nodes
+                .iter()
+                .any(|&i| i < 4 * segments && tyre.velocities()[i].x < 4.0)
+        );
     }
 
     #[test]
