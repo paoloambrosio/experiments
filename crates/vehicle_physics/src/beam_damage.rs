@@ -7,8 +7,7 @@ use std::{error::Error, fmt};
 pub struct BeamDamageConfig {
     tension_yield: f64,
     compression_yield: f64,
-    tension_fracture: f64,
-    compression_fracture: f64,
+    fracture_strains: Option<[f64; 2]>,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -29,30 +28,40 @@ impl BeamDamageConfig {
         tension_fracture: f64,
         compression_fracture: f64,
     ) -> Result<Self, InvalidBeamDamageConfig> {
-        if [
-            tension_yield,
-            compression_yield,
-            tension_fracture,
-            compression_fracture,
-        ]
-        .iter()
-        .any(|value| !value.is_finite() || *value <= 0.0)
-            || tension_yield >= tension_fracture
-            || compression_yield >= compression_fracture
+        let mut config = Self::yield_only(tension_yield, compression_yield)?;
+        if !tension_fracture.is_finite()
+            || !compression_fracture.is_finite()
+            || tension_fracture <= tension_yield
+            || compression_fracture <= compression_yield
             || compression_fracture > 1.0
+        {
+            return Err(InvalidBeamDamageConfig);
+        }
+        config.fracture_strains = Some([tension_fracture, compression_fracture]);
+        Ok(config)
+    }
+
+    /// Allow permanent axial deformation while keeping the beam connected.
+    pub fn yield_only(
+        tension_yield: f64,
+        compression_yield: f64,
+    ) -> Result<Self, InvalidBeamDamageConfig> {
+        if [tension_yield, compression_yield]
+            .into_iter()
+            .any(|strain| !strain.is_finite() || strain <= 0.0)
         {
             return Err(InvalidBeamDamageConfig);
         }
         Ok(Self {
             tension_yield,
             compression_yield,
-            tension_fracture,
-            compression_fracture,
+            fracture_strains: None,
         })
     }
 
     fn fractures(self, strain: f64) -> bool {
-        strain >= self.tension_fracture || strain <= -self.compression_fracture
+        self.fracture_strains
+            .is_some_and(|[tension, compression]| strain >= tension || strain <= -compression)
     }
 }
 

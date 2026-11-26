@@ -84,6 +84,16 @@ The current drive uses fixed first-gear torque split across the driven wheels an
 
 `--alignment-report` repeats the level-road drive with upright and authored alignment. It measures the lateral centre of normal load across each tread during the last second of settling, then reports mean absolute lateral friction force per wheel from 2 to 4 m/s with the steering centred. Offset is positive toward vehicle left. Positive camber leans the wheel top outward and positive toe points the wheel inward. The comparison uses the terrain start and needs a level stretch of road ahead. [Core 014 results](../devlog/014-authored-wheel-alignment/README.md)
 
+## Crash test a deformable chassis
+
+Run the headless wall-strike replay from the workspace root.
+
+```sh
+cargo run -p vehicle_lab -- --chassis-crash-report
+```
+
+The synthetic chassis runs light and hard frontal strikes, then an offset strike from both sides. The report prints nose and cabin shortening in millimetres, rebound speed, yaw at wall release, beam yielding, and wall impulse. It fails if the checks or deterministic reset replay fail. [Core 015 fixture and measurements](../devlog/015-soft-body-chassis-impacts/README.md)
+
 ## Use imported asset geometry
 
 Use the `vehicle_assets` crate to represent terrain meshes, height samples, and vehicle and wheel geometry in memory. `VehicleAsset::physics` exposes supported rigid-body inputs in SI units. An absent value means the importer could not supply it. Call `TerrainAsset::validate()` or `VehicleAsset::validate()` before consuming these values. Validation errors identify the field and any relevant element indices. Positions and dimensions use metres, with +Y up, +Z forward, and +X to vehicle left. [Imported terrain and vehicle roadmap](../drive-roadmap.md)

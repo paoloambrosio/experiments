@@ -1,0 +1,67 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 792 407" role="img" aria-labelledby="title desc">
+  <title id="title">Crash-test chassis and wall overlap viewed from above</title>
+  <desc id="desc">A full-width wall overlaps both nose rails. A shorter wall overlaps only the vehicle-left corner. Nose and cabin shortening are measured between the bumper, firewall, and rear cabin sections.</desc>
+  <defs>
+    <marker id="arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
+      <path d="M0 0L8 4L0 8Z" fill="#607188"/>
+    </marker>
+  </defs>
+  <style>
+    text { font: 14px system-ui, sans-serif; fill: #1b2d40 }
+    .title { font-weight: 650; font-size: 18px }
+    .muted { fill: #43566d }
+    .wall { stroke: #a63e2f; stroke-width: 5; stroke-linecap: round }
+    .axis { stroke: #607188; stroke-width: 1.4; stroke-dasharray: 4 4 }
+    .nose { stroke: #147d78; stroke-width: 1.4; fill: #d8f1ed; fill-opacity: .33 }
+    .cabin { stroke: #526d91; stroke-width: 1.4; fill: #dde7f4; fill-opacity: .28 }
+    .section { stroke: #263a50; stroke-width: 1.5 }
+    .mark { stroke: #607188; stroke-width: 1.1 }
+    circle { fill: #263a50 }
+  </style>
+  <rect width="792" height="407" rx="12" fill="#f3f6fa"/>
+  <g transform="translate(12 0)">
+    <rect width="378" height="348" x="0" y="12" rx="10" fill="#fff" stroke="#c9d3df"/>
+    <text x="20" y="44" class="title">Frontal strikes</text>
+    <path d="M30 91H348" class="wall"/>
+    <text x="20" y="84" class="muted">Wall at Z = 1.00 m</text>
+    <path d="M184 290V59" class="axis" marker-end="url(#arrow)"/>
+    <text x="127" y="72" class="muted">+Z travel</text>
+    <path d="M184 322H286" class="axis" marker-end="url(#arrow)"/>
+    <text x="295" y="327" class="muted">+X left</text>
+    <path d="M120 104H248V176H120Z M120 104L248 176 M248 104L120 176" class="nose"/>
+    <path d="M120 176H248V295H120Z M120 176L248 295 M248 176L120 295" class="cabin"/>
+    <path d="M120 104h128" class="section"/><circle cx="120" cy="104" r="4"/><circle cx="248" cy="104" r="4"/>
+    <path d="M120 176h128" class="section"/><circle cx="120" cy="176" r="4"/><circle cx="248" cy="176" r="4"/>
+    <path d="M120 295h128" class="section"/><circle cx="120" cy="295" r="4"/><circle cx="248" cy="295" r="4"/>
+    <text x="20" y="109" class="muted">Bumper</text>
+    <text x="20" y="181" class="muted">Firewall</text>
+    <text x="20" y="300" class="muted">Rear cabin</text>
+    <path d="M265 107V173 M261 107h8 M261 173h8" class="mark"/>
+    <text x="275" y="144" class="muted">0.85 m</text>
+    <path d="M265 180V292 M261 180h8 M261 292h8" class="mark"/>
+    <text x="275" y="236" class="muted">1.40 m</text>
+  </g>
+  <g transform="translate(402 0)">
+    <rect width="378" height="348" x="0" y="12" rx="10" fill="#fff" stroke="#c9d3df"/>
+    <text x="20" y="44" class="title">Left offset strike</text>
+    <path d="M218 91H303" class="wall"/>
+    <text x="310" y="84" class="muted">Wall</text>
+    <path d="M184 290V59" class="axis" marker-end="url(#arrow)"/>
+    <text x="127" y="72" class="muted">+Z travel</text>
+    <path d="M184 322H286" class="axis" marker-end="url(#arrow)"/>
+    <text x="295" y="327" class="muted">+X left</text>
+    <path d="M120 104H248V176H120Z M120 104L248 176 M248 104L120 176" class="nose"/>
+    <path d="M120 176H248V295H120Z M120 176L248 295 M248 176L120 295" class="cabin"/>
+    <path d="M120 104h128" class="section"/><circle cx="120" cy="104" r="4"/><circle cx="248" cy="104" r="4"/>
+    <path d="M120 176h128" class="section"/><circle cx="120" cy="176" r="4"/><circle cx="248" cy="176" r="4"/>
+    <path d="M120 295h128" class="section"/><circle cx="120" cy="295" r="4"/><circle cx="248" cy="295" r="4"/>
+    <text x="20" y="109" class="muted">Bumper</text>
+    <text x="20" y="181" class="muted">Firewall</text>
+    <text x="20" y="300" class="muted">Rear cabin</text>
+    <path d="M265 107V173 M261 107h8 M261 173h8" class="mark"/>
+    <text x="275" y="144" class="muted">0.85 m</text>
+    <path d="M265 180V292 M261 180h8 M261 292h8" class="mark"/>
+    <text x="275" y="236" class="muted">1.40 m</text>
+  </g>
+  <text x="28" y="387" class="muted">Each corner in this view represents an upper and a lower node.</text>
+</svg>

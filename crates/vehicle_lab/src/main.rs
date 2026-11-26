@@ -1,4 +1,5 @@
 mod assembly_report;
+mod chassis_crash_report;
 mod corner_experiment;
 mod corner_lab;
 mod drop_experiment;
@@ -164,6 +165,8 @@ fn main() -> AppExit {
     for argument in std::env::args_os().skip(1) {
         let result = if argument == "--assembly-report" {
             assembly_report::report()
+        } else if argument == "--chassis-crash-report" {
+            chassis_crash_report::report()
         } else if argument == "--handling-report" {
             handling_report::report(std::env::args_os().any(|argument| argument == "--samples"))
         } else if argument == "--grip-report" {

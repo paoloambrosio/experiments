@@ -7,6 +7,7 @@ cargo run -p vehicle_lab
 cargo run -p vehicle_lab -- --handling-lab
 cargo run -p vehicle_lab -- --handling-report
 cargo run -p vehicle_lab -- --assembly-report
+cargo run -p vehicle_lab -- --chassis-crash-report
 cargo run -p vehicle_drive -- --drive
 cargo run -p vehicle_drive -- --alignment-report
 cargo run -p vehicle_lab -- --grip-lab
