@@ -95,6 +95,15 @@ fn imports_the_rest_pose_wheel_basis_and_dds_materials() {
     assert_eq!(wheel.axle, Vec3::X);
     assert_eq!(wheel.width, 0.2);
     assert_eq!(wheel.rim_radius, Some(0.18));
+    let detail = vehicle.physics.wheels[0];
+    assert_eq!(detail.side, vehicle_assets::WheelSide::Left);
+    assert_eq!(detail.mass_kg, Some(2.0));
+    assert!(detail.drive_torque_nm.is_none());
+    assert!(detail.brake_torque_nm.is_none());
+    assert!(detail.suspension.is_none());
+    assert!(vehicle.physics.chassis.is_none());
+    assert_eq!(vehicle.objects[detail.rim_object].name, "rim.mesh");
+    assert_eq!(vehicle.objects[detail.tyre_object].name, "tread");
 
     let body = vehicle
         .objects
@@ -175,6 +184,35 @@ fn local_accord_variants_keep_their_authored_geometry_and_textures() {
             approx(lf.centre.x - rf.centre.x, 1.375);
             approx(lr.centre.x - rr.centre.x, 1.395);
             approx(lf.centre.z - lr.centre.z, 2.600);
+            let physics = &vehicle.physics;
+            let chassis = physics.chassis.expect("rigid chassis properties");
+            assert!(chassis.size_m.min_element() > 0.0);
+            assert!(chassis.centre_of_mass_m.x.abs() < 0.03);
+            assert_eq!(physics.wheels.len(), 4);
+            for (i, detail) in physics.wheels.iter().enumerate() {
+                approx(detail.mass_kg.unwrap(), 39.0);
+                let [spring, damper, rise, run] = if i < 2 {
+                    [38000.0, 2650.0, 0.38, 0.3575_f32.hypot(0.05)]
+                } else {
+                    [31000.0, 2050.0, 0.444, 0.27]
+                };
+                let ratio_sq = rise * rise / (rise * rise + run * run);
+                let suspension = detail.suspension.expect("wheel shock");
+                assert!((suspension.stiffness_n_per_m - spring * ratio_sq).abs() < 0.01);
+                assert!((suspension.damping_ns_per_m - damper * ratio_sq).abs() < 0.01);
+                approx(suspension.initial_length_m, rise);
+                assert!(suspension.free_length_m > suspension.initial_length_m);
+                assert!(detail.upright_mass_kg.unwrap() > 18.0);
+                approx(detail.brake_torque_nm.unwrap(), 1800.0);
+                approx(
+                    detail.drive_torque_nm.unwrap(),
+                    if i < 2 {
+                        170.0 * 4.066 * 3.181 / 2.0
+                    } else {
+                        0.0
+                    },
+                );
+            }
         }
         let rim_objects = vehicle.objects.iter().filter(|object| {
             object.name.starts_with("accordwheel") && object.name.ends_with(".mesh")

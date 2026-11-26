@@ -77,6 +77,7 @@ fn vehicle() -> VehicleAsset {
         })
         .collect();
     VehicleAsset {
+        physics: Default::default(),
         name: "Test car".into(),
         meshes: Vec::new(),
         objects: Vec::new(),

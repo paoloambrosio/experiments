@@ -165,6 +165,7 @@ mod tests {
             objects: Vec::new(),
             nodes: vec![Vec3::new(0.1, 1.0, 0.2)],
             edges: Vec::new(),
+            physics: Default::default(),
             wheels: vec![WheelGeometry {
                 centre: Vec3::new(0.5, 1.0, 0.25),
                 axle: Vec3::X,

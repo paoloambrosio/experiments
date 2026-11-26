@@ -1,4 +1,4 @@
-//! In-memory geometry shared by asset importers and their consumers.
+//! In-memory geometry and supported physics properties shared by asset importers and their consumers.
 //!
 //! Positions and dimensions are in metres. The asset frame has +Y up,
 //! +Z forward and +X to vehicle left. Converters resolve source coordinates
@@ -100,6 +100,7 @@ pub struct VehicleAsset {
     /// Authored structural edges for showing the vehicle outline.
     pub edges: Vec<[NodeId; 2]>,
     pub wheels: Vec<WheelGeometry>,
+    pub physics: VehiclePhysics,
 }
 
 /// Vehicle-local wheel geometry with a unit axle direction toward vehicle left.
@@ -110,4 +111,53 @@ pub struct WheelGeometry {
     pub outer_radius: f32,
     pub width: f32,
     pub rim_radius: Option<f32>,
+}
+
+#[derive(Clone, Debug, Default)]
+pub struct VehiclePhysics {
+    /// Rigid approximation derived from the authored structure and body geometry.
+    pub chassis: Option<ChassisPhysics>,
+    /// In the same order as `VehicleAsset::wheels` when supplied by the importer.
+    pub wheels: Vec<WheelPhysics>,
+}
+
+#[derive(Clone, Copy, Debug)]
+pub struct ChassisPhysics {
+    pub mass_kg: f32,
+    pub size_m: Vec3,
+    pub centre_of_mass_m: Vec3,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum WheelSide {
+    Left,
+    Right,
+}
+
+#[derive(Clone, Copy, Debug)]
+pub struct WheelPhysics {
+    pub side: WheelSide,
+    /// Combined mass of the rim and tyre, in kg.
+    pub mass_kg: Option<f32>,
+    /// Mass assigned to the upright, excluded from chassis and wheel mass.
+    pub upright_mass_kg: Option<f32>,
+    pub suspension: Option<VerticalSuspension>,
+    /// Signed first-gear torque under full throttle, in N·m. Zero for a free wheel.
+    pub drive_torque_nm: Option<f32>,
+    /// Full service-brake capacity in N·m. Zero for an unbraked wheel.
+    pub brake_torque_nm: Option<f32>,
+    /// Indices into `VehicleAsset::objects`.
+    pub rim_object: usize,
+    pub tyre_object: usize,
+}
+
+/// Linearized suspension along vehicle-local Y. Length increases as the wheel drops.
+#[derive(Clone, Copy, Debug)]
+pub struct VerticalSuspension {
+    pub stiffness_n_per_m: f32,
+    pub damping_ns_per_m: f32,
+    pub initial_length_m: f32,
+    pub free_length_m: f32,
+    pub min_length_m: f32,
+    pub max_length_m: f32,
 }

@@ -7,6 +7,7 @@ use bevy_math::{Mat3, Quat, Vec2, Vec3};
 
 use crate::{
     MeshAppearance, MeshId, MeshInstance, NodeId, TriangleMesh, VehicleAsset, WheelGeometry,
+    WheelPhysics, WheelSide,
 };
 
 use super::{
@@ -21,6 +22,15 @@ pub struct VehicleImport {
     pub appearance: MeshAppearance,
     pub warnings: Vec<ImportWarning>,
     pub entry: String,
+}
+
+mod dynamics;
+
+struct WheelRecord {
+    physics: WheelPhysics,
+    axle_nodes: [NodeId; 2],
+    drive: Option<u8>,
+    brake: Option<u8>,
 }
 
 #[derive(Clone, Copy)]
@@ -52,8 +62,11 @@ pub fn load_vehicle(path: &Path, entry: &str) -> Result<VehicleImport, ImportErr
         nodes: Vec::new(),
         edges: Vec::new(),
         wheels: Vec::new(),
+        physics: Default::default(),
     };
     let mut nodes = HashMap::new();
+    let mut wheel_details = Vec::new();
+    let mut body_objects = Vec::new();
     let mut meshes = MeshCache::default();
     let mut materials = Materials::load(&mut archive, &mut warnings);
     let error = |archive: &Archive, record: Record<'_>, detail: String| {
@@ -88,7 +101,8 @@ pub fn load_vehicle(path: &Path, entry: &str) -> Result<VehicleImport, ImportErr
     for &record in &records {
         let fields = record.fields();
         let result = match record.section {
-            "nodes" => continue,
+            "nodes" | "set_node_defaults" | "minimass" | "globals" | "shocks" | "engine"
+            | "brakes" => continue,
             "beams" => {
                 if let [first, second, ..] = fields.as_slice() {
                     let edge = resolve_nodes(&nodes, [first, second])
@@ -106,7 +120,8 @@ pub fn load_vehicle(path: &Path, entry: &str) -> Result<VehicleImport, ImportErr
                 &mut vehicle,
                 &nodes,
                 &fields,
-            ),
+            )
+            .map(|wheel| wheel_details.push(wheel)),
             "flexbodies" | "props" => {
                 if fields
                     .first()
@@ -119,6 +134,7 @@ pub fn load_vehicle(path: &Path, entry: &str) -> Result<VehicleImport, ImportErr
                     });
                     continue;
                 }
+                let object = vehicle.objects.len();
                 add_attachment(
                     &mut archive,
                     &entry,
@@ -128,6 +144,11 @@ pub fn load_vehicle(path: &Path, entry: &str) -> Result<VehicleImport, ImportErr
                     record.section,
                     &fields,
                 )
+                .map(|()| {
+                    if record.section == "flexbodies" {
+                        body_objects.push(object);
+                    }
+                })
             }
             "managedmaterials" => {
                 if let [name, effect, diffuse, extra @ ..] = fields.as_slice() {
@@ -171,13 +192,14 @@ pub fn load_vehicle(path: &Path, entry: &str) -> Result<VehicleImport, ImportErr
             &mut warnings,
             &entry,
             format!(
-                "static preview skips {}",
+                "vehicle import skips {}",
                 deferred.into_iter().collect::<Vec<_>>().join(", ")
             ),
         );
     }
 
     vehicle.meshes = meshes.geometry;
+    vehicle.physics = dynamics::convert(&records, &vehicle, &nodes, wheel_details, &body_objects);
     vehicle
         .validate()
         .map_err(|error| archive.error(&entry, error.to_string()))?;
@@ -214,6 +236,14 @@ fn parse_truck(text: &str) -> Result<(&str, Vec<Record<'_>>), String> {
     for (line, value) in lines {
         if value == "end" {
             break;
+        }
+        if value.starts_with("set_node_defaults ") || value.starts_with("set_node_defaults\t") {
+            records.push(Record {
+                section: "set_node_defaults",
+                line,
+                value,
+            });
+            continue;
         }
         if value.starts_with("set_") || value.starts_with("detacher_group ") {
             continue;
@@ -350,7 +380,7 @@ fn add_wheel(
     vehicle: &mut VehicleAsset,
     nodes: &HashMap<u32, NodeId>,
     fields: &[&str],
-) -> Result<(), String> {
+) -> Result<WheelRecord, String> {
     let [
         radius,
         rim,
@@ -359,10 +389,10 @@ fn add_wheel(
         first,
         second,
         _,
+        brake,
+        drive,
         _,
-        _,
-        _,
-        _,
+        mass,
         _,
         _,
         side,
@@ -383,17 +413,41 @@ fn add_wheel(
     if !(3..=1024).contains(&rays) {
         return Err("tyre ray count must be in 3..=1024".into());
     }
-    let [first, second] = resolve_nodes(nodes, [first, second])?.map(|id| vehicle.nodes[id.0]);
+    let axle_nodes = resolve_nodes(nodes, [first, second])?;
+    let [first, second] = axle_nodes.map(|id| vehicle.nodes[id.0]);
     let direction = second - first;
     if direction.x == 0.0 {
         return Err("wheel axle has no lateral span".into());
     }
     let axle = direction.normalize() * direction.x.signum();
     let centre = (first + second) * 0.5;
-    let out = match *side {
-        "l" | "L" => axle,
-        "r" | "R" => -axle,
+    let side = match *side {
+        "l" | "L" => WheelSide::Left,
+        "r" | "R" => WheelSide::Right,
         _ => return Err(format!("invalid wheel side {side:?}")),
+    };
+    let mode = |value: &str| {
+        let mode = number(value).ok()?;
+        ((0.0..=255.0).contains(&mode) && mode.fract() == 0.0).then_some(mode as u8)
+    };
+    let wheel = WheelRecord {
+        physics: WheelPhysics {
+            side,
+            mass_kg: number(mass).ok().filter(|mass| *mass > 0.0),
+            upright_mass_kg: None,
+            suspension: None,
+            drive_torque_nm: None,
+            brake_torque_nm: None,
+            rim_object: vehicle.objects.len(),
+            tyre_object: vehicle.objects.len() + 1,
+        },
+        axle_nodes,
+        drive: mode(drive),
+        brake: mode(brake),
+    };
+    let out = match side {
+        WheelSide::Left => axle,
+        WheelSide::Right => -axle,
     };
     let up = (Vec3::Y - out * out.y).normalize();
     let rim_rotation = Quat::from_mat3(&Mat3::from_cols(out, up, out.cross(up)));
@@ -415,7 +469,7 @@ fn add_wheel(
         width,
         rim_radius: Some(rim),
     });
-    Ok(())
+    Ok(wheel)
 }
 
 fn tyre_mesh(radius: f32, rim: f32, width: f32, segments: u32, material: &str) -> Mesh {
