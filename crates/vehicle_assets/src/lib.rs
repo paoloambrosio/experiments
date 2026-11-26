@@ -119,6 +119,62 @@ pub struct VehiclePhysics {
     pub chassis: Option<ChassisPhysics>,
     /// In the same order as `VehicleAsset::wheels` when supplied by the importer.
     pub wheels: Vec<WheelPhysics>,
+    pub structure: Option<VehicleStructure>,
+}
+
+/// Structural properties of the vehicle in its authored rest pose.
+#[derive(Clone, Debug, Default)]
+pub struct VehicleStructure {
+    /// One entry per `VehicleAsset::nodes` position, in the same order.
+    pub nodes: Vec<StructuralNode>,
+    /// One entry per `VehicleAsset::edges` pair, in the same order.
+    /// A `None` slot preserves the edge geometry when its physics is unavailable.
+    pub beams: Vec<Option<StructuralBeam>>,
+    /// Collision panels indexed by their nodes, in authored winding order.
+    pub collision_triangles: Vec<[NodeId; 3]>,
+    /// Explicitly authored nodes for contact with other vehicles' panels.
+    pub contact_nodes: Vec<NodeId>,
+    pub deformable_meshes: Vec<DeformableMeshBinding>,
+}
+
+#[derive(Clone, Copy, Debug, Default)]
+pub struct StructuralNode {
+    /// Per-node mass, including any mass allocated to an upright.
+    pub mass_kg: Option<f32>,
+    /// Index into `VehicleAsset::wheels`. A node with no upright belongs to the chassis.
+    pub upright: Option<usize>,
+    pub excludes_ground_contact: bool,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct StructuralBeam {
+    pub kind: StructuralBeamKind,
+    pub stiffness_n_per_m: f32,
+    pub damping_ns_per_m: f32,
+    pub deformation_threshold_n: f32,
+    pub breaking_threshold_n: f32,
+    /// Dimensionless coefficient from the source material, in 0..=1.
+    pub plasticity: f32,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum StructuralBeamKind {
+    Bilateral,
+    /// A support whose elastic force opposes compression.
+    CompressionSupport {
+        /// Authored limit on elongation as a multiple of the rest length.
+        extension_limit_ratio: Option<f32>,
+    },
+}
+
+/// Node references for one deformable instance of a visual mesh.
+#[derive(Clone, Debug)]
+pub struct DeformableMeshBinding {
+    /// Index into `VehicleAsset::objects`.
+    pub object: usize,
+    /// Origin, local X reference, and local plane reference, in that order.
+    pub placement_nodes: [NodeId; 3],
+    pub influence_nodes: Vec<NodeId>,
 }
 
 #[derive(Clone, Copy, Debug)]

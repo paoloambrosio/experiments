@@ -3,7 +3,7 @@ mod common;
 use std::{fs::File, io::Write, path::Path};
 
 use bevy_math::Vec3;
-use vehicle_assets::ror::load_vehicle;
+use vehicle_assets::{NodeId, StructuralBeamKind, ror::load_vehicle};
 use zip::{CompressionMethod, ZipWriter, write::SimpleFileOptions};
 
 fn dds(pixel: &[u8]) -> Vec<u8> {
@@ -57,10 +57,14 @@ end
     } else {
         truck.to_owned()
     };
+    write_archive(path, &truck);
+}
+
+fn write_archive(path: &Path, truck: &str) {
     let mut zip = ZipWriter::new(File::create(path).unwrap());
     let opts = SimpleFileOptions::default().compression_method(CompressionMethod::Deflated);
     for (name, data) in [
-        ("pack/fixture.truck", truck.into_bytes()),
+        ("pack/fixture.truck", truck.as_bytes().to_vec()),
         (
             "pack/Body.mesh",
             common::triangle_mesh("1.30", &["paint", "glass"], 0.0),
@@ -76,6 +80,161 @@ end
         zip.write_all(&data).unwrap();
     }
     zip.finish().unwrap();
+}
+
+#[test]
+fn imports_structural_properties_in_authored_order() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("structure.zip");
+    write_archive(
+        &path,
+        "Structure
+globals
+0,8
+minimass
+2
+nodes
+10,0,0,0,l 4
+set_node_defaults -1,-1,-1,-1,c
+20,0,0,2
+set_node_defaults -1,-1,-1,-1,n
+30,-1,0,0,l
+31,-1,1,0,c
+32,-1,0,1
+beams
+10,20
+set_beam_defaults 2000,80,120,8000,0.05,tracks/beam,0.25
+10,30,i
+enable_advanced_deformation
+set_beam_defaults_scale 0.5,0.25,0.5,0.75
+20,30,i
+set_beam_defaults 3200
+20,31,is 2.5
+set_beam_defaults_scale 1,1,1,1
+set_beam_defaults -1,-1,-1,-1,0.05,tracks/beam,-1
+30,31,s
+31,32,r
+submesh
+cab
+10,30,20,u
+10,31,30,c
+10,32,31,p
+10,20,31,n
+10,31,32,b
+contacters
+31
+flexbodies
+10,20,30,0,0,0,0,0,0,body.mesh
+forset 30-32,20,31
+10,30,20,0,0,0,0,0,0,body.mesh
+forset 10,20
+end
+",
+    );
+    let imported = load_vehicle(&path, "pack/fixture.truck").unwrap();
+    let vehicle = &imported.vehicle;
+    let structure = vehicle.physics.structure.as_ref().unwrap();
+    let beam_values = |i: usize| {
+        let beam = structure.beams[i].unwrap();
+        [
+            beam.stiffness_n_per_m,
+            beam.damping_ns_per_m,
+            beam.deformation_threshold_n,
+            beam.breaking_threshold_n,
+            beam.plasticity,
+        ]
+    };
+    assert_eq!(beam_values(0), [9e6, 12e3, 400e3, 1e6, 0.0]);
+    assert_eq!(beam_values(1), [2000.0, 80.0, 400e3, 8000.0, 0.25]);
+    assert_eq!(beam_values(2), [1000.0, 20.0, 200e3, 6000.0, 0.25]);
+    assert_eq!(beam_values(3), [1600.0, 20.0, 60.0, 6000.0, 0.25]);
+    assert_eq!(beam_values(4), beam_values(0));
+    assert_eq!(
+        structure.beams[3].unwrap().kind,
+        StructuralBeamKind::CompressionSupport {
+            extension_limit_ratio: Some(2.5),
+        },
+    );
+    assert_eq!(
+        structure.beams[4].unwrap().kind,
+        StructuralBeamKind::CompressionSupport {
+            extension_limit_ratio: None,
+        },
+    );
+    assert!(structure.beams[5].is_none());
+    assert_eq!(vehicle.edges[5], [NodeId(3), NodeId(4)]);
+    assert!(
+        imported
+            .warnings
+            .iter()
+            .any(|w| w.entry == "pack/fixture.truck"
+                && w.message.contains("beams line")
+                && w.message.contains("unsupported beam options"))
+    );
+    assert_eq!(
+        structure
+            .nodes
+            .iter()
+            .map(|node| node.mass_kg.unwrap())
+            .collect::<Vec<_>>(),
+        [4.0, 2.0, 8.0, 2.0, 2.0],
+    );
+    assert_eq!(
+        structure
+            .nodes
+            .iter()
+            .map(|node| node.excludes_ground_contact)
+            .collect::<Vec<_>>(),
+        [false, true, false, true, false],
+    );
+    assert_eq!(structure.contact_nodes, [NodeId(3)]);
+    assert_eq!(
+        structure.collision_triangles,
+        [
+            [NodeId(0), NodeId(2), NodeId(1)],
+            [NodeId(0), NodeId(3), NodeId(2)],
+            [NodeId(0), NodeId(4), NodeId(3)]
+        ],
+    );
+    let [first, second] = structure.deformable_meshes.as_slice() else {
+        panic!("expected two mesh instance bindings");
+    };
+    assert_eq!((first.object, second.object), (0, 1));
+    assert_eq!(
+        vehicle.objects[0].visual_mesh,
+        vehicle.objects[1].visual_mesh
+    );
+    assert_eq!(first.placement_nodes, [NodeId(0), NodeId(1), NodeId(2)]);
+    assert_eq!(second.placement_nodes, [NodeId(0), NodeId(2), NodeId(1)]);
+    assert_eq!(
+        first.influence_nodes,
+        [NodeId(2), NodeId(3), NodeId(4), NodeId(1)]
+    );
+    assert_eq!(second.influence_nodes, [NodeId(0), NodeId(1)]);
+}
+
+#[test]
+fn reports_invalid_collision_node_with_file_section_and_line() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("bad-panel.zip");
+    write_archive(&path, "Fixture\nnodes\n0,0,0,0\ncab\n0,0,999,c\nend\n");
+    let error = load_vehicle(&path, "pack/fixture.truck")
+        .unwrap_err()
+        .to_string();
+    assert!(
+        error.contains("fixture.truck: cab line 5: unknown node 999"),
+        "{error}"
+    );
+}
+
+#[test]
+fn loads_a_geometry_only_vehicle() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("geometry.zip");
+    write_archive(&path, "Fixture\nnodes\n3,0,0,0\nend\n");
+    let vehicle = load_vehicle(&path, "pack/fixture.truck").unwrap().vehicle;
+    assert_eq!(vehicle.nodes, [Vec3::ZERO]);
+    assert!(vehicle.physics.structure.is_none());
 }
 
 #[test]
@@ -164,6 +323,17 @@ fn local_accord_variants_keep_their_authored_geometry_and_textures() {
     for (entry, radius, rim, front_width, rear_width) in values {
         let imported = load_vehicle(Path::new(&archive), entry).unwrap();
         let vehicle = &imported.vehicle;
+        let structure = vehicle
+            .physics
+            .structure
+            .as_ref()
+            .expect("authored structure");
+        assert!(structure.nodes.iter().all(|node| node.mass_kg.is_some()));
+        assert!(
+            structure.beams.iter().all(Option::is_some),
+            "{entry}: {:?}",
+            imported.warnings
+        );
         let [rf, lf, rr, lr] = vehicle.wheels.as_slice() else {
             panic!("{entry} did not import four wheels");
         };
@@ -186,6 +356,60 @@ fn local_accord_variants_keep_their_authored_geometry_and_textures() {
             approx(lf.centre.z - lr.centre.z, 2.600);
             let physics = &vehicle.physics;
             let chassis = physics.chassis.expect("rigid chassis properties");
+            assert_eq!(structure.collision_triangles.len(), 269);
+            assert_eq!(structure.contact_nodes.len(), 85);
+            assert_eq!(structure.deformable_meshes.len(), 13);
+            assert_eq!(
+                structure
+                    .beams
+                    .iter()
+                    .flatten()
+                    .filter(|beam| matches!(
+                        beam.kind,
+                        StructuralBeamKind::CompressionSupport { .. },
+                    ))
+                    .count(),
+                54,
+            );
+            for (index, stiffness, damping, deform, breaking) in [
+                (0, 2_500_000.0, 800.0, 8000.0, 25_000_000.0),
+                (140, 3_000_000.0, 950.0, 40_000.0, 57_500.0),
+            ] {
+                let beam = structure.beams[index].unwrap();
+                approx(beam.stiffness_n_per_m, stiffness * 0.80);
+                approx(beam.damping_ns_per_m, damping * 0.13);
+                approx(beam.deformation_threshold_n, deform * 0.56);
+                approx(beam.breaking_threshold_n, breaking * 0.61);
+                approx(beam.plasticity, 0.1);
+            }
+            let mut sprung_mass = 0.0;
+            let mut sprung_moment = Vec3::ZERO;
+            let mut upright_masses = [0.0; 4];
+            for (node, &point) in structure.nodes.iter().zip(&vehicle.nodes) {
+                let mass = node.mass_kg.unwrap();
+                if let Some(wheel) = node.upright {
+                    upright_masses[wheel] += mass;
+                } else {
+                    sprung_mass += mass;
+                    sprung_moment += point * mass;
+                }
+            }
+            approx(sprung_mass, chassis.mass_kg);
+            assert!((sprung_moment / sprung_mass).abs_diff_eq(chassis.centre_of_mass_m, 1e-5));
+            assert!((sprung_mass - 866.36).abs() < 0.01);
+            let node_mass: f32 = structure
+                .nodes
+                .iter()
+                .map(|node| node.mass_kg.unwrap())
+                .sum();
+            let wheel_mass: f32 = physics
+                .wheels
+                .iter()
+                .map(|wheel| wheel.mass_kg.unwrap())
+                .sum();
+            approx(wheel_mass, 156.0);
+            let total_mass = chassis.mass_kg + upright_masses.into_iter().sum::<f32>() + wheel_mass;
+            assert!((total_mass - (node_mass + wheel_mass)).abs() < 0.002);
             assert!(chassis.size_m.min_element() > 0.0);
             assert!(chassis.centre_of_mass_m.x.abs() < 0.03);
             assert_eq!(physics.wheels.len(), 4);
@@ -203,6 +427,7 @@ fn local_accord_variants_keep_their_authored_geometry_and_textures() {
                 approx(suspension.initial_length_m, rise);
                 assert!(suspension.free_length_m > suspension.initial_length_m);
                 assert!(detail.upright_mass_kg.unwrap() > 18.0);
+                approx(detail.upright_mass_kg.unwrap(), upright_masses[i]);
                 approx(detail.brake_torque_nm.unwrap(), 1800.0);
                 approx(
                     detail.drive_torque_nm.unwrap(),

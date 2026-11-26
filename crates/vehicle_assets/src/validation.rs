@@ -1,6 +1,9 @@
 use std::fmt;
 
-use crate::{Heightfield, MeshInstance, TerrainAsset, TriangleMesh, VehicleAsset, WheelGeometry};
+use crate::{
+    Heightfield, MeshInstance, TerrainAsset, TriangleMesh, VehicleAsset, VehicleStructure,
+    WheelGeometry,
+};
 
 /// The first invalid field found, with asset-local indices in the path.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -13,6 +16,7 @@ pub struct AssetValidationError {
 pub enum ValidationErrorKind {
     NonFinite,
     NonPositive,
+    OutOfRange,
     ZeroScale,
     NotUnitLength,
     TooFewSamples,
@@ -36,6 +40,7 @@ impl fmt::Display for ValidationErrorKind {
         match self {
             Self::NonFinite => f.write_str("must be finite"),
             Self::NonPositive => f.write_str("must be positive"),
+            Self::OutOfRange => f.write_str("value is out of range"),
             Self::ZeroScale => f.write_str("scale components must be nonzero"),
             Self::NotUnitLength => f.write_str("must be unit length"),
             Self::TooFewSamples => f.write_str("must contain at least two samples along this axis"),
@@ -67,7 +72,7 @@ impl TerrainAsset {
 }
 
 impl VehicleAsset {
-    /// Checks geometry, wheel dimensions and asset-local references.
+    /// Checks geometry, wheel dimensions, structural properties and asset-local references.
     pub fn validate(&self) -> Result<(), AssetValidationError> {
         validate_objects(&self.meshes, &self.objects)?;
 
@@ -86,6 +91,100 @@ impl VehicleAsset {
         for (index, wheel) in self.wheels.iter().enumerate() {
             validate_wheel(wheel, index)?;
         }
+        if let Some(structure) = &self.physics.structure {
+            validate_structure(self, structure)?;
+        }
+        Ok(())
+    }
+}
+
+fn validate_structure(vehicle: &VehicleAsset, structure: &VehicleStructure) -> Validation {
+    check_count(structure.nodes.len(), vehicle.nodes.len(), || {
+        "physics.structure.nodes".into()
+    })?;
+    check_count(structure.beams.len(), vehicle.edges.len(), || {
+        "physics.structure.beams".into()
+    })?;
+    for (index, node) in structure.nodes.iter().enumerate() {
+        if let Some(mass) = node.mass_kg {
+            check_range(mass, 0.0..=f32::MAX, || {
+                format!("physics.structure.nodes[{index}].mass_kg")
+            })?;
+        }
+        if let Some(owner) = node.upright {
+            check_index(owner, vehicle.wheels.len(), || {
+                format!("physics.structure.nodes[{index}].upright")
+            })?;
+        }
+    }
+    for (index, beam) in structure.beams.iter().enumerate() {
+        let Some(beam) = beam else { continue };
+        for (field, value) in [
+            ("stiffness_n_per_m", beam.stiffness_n_per_m),
+            ("damping_ns_per_m", beam.damping_ns_per_m),
+            ("deformation_threshold_n", beam.deformation_threshold_n),
+            ("breaking_threshold_n", beam.breaking_threshold_n),
+        ] {
+            check_range(value, 0.0..=f32::MAX, || {
+                format!("physics.structure.beams[{index}].{field}")
+            })?;
+        }
+        check_range(beam.plasticity, 0.0..=1.0, || {
+            format!("physics.structure.beams[{index}].plasticity")
+        })?;
+        if let crate::StructuralBeamKind::CompressionSupport {
+            extension_limit_ratio: Some(limit),
+        } = beam.kind
+        {
+            check_dimension(limit, || {
+                format!("physics.structure.beams[{index}].kind.extension_limit_ratio")
+            })?;
+        }
+    }
+    for (index, triangle) in structure.collision_triangles.iter().enumerate() {
+        for (corner, node) in triangle.iter().enumerate() {
+            check_index(node.0, vehicle.nodes.len(), || {
+                format!("physics.structure.collision_triangles[{index}][{corner}]")
+            })?;
+        }
+    }
+    for (index, node) in structure.contact_nodes.iter().enumerate() {
+        check_index(node.0, vehicle.nodes.len(), || {
+            format!("physics.structure.contact_nodes[{index}]")
+        })?;
+    }
+    for (index, binding) in structure.deformable_meshes.iter().enumerate() {
+        let field = || format!("physics.structure.deformable_meshes[{index}]");
+        check_index(binding.object, vehicle.objects.len(), || {
+            format!("{}.object", field())
+        })?;
+        if vehicle.objects[binding.object].visual_mesh.is_none() {
+            return invalid(format!("{}.object", field()), Kind::MissingMeshRole);
+        }
+        for (role, nodes) in [
+            ("placement_nodes", binding.placement_nodes.as_slice()),
+            ("influence_nodes", binding.influence_nodes.as_slice()),
+        ] {
+            for (offset, node) in nodes.iter().enumerate() {
+                check_index(node.0, vehicle.nodes.len(), || {
+                    format!("{}.{role}[{offset}]", field())
+                })?;
+            }
+        }
+    }
+    Ok(())
+}
+
+fn check_range(
+    value: f32,
+    range: std::ops::RangeInclusive<f32>,
+    field: impl FnOnce() -> String,
+) -> Validation {
+    if !value.is_finite() {
+        invalid(field(), Kind::NonFinite)
+    } else if !range.contains(&value) {
+        invalid(field(), Kind::OutOfRange)
+    } else {
         Ok(())
     }
 }

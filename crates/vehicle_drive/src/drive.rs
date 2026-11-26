@@ -600,6 +600,7 @@ mod tests {
                         centre_of_mass_m: Vec3::new(0.0, 0.45, 0.22),
                     }),
                     wheels: wheel_details,
+                    structure: None,
                 },
             },
             appearance: MeshAppearance::default(),

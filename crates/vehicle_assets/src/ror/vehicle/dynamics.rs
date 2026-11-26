@@ -1,5 +1,7 @@
 use super::{Record, WheelRecord, number, resolve_nodes};
-use crate::{ChassisPhysics, NodeId, VehicleAsset, VehiclePhysics, VerticalSuspension};
+use crate::{
+    ChassisPhysics, NodeId, StructuralNode, VehicleAsset, VehiclePhysics, VerticalSuspension,
+};
 use bevy_math::Vec3;
 use std::collections::HashMap;
 
@@ -9,6 +11,7 @@ pub(super) fn convert(
     nodes: &HashMap<u32, NodeId>,
     mut wheels: Vec<WheelRecord>,
     body_objects: &[usize],
+    structural_nodes: &mut [StructuralNode],
 ) -> VehiclePhysics {
     let shocks: Vec<_> = records
         .iter()
@@ -37,26 +40,32 @@ pub(super) fn convert(
         upright_nodes.push(attached);
     }
 
-    let chassis = node_masses(records, vehicle, &shocks).and_then(|mut masses| {
-        let mut assigned = vec![false; masses.len()];
-        for (wheel, nodes) in wheels.iter_mut().zip(upright_nodes) {
-            let mut upright_mass = 0.0;
+    let chassis = node_masses(records, vehicle, &shocks).and_then(|masses| {
+        let mut owners = vec![None; masses.len()];
+        for (index, nodes) in upright_nodes.iter().enumerate() {
             for id in nodes {
-                if std::mem::replace(&mut assigned[id.0], true) {
+                if owners[id.0].replace(index).is_some() {
                     return None;
                 }
-                upright_mass += std::mem::take(&mut masses[id.0]);
             }
+        }
+        for ((node, &mass), owner) in structural_nodes.iter_mut().zip(&masses).zip(owners) {
+            node.mass_kg = Some(mass);
+            node.upright = owner;
+        }
+        for (wheel, nodes) in wheels.iter_mut().zip(upright_nodes) {
+            let upright_mass: f32 = nodes.iter().map(|id| masses[id.0]).sum();
             wheel.physics.upright_mass_kg = (upright_mass > 0.0).then_some(upright_mass);
         }
         let size_m = body_size(vehicle, body_objects)?;
-        let mass_kg: f32 = masses.iter().sum();
-        let moment: Vec3 = vehicle
-            .nodes
-            .iter()
-            .zip(masses)
-            .map(|(&point, mass)| point * mass)
-            .sum();
+        let mut mass_kg = 0.0;
+        let mut moment = Vec3::ZERO;
+        for ((&point, mass), node) in vehicle.nodes.iter().zip(masses).zip(structural_nodes) {
+            if node.upright.is_none() {
+                mass_kg += mass;
+                moment += point * mass;
+            }
+        }
         let centre_of_mass_m = moment / mass_kg;
         (mass_kg > 0.0 && mass_kg.is_finite() && centre_of_mass_m.is_finite()).then_some(
             ChassisPhysics {
@@ -99,7 +108,11 @@ pub(super) fn convert(
             wheel.physics
         })
         .collect();
-    VehiclePhysics { chassis, wheels }
+    VehiclePhysics {
+        chassis,
+        wheels,
+        structure: None,
+    }
 }
 
 fn fields_in<'a>(records: &[Record<'a>], section: &str) -> Option<Vec<&'a str>> {
@@ -196,16 +209,15 @@ fn node_masses(
     } else {
         0.0
     };
-    Some(
-        lengths
-            .into_iter()
-            .zip(loads)
-            .map(|(length, (loaded, weight))| {
-                let load = if loaded { weight.unwrap_or(share) } else { 0.0 };
-                (length * density + load).max(minimum)
-            })
-            .collect(),
-    )
+    let masses: Vec<_> = lengths
+        .into_iter()
+        .zip(loads)
+        .map(|(length, (loaded, weight))| {
+            let load = if loaded { weight.unwrap_or(share) } else { 0.0 };
+            (length * density + load).max(minimum)
+        })
+        .collect();
+    masses.iter().all(|mass| mass.is_finite()).then_some(masses)
 }
 
 struct Shock {
@@ -343,7 +355,22 @@ mod tests {
             brake: Some(0),
         };
         let nodes = (0..4).map(|i| (i, NodeId(i as usize))).collect();
-        let physics = convert(&records, &vehicle, &nodes, vec![wheel], &[0]);
+        let mut structural_nodes = vec![StructuralNode::default(); vehicle.nodes.len()];
+        let physics = convert(
+            &records,
+            &vehicle,
+            &nodes,
+            vec![wheel],
+            &[0],
+            &mut structural_nodes,
+        );
+        assert_eq!(
+            structural_nodes
+                .iter()
+                .map(|node| node.upright)
+                .collect::<Vec<_>>(),
+            [Some(0), Some(0), None, None],
+        );
         let chassis = physics.chassis.unwrap();
         let wheel = physics.wheels[0];
         let mass = chassis.mass_kg + wheel.upright_mass_kg.unwrap() + wheel.mass_kg.unwrap();
