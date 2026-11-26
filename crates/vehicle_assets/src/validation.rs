@@ -91,6 +91,23 @@ impl VehicleAsset {
         for (index, wheel) in self.wheels.iter().enumerate() {
             validate_wheel(wheel, index)?;
         }
+        for (index, wheel) in self.physics.wheels.iter().enumerate() {
+            if let Some(attachment) = wheel.attachment {
+                for (node, field) in attachment
+                    .axle_nodes
+                    .into_iter()
+                    .zip(["axle_nodes[0]", "axle_nodes[1]"])
+                    .chain([
+                        (attachment.upper_node, "upper_node"),
+                        (attachment.lower_node, "lower_node"),
+                    ])
+                {
+                    check_index(node.0, self.nodes.len(), || {
+                        format!("physics.wheels[{index}].attachment.{field}")
+                    })?;
+                }
+            }
+        }
         if let Some(structure) = &self.physics.structure {
             validate_structure(self, structure)?;
         }

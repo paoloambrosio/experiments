@@ -84,6 +84,20 @@ The current drive uses fixed first-gear torque split across the driven wheels an
 
 `--alignment-report` repeats the level-road drive with upright and authored alignment. It measures the lateral centre of normal load across each tread during the last second of settling, then reports mean absolute lateral friction force per wheel from 2 to 4 m/s with the steering centred. Offset is positive toward vehicle left. Positive camber leans the wheel top outward and positive toe points the wheel inward. The comparison uses the terrain start and needs a level stretch of road ahead. [Core 014 results](../devlog/014-authored-wheel-alignment/README.md)
 
+### Crash the imported chassis
+
+Use the same asset configuration as the drive. The target is the name of a placed object with a collision mesh. For the N-Labs terrain, run the CMWall strike from the workspace root.
+
+```sh
+cargo run -p vehicle_drive -- --crash-report --crash-target CMWall
+```
+
+The headless report checks all four wheel loads, then launches the vehicle at 8 m/s toward a face of the selected object. A control removes the object from both obstacle collision and tyre support. The report compares damage at the same time while the control is still over terrain, then follows the strike through unloading and repeats it after reset. It prints the source of the first chassis contact, the wall impulse, nose shortening, and permanent changes in beam length.
+
+The importer supplies the axle and shock attachments. Beam stiffness, damping, and deformation-force thresholds come from the asset. The crash uses a yield-only approximation of the authored plasticity. Wheel uprights and projected suspension represent their associated structural links. The report counts those links and identifies unsupported records separately.
+
+With the reference archives, the Accord hits CMWall at 7.53 m/s. At the matched 0.633 s sample, the nose gauge reads 203.64 mm of shortening against 1.70 mm in the control. The two-second strike retains an 89.44 mm change in the most affected beam. These figures describe the configured yield-only simulation.
+
 ## Crash test a deformable chassis
 
 Run the headless wall-strike replay from the workspace root.

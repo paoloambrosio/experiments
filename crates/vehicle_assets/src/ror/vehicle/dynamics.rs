@@ -1,6 +1,7 @@
 use super::{Record, WheelRecord, number, resolve_nodes};
 use crate::{
     ChassisPhysics, NodeId, StructuralNode, VehicleAsset, VehiclePhysics, VerticalSuspension,
+    WheelAttachment,
 };
 use bevy_math::Vec3;
 use std::collections::HashMap;
@@ -33,6 +34,17 @@ pub(super) fn convert(
             && matches.next().is_none()
         {
             wheel.physics.suspension = shock.suspension();
+            if wheel.physics.suspension.is_some() {
+                wheel.physics.attachment = Some(WheelAttachment {
+                    axle_nodes: wheel.axle_nodes,
+                    upper_node: if shock.lower == shock.ends[0] {
+                        shock.ends[1]
+                    } else {
+                        shock.ends[0]
+                    },
+                    lower_node: shock.lower,
+                });
+            }
             if !attached.contains(&shock.lower) {
                 attached.push(shock.lower);
             }
@@ -344,6 +356,7 @@ mod tests {
                 side: WheelSide::Left,
                 mass_kg: Some(5.0),
                 upright_mass_kg: None,
+                attachment: None,
                 suspension: None,
                 drive_torque_nm: None,
                 brake_torque_nm: None,
@@ -382,6 +395,14 @@ mod tests {
                 .abs_diff_eq((Vec3::new(1.0, 1.0, 0.0) * 1.1 + Vec3::Z) / 2.1, 1e-5,)
         );
         let suspension = wheel.suspension.unwrap();
+        assert_eq!(
+            wheel.attachment,
+            Some(WheelAttachment {
+                axle_nodes: [NodeId(0), NodeId(1)],
+                upper_node: NodeId(2),
+                lower_node: NodeId(1),
+            }),
+        );
         assert_eq!(suspension.stiffness_n_per_m, 1000.0);
         assert!((suspension.free_length_m - 1.1).abs() < 1e-6);
         assert!((suspension.min_length_m - 0.825).abs() < 1e-6);

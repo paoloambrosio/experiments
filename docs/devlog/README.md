@@ -22,5 +22,7 @@ Each entry documents a development step in the `vehicle_physics` core crate. Sup
 - [016 — Soft-body contact with static obstacles](016-static-world-contact/README.md) measures panel contact with a narrow post and a wheel-first side impact on a loaded tread.
 - [017 — Deformable chassis and suspension](017-deformable-chassis-suspension/README.md) couples four live wheels to a structural frame and measures how impacts travel through its mounts.
 - [018 — Sustained tyre contact with static obstacles](018-sustained-tyre-contact/README.md) follows a wheel-first strike for one second and checks the final bead path after suspension coupling.
+- [019 — Compression supports for chassis beams](019-compression-supports/README.md) checks that a support resists shortening, retains plastic set under load, and goes slack in extension.
+- [019 — Compression supports for chassis beams](019-compression-supports/README.md) checks that a support resists shortening, retains plastic set under load, and goes slack in extension.
 
 These core milestones support the [imported terrain and vehicle roadmap](../drive-roadmap.md).

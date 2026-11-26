@@ -198,6 +198,8 @@ pub struct WheelPhysics {
     /// Mass assigned to the upright, excluded from chassis and wheel mass.
     pub upright_mass_kg: Option<f32>,
     pub suspension: Option<VerticalSuspension>,
+    /// Authored axle endpoints and shock nodes for the projected suspension.
+    pub attachment: Option<WheelAttachment>,
     /// Signed first-gear torque under full throttle, in N·m. Zero for a free wheel.
     pub drive_torque_nm: Option<f32>,
     /// Full service-brake capacity in N·m. Zero for an unbraked wheel.
@@ -205,6 +207,13 @@ pub struct WheelPhysics {
     /// Indices into `VehicleAsset::objects`.
     pub rim_object: usize,
     pub tyre_object: usize,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct WheelAttachment {
+    pub axle_nodes: [NodeId; 2],
+    pub upper_node: NodeId,
+    pub lower_node: NodeId,
 }
 
 /// Linearized suspension along vehicle-local Y. Length increases as the wheel drops.

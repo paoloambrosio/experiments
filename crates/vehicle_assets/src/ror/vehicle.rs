@@ -567,6 +567,7 @@ fn add_wheel(
     };
     let wheel = WheelRecord {
         physics: WheelPhysics {
+            attachment: None,
             side,
             mass_kg: number(mass).ok().filter(|mass| *mass > 0.0),
             upright_mass_kg: None,

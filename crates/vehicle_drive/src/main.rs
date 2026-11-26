@@ -1,4 +1,6 @@
 mod config;
+mod crash_report;
+mod crash_structure;
 mod drive;
 mod drive_report;
 mod drive_view;
@@ -65,12 +67,35 @@ fn main() -> ExitCode {
                 .conflicts_with_all(["view-terrain", "view-vehicle", "drive", "drive-report"])
                 .help("Compare authored and upright wheel alignment on level terrain"),
         )
+        .arg(
+            Arg::new("crash-report")
+                .long("crash-report")
+                .action(ArgAction::SetTrue)
+                .requires("crash-target")
+                .conflicts_with_all([
+                    "view-terrain",
+                    "view-vehicle",
+                    "drive",
+                    "drive-report",
+                    "alignment-report",
+                ])
+                .help("Run a headless crash using the selected terrain and vehicle structure"),
+        )
+        .arg(
+            Arg::new("crash-target")
+                .long("crash-target")
+                .value_name("OBJECT")
+                .requires("crash-report")
+                .help("Name of a placed terrain object with a collision mesh"),
+        )
         .get_matches();
     let path = args
         .get_one::<PathBuf>("config")
         .expect("config has a default");
 
-    let mode = if args.get_flag("drive-report") {
+    let mode = if let Some(target) = args.get_one::<String>("crash-target") {
+        Some(DriveMode::CrashReport(target))
+    } else if args.get_flag("drive-report") {
         Some(DriveMode::Report)
     } else if args.get_flag("alignment-report") {
         Some(DriveMode::AlignmentReport)
@@ -193,13 +218,14 @@ fn import_scene(
     Ok((terrain, selected, vehicle))
 }
 
-enum DriveMode {
+enum DriveMode<'a> {
     Interactive,
     Report,
     AlignmentReport,
+    CrashReport(&'a str),
 }
 
-fn start_drive(path: &Path, mode: DriveMode) -> Result<bool, String> {
+fn start_drive(path: &Path, mode: DriveMode<'_>) -> Result<bool, String> {
     let mut config = Config::read(path)?;
     let ramp = if matches!(mode, DriveMode::Report) {
         config
@@ -239,6 +265,11 @@ fn start_drive(path: &Path, mode: DriveMode) -> Result<bool, String> {
                 drive::DriveSetup::new(None, &terrain, &vehicle, drive::AlignmentMode::Upright)
                     .map_err(|error| format!("upright comparison: {terrain_entry}: {error}"))?;
             drive_report::compare_alignment(upright, setup)?;
+            Ok(true)
+        }
+        DriveMode::CrashReport(target) => {
+            crash_report::run(&setup, &vehicle.vehicle, target)
+                .map_err(|error| format!("{} in {terrain_entry}: {error}", vehicle.entry))?;
             Ok(true)
         }
     }

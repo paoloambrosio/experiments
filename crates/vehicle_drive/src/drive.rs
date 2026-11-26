@@ -98,27 +98,8 @@ impl DriveSetup {
             );
         }
         let collision = placement::collision_geometry(&terrain.terrain);
-        let (vertices, triangles): (Vec<_>, Vec<_>) = collision
-            .triangles
-            .iter()
-            .enumerate()
-            .map(|(i, face)| {
-                (
-                    face.map(|point| point.as_dvec3()),
-                    [3 * i, 3 * i + 1, 3 * i + 2],
-                )
-            })
-            .unzip();
-        let vertices: Vec<DVec3> = vertices.into_iter().flatten().collect();
-        let road = Arc::new(
-            TriangleRoad::new(&vertices, &triangles, ROAD_CONTACT_DEPTH_M)
-                .map_err(|error| format!("{} collision geometry: {error}", terrain.terrain.name))?,
-        );
-        let contact = ContactParameters::new(ROAD_STIFFNESS_N_PER_M, ROAD_DAMPING_NS_PER_M)
-            .and_then(|parameters| {
-                parameters.with_friction(ROAD_FRICTION, ROAD_TRANSITION_SPEED_MPS)
-            })
-            .map_err(|error| format!("invalid road contact defaults: {error}"))?;
+        let road = road_from_triangles(collision.triangles.iter().copied())
+            .map_err(|error| format!("{} collision geometry: {error}", terrain.terrain.name))?;
         let start = spawn_pose(
             &collision.triangles,
             placement::start_hint(terrain)?,
@@ -133,7 +114,7 @@ impl DriveSetup {
             wheels,
             prepared,
             collision,
-            road: VehicleRoad::Triangles { road, contact },
+            road,
             start,
         })
     }
@@ -150,6 +131,14 @@ impl DriveSetup {
 
     pub(crate) fn centre_of_mass(&self) -> Vec3 {
         self.specification.chassis.centre_of_mass_m
+    }
+
+    pub(crate) fn specification(&self) -> VehicleSpec {
+        self.specification
+    }
+
+    pub(crate) fn road(&self) -> &VehicleRoad {
+        &self.road
     }
 
     pub(crate) fn wheel_visuals(&self) -> [(usize, WheelPhysics); 4] {
@@ -351,7 +340,27 @@ fn build_wheel(
     })
 }
 
-fn spawn_pose(
+pub(crate) fn road_from_triangles(
+    faces: impl Iterator<Item = [Vec3; 3]>,
+) -> Result<VehicleRoad, String> {
+    let mut vertices = Vec::new();
+    let mut triangles = Vec::new();
+    for face in faces {
+        let i = vertices.len();
+        vertices.extend(face.map(Vec3::as_dvec3));
+        triangles.push([i, i + 1, i + 2]);
+    }
+    let road = Arc::new(
+        TriangleRoad::new(&vertices, &triangles, ROAD_CONTACT_DEPTH_M)
+            .map_err(|error| error.to_string())?,
+    );
+    let contact = ContactParameters::new(ROAD_STIFFNESS_N_PER_M, ROAD_DAMPING_NS_PER_M)
+        .and_then(|parameters| parameters.with_friction(ROAD_FRICTION, ROAD_TRANSITION_SPEED_MPS))
+        .map_err(|error| format!("invalid road contact defaults: {error}"))?;
+    Ok(VehicleRoad::Triangles { road, contact })
+}
+
+pub(crate) fn spawn_pose(
     triangles: &[[Vec3; 3]],
     hint: Vec3,
     rotation: Quat,
@@ -396,25 +405,31 @@ pub(crate) struct DriveSession {
     commands: DriverInput,
 }
 
+pub(crate) fn physics_app(substeps: u32, configure: impl FnOnce(&mut App)) -> App {
+    let mut app = App::new();
+    app.add_plugins((
+        MinimalPlugins,
+        TransformPlugin,
+        PhysicsPlugins::default(),
+        AvianTyrePlugin,
+        AvianSuspensionPlugin,
+    ))
+    .insert_resource(TimeUpdateStrategy::ManualDuration(Duration::from_secs_f64(
+        1.0 / f64::from(TICKS_PER_SECOND),
+    )))
+    .insert_resource(Time::<Fixed>::from_hz(f64::from(TICKS_PER_SECOND)))
+    .insert_resource(SubstepCount(substeps))
+    .insert_resource(Gravity(Vec3::NEG_Y * G as f32));
+    configure(&mut app);
+    app.finish();
+    app.cleanup();
+    app.update();
+    app
+}
+
 impl DriveSession {
     pub(crate) fn new(setup: DriveSetup) -> Result<Self, String> {
-        let mut app = App::new();
-        app.add_plugins((
-            MinimalPlugins,
-            TransformPlugin,
-            PhysicsPlugins::default(),
-            AvianTyrePlugin,
-            AvianSuspensionPlugin,
-        ))
-        .insert_resource(TimeUpdateStrategy::ManualDuration(Duration::from_secs_f64(
-            1.0 / f64::from(TICKS_PER_SECOND),
-        )))
-        .insert_resource(Time::<Fixed>::from_hz(f64::from(TICKS_PER_SECOND)))
-        .insert_resource(SubstepCount(SUBSTEPS))
-        .insert_resource(Gravity(Vec3::NEG_Y * G as f32));
-        app.finish();
-        app.cleanup();
-        app.update();
+        let mut app = physics_app(SUBSTEPS, |_| {});
         let car = setup
             .prepared
             .spawn(app.world_mut(), setup.start, &setup.road)
@@ -541,14 +556,14 @@ impl DriveSession {
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
     use vehicle_assets::{
         ChassisPhysics, Heightfield, MeshAppearance, MeshId, MeshInstance, TerrainAsset,
         TriangleMesh, VehicleAsset, VehiclePhysics, VerticalSuspension,
     };
 
-    fn fixture_vehicle() -> VehicleImport {
+    pub(crate) fn fixture_vehicle() -> VehicleImport {
         // Deliberately shuffle the two axles and the left/right order.
         let points = [(-0.8, -1.4), (0.7, 1.25), (0.8, -1.4), (-0.7, 1.25)];
         let wheels = points
@@ -564,6 +579,7 @@ mod tests {
             .into_iter()
             .enumerate()
             .map(|(i, (x, z))| WheelPhysics {
+                attachment: None,
                 side: if x > 0.0 {
                     WheelSide::Left
                 } else {
@@ -609,7 +625,7 @@ mod tests {
         }
     }
 
-    fn fixture_terrain() -> TerrainImport {
+    pub(crate) fn fixture_terrain() -> TerrainImport {
         let square = TriangleMesh {
             vertices: vec![
                 -Vec3::X - Vec3::Z,

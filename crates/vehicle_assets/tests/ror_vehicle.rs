@@ -1,6 +1,6 @@
 mod common;
 
-use std::{fs::File, io::Write, path::Path};
+use std::{fmt::Write as _, fs::File, io::Write, path::Path};
 
 use bevy_math::Vec3;
 use vehicle_assets::{NodeId, StructuralBeamKind, ror::load_vehicle};
@@ -80,6 +80,58 @@ fn write_archive(path: &Path, truck: &str) {
         zip.write_all(&data).unwrap();
     }
     zip.finish().unwrap();
+}
+
+#[test]
+fn imports_shock_attachments_in_shuffled_wheel_order() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("attachments.zip");
+    let corners = [(-0.7, -1.2), (0.7, 1.2), (0.7, -1.2), (-0.7, 1.2)];
+    let mut truck = String::from("Attachments\nglobals\n600,0\nminimass\n2\nnodes\n");
+    for (i, &(x, z)) in corners.iter().enumerate() {
+        let n = 3 * i;
+        writeln!(truck, "{n},{},{},{}", -z, 0.3, x - 0.1).unwrap();
+        writeln!(truck, "{},{},{},{}", n + 1, -z, 0.3, x + 0.1).unwrap();
+        writeln!(truck, "{},{},{},{}", n + 2, -z, 0.7, x).unwrap();
+    }
+    truck.push_str("beams\n2,5\n2,8,s\n5,8\n2,11\n5,11\n8,11\nshocks\n");
+    for i in 0..4 {
+        writeln!(truck, "{},{},32000,2000,0.2,0.2,1.1,i", 3 * i + 2, 3 * i).unwrap();
+    }
+    truck.push_str("meshwheels2\n");
+    for (i, &(x, _)) in corners.iter().enumerate() {
+        let (side, outer, inner) = if x > 0.0 {
+            ('l', 3 * i + 1, 3 * i)
+        } else {
+            ('r', 3 * i, 3 * i + 1)
+        };
+        writeln!(
+            truck,
+            "0.32,0.18,0.2,12,{outer},{inner},9999,1,1,2,30,1000,100,{side},rim.mesh,tread"
+        )
+        .unwrap();
+    }
+    truck.push_str(
+        "submesh\ncab\n2,5,8,n\nflexbodies\n2,5,8,0,0,0,0,0,0,body.mesh\nforset 2,5,8,11\nend\n",
+    );
+    write_archive(&path, &truck);
+    let asset = load_vehicle(&path, "pack/fixture.truck").unwrap().vehicle;
+    let structure = asset.physics.structure.unwrap();
+    for (i, (wheel, &(x, z))) in asset.wheels.iter().zip(&corners).enumerate() {
+        assert!(wheel.centre.abs_diff_eq(Vec3::new(x, 0.3, z), 1e-6));
+        let attachment = asset.physics.wheels[i].attachment.unwrap();
+        assert_eq!(attachment.upper_node, NodeId(3 * i + 2));
+        assert_eq!(attachment.lower_node, NodeId(3 * i));
+        assert_eq!(structure.nodes[attachment.upper_node.0].upright, None);
+        for axle in attachment.axle_nodes {
+            assert_eq!(structure.nodes[axle.0].upright, Some(i));
+            assert!(structure.nodes[axle.0].mass_kg.unwrap() > 0.0);
+        }
+    }
+    assert!(matches!(
+        structure.beams[1].unwrap().kind,
+        StructuralBeamKind::CompressionSupport { .. }
+    ));
 }
 
 #[test]
@@ -422,6 +474,15 @@ fn local_accord_variants_keep_their_authored_geometry_and_textures() {
                 };
                 let ratio_sq = rise * rise / (rise * rise + run * run);
                 let suspension = detail.suspension.expect("wheel shock");
+                let attachment = detail.attachment.expect("authored shock nodes");
+                assert_eq!(structure.nodes[attachment.upper_node.0].upright, None);
+                for node in [
+                    attachment.lower_node,
+                    attachment.axle_nodes[0],
+                    attachment.axle_nodes[1],
+                ] {
+                    assert_eq!(structure.nodes[node.0].upright, Some(i));
+                }
                 assert!((suspension.stiffness_n_per_m - spring * ratio_sq).abs() < 0.01);
                 assert!((suspension.damping_ns_per_m - damper * ratio_sq).abs() < 0.01);
                 approx(suspension.initial_length_m, rise);

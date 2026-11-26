@@ -109,6 +109,7 @@ fn fixture(alignment: [WheelAlignment; 4]) -> Result<PreparedDeformableVehicle, 
         for i in start..start + 4 {
             for j in i + 1..start + 4 {
                 beams.push(ChassisBeamSpec {
+                    kind: Default::default(),
                     endpoints: [i, j],
                     coefficients: frame,
                     material: None,
@@ -118,6 +119,7 @@ fn fixture(alignment: [WheelAlignment; 4]) -> Result<PreparedDeformableVehicle, 
                 for j in start + 4..start + 8 {
                     let coefficients = if start == 0 { nose } else { frame };
                     beams.push(ChassisBeamSpec {
+                        kind: Default::default(),
                         endpoints: [i, j],
                         coefficients,
                         material: (start == 0).then_some(yield_nose),

@@ -133,6 +133,7 @@ pub(crate) fn fixture(speed_mps: f64) -> Result<Chassis, Box<dyn Error>> {
         for corner in section..section + 4 {
             for other in corner + 1..section + 4 {
                 beams.push(ChassisBeamSpec {
+                    kind: Default::default(),
                     endpoints: [corner, other],
                     coefficients: cabin,
                     material: Some(cabin_yield),
@@ -144,6 +145,7 @@ pub(crate) fn fixture(speed_mps: f64) -> Result<Chassis, Box<dyn Error>> {
         for corner in front..front + 4 {
             for other in front + 4..front + 8 {
                 beams.push(ChassisBeamSpec {
+                    kind: Default::default(),
                     endpoints: [corner, other],
                     coefficients,
                     material: Some(material),

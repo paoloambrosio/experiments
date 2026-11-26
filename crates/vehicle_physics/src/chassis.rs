@@ -21,8 +21,18 @@ pub struct ChassisBeamSpec {
     /// Indices into the chassis node array.
     pub endpoints: [usize; 2],
     pub coefficients: BeamCoefficients,
+    pub kind: ChassisBeamKind,
     /// Optional axial yielding and fracture limits.
     pub material: Option<BeamDamageConfig>,
+}
+
+/// Axial force law in the chassis rest geometry.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum ChassisBeamKind {
+    #[default]
+    Bilateral,
+    /// Resists shortening. A support goes slack beyond its stress-free length.
+    CompressionSupport,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -385,8 +395,14 @@ impl Chassis {
             let axis = offset / length;
             let speed = (self.nodes[b].velocity_mps - self.nodes[a].velocity_mps).dot(axis);
             let coefficients = beam.spec.coefficients;
-            let spring = coefficients.stiffness * (length - beam.damage.stress_free_length_m());
-            let force = axis * (spring + coefficients.damping * speed);
+            let extension = length - beam.damage.stress_free_length_m();
+            let axial = coefficients.stiffness * extension + coefficients.damping * speed;
+            let force = axis
+                * match beam.spec.kind {
+                    ChassisBeamKind::Bilateral => axial,
+                    ChassisBeamKind::CompressionSupport if extension <= 0.0 => axial.min(0.0),
+                    ChassisBeamKind::CompressionSupport => 0.0,
+                };
             self.forces[a] += force;
             self.forces[b] -= force;
         }
@@ -429,7 +445,10 @@ impl Chassis {
             let [a, b] = beam.spec.endpoints;
             let offset = self.next_nodes[b].position_m - self.next_nodes[a].position_m;
             let length = checked_length(offset, index)?;
-            if let Some(material) = beam.spec.material {
+            if let Some(material) = beam.spec.material
+                && (beam.spec.kind == ChassisBeamKind::Bilateral
+                    || length < beam.damage.stress_free_length_m())
+            {
                 *next = beam
                     .damage
                     .at_length(length, material)

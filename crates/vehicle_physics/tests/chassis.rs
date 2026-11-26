@@ -1,7 +1,10 @@
 use bevy_math::DVec3;
 use vehicle_physics::{
     beam_damage::BeamDamageConfig,
-    chassis::{BeamCoefficients, Chassis, ChassisBeamSpec, ChassisError, ChassisNode, WallFace},
+    chassis::{
+        BeamCoefficients, Chassis, ChassisBeamKind, ChassisBeamSpec, ChassisError, ChassisNode,
+        WallFace,
+    },
 };
 
 const DT: f64 = 1.0 / 3840.0;
@@ -16,6 +19,7 @@ fn node(x_m: f64, speed_mps: f64) -> ChassisNode {
 
 fn beam(endpoints: [usize; 2], material: Option<BeamDamageConfig>) -> ChassisBeamSpec {
     ChassisBeamSpec {
+        kind: Default::default(),
         endpoints,
         coefficients: BeamCoefficients {
             stiffness: 400.0,
@@ -37,6 +41,41 @@ fn length(chassis: &Chassis) -> f64 {
     chassis.nodes()[0]
         .position_m
         .distance(chassis.nodes()[1].position_m)
+}
+
+#[test]
+fn compression_support_goes_slack_in_extension_and_yields_under_compression() {
+    let support = ChassisBeamSpec {
+        kind: ChassisBeamKind::CompressionSupport,
+        coefficients: BeamCoefficients {
+            stiffness: 400.0,
+            damping: 8.0,
+        },
+        ..beam(
+            [0, 1],
+            Some(BeamDamageConfig::yield_only(0.03, 0.03).unwrap()),
+        )
+    };
+    let mut extending = Chassis::new(vec![node(0.0, 0.0), node(1.0, 2.0)], vec![support]).unwrap();
+    let mut closing = Chassis::new(vec![node(0.0, 2.0), node(1.0, 0.0)], vec![support]).unwrap();
+    let mut forward = 0.0_f64;
+    for _ in 0..768 {
+        extending.step(DT, None).unwrap();
+        closing.step(DT, None).unwrap();
+        forward = forward.max(closing.nodes()[1].velocity_mps.x);
+    }
+    assert!((length(&extending) - 1.4).abs() < 1e-10);
+    assert!(!extending.beam_damage().next().unwrap().yielded());
+    assert!(forward > 1.0);
+    assert!(
+        closing
+            .beam_damage()
+            .next()
+            .unwrap()
+            .permanent_length_change_m()
+            < -0.001
+    );
+    assert!(momentum(&closing).abs_diff_eq(DVec3::X * 4.0, 1e-10));
 }
 
 #[test]

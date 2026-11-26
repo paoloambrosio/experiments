@@ -121,6 +121,7 @@ fn invalid_geometry_and_a_failed_step_preserve_committed_state() {
             node(2.0 * DVec3::Z, DVec3::ZERO, 1.0),
         ],
         vec![ChassisBeamSpec {
+            kind: Default::default(),
             endpoints: [0, 1],
             coefficients: BeamCoefficients {
                 stiffness: 10.0,

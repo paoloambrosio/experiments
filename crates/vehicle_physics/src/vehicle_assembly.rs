@@ -271,6 +271,11 @@ impl VehicleSpec {
 }
 
 impl PreparedVehicle {
+    /// Inflated tyres in front-left, front-right, rear-left, rear-right order.
+    pub fn tyres(&self) -> [&ElasticTyre; 4] {
+        self.tyres.each_ref().map(Arc::as_ref)
+    }
+
     /// Set chassis-local rest camber and toe in FL, FR, RL, RR order. Preparation
     /// defaults to upright wheels, and alignment does not change the inflated tyres.
     pub fn with_wheel_alignments(mut self, alignments: [WheelAlignment; 4]) -> Self {
@@ -303,8 +308,7 @@ impl PreparedVehicle {
         pose: VehiclePose,
         road: &VehicleRoad,
     ) -> Result<VehicleAssembly, AssemblyError> {
-        self.layout
-            .spawn(world, self.tyres.each_ref().map(Arc::as_ref), pose, road)
+        self.layout.spawn(world, self.tyres(), pose, road)
     }
 }
 
