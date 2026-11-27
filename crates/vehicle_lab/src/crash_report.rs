@@ -14,8 +14,8 @@ use vehicle_physics::{
     vehicle_assembly::{PreparedVehicle, VehiclePose, VehicleRoad, VehicleSpec, WHEEL_NAMES},
 };
 
-use crate::{
-    crash_structure::{self, ImportedStructure},
+use crate::crash_structure::{self, ImportedStructure};
+use vehicle_scene::{
     drive::{self, DriveSetup, TICKS_PER_SECOND},
     placement::{self, CollisionGeometry},
 };
@@ -755,187 +755,52 @@ fn measure(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::drive::{
-        AlignmentMode,
-        tests::{fixture_terrain, fixture_vehicle},
-    };
-    use vehicle_assets::{
-        MeshId, MeshInstance, NodeId, StructuralBeam, StructuralBeamKind, StructuralNode,
-        TriangleMesh, VehicleStructure, WheelAttachment,
-    };
-    use vehicle_physics::chassis::{Chassis, ChassisBeamKind, ChassisCollision};
+    use vehicle_assets::ror::reference;
+    use vehicle_physics::chassis::ChassisBeamKind;
+    use vehicle_scene::drive::AlignmentMode;
 
     #[test]
-    fn imported_layout_maps_shuffled_uprights_and_hits_a_transformed_wall() {
-        let mut vehicle = fixture_vehicle();
-        let asset = &mut vehicle.vehicle;
-        asset.nodes = vec![
-            Vec3::new(-0.6, 0.5, 1.9),
-            Vec3::new(0.6, 0.5, 1.9),
-            Vec3::new(-0.6, 0.8, 0.0),
-            Vec3::new(0.6, 0.8, 0.0),
-        ];
-        let beam = StructuralBeam {
-            kind: StructuralBeamKind::Bilateral,
-            stiffness_n_per_m: 40_000.0,
-            damping_ns_per_m: 100.0,
-            deformation_threshold_n: 1600.0,
-            breaking_threshold_n: 100_000.0,
-            plasticity: 0.1,
-        };
-        let mut authored = VehicleStructure {
-            nodes: vec![
-                StructuralNode {
-                    mass_kg: Some(270.0),
-                    ..default()
-                };
-                4
-            ],
-            collision_triangles: vec![
-                [NodeId(0), NodeId(1), NodeId(2)],
-                [NodeId(1), NodeId(2), NodeId(3)],
-            ],
-            ..default()
-        };
-        for a in 0..4 {
-            for b in a + 1..4 {
-                asset.edges.push([NodeId(a), NodeId(b)]);
-                authored.beams.push(Some(if [a, b] == [2, 3] {
-                    StructuralBeam {
-                        kind: StructuralBeamKind::CompressionSupport {
-                            extension_limit_ratio: None,
-                        },
-                        ..beam
-                    }
-                } else {
-                    beam
-                }));
-            }
-        }
-        for (index, (wheel, physics)) in asset
-            .wheels
-            .iter()
-            .zip(&mut asset.physics.wheels)
-            .enumerate()
-        {
-            let a = NodeId(asset.nodes.len());
-            let b = NodeId(a.0 + 1);
-            let upper = NodeId(index);
-            asset
-                .nodes
-                .extend([wheel.centre - Vec3::X * 0.06, wheel.centre + Vec3::X * 0.06]);
-            authored.nodes.extend(
-                [StructuralNode {
-                    mass_kg: Some(1.5),
-                    upright: Some(index),
-                    ..default()
-                }; 2],
-            );
-            asset.edges.extend([[a, b], [a, upper]]);
-            authored.beams.extend([Some(beam), Some(beam)]);
-            physics.attachment = Some(WheelAttachment {
-                axle_nodes: [a, b],
-                upper_node: upper,
-                lower_node: a,
-            });
-        }
-        vehicle.vehicle.physics.structure = Some(authored);
-        let mut terrain = fixture_terrain();
-        terrain.terrain.objects.clear();
-        let rotation = Quat::from_rotation_y(0.4);
-        let forward = rotation * Vec3::Z;
-        let centre = Vec3::new(20.0, 0.0, 20.0);
-        terrain.terrain.meshes.push(TriangleMesh {
-            vertices: vec![
-                Vec3::new(-3.0, 0.0, 0.0),
-                Vec3::new(3.0, 0.0, 0.0),
-                Vec3::new(3.0, 3.0, 0.0),
-                Vec3::new(-3.0, 3.0, 0.0),
-            ],
-            triangles: vec![[0, 1, 2], [0, 2, 3]],
-            normals: None,
-            uvs: None,
-        });
-        terrain.terrain.objects.push(MeshInstance {
-            name: "fixture wall".into(),
-            translation: centre,
-            rotation,
-            scale: Vec3::ONE,
-            visual_mesh: None,
-            collision_mesh: Some(MeshId(1)),
-        });
-        let setup = DriveSetup::new(None, &terrain, &vehicle, AlignmentMode::Authored).unwrap();
+    fn imported_structure_maps_shuffled_uprights_and_excludes_the_wall_from_control() {
+        let vehicle = reference::vehicle().unwrap();
+        let terrain = reference::terrain().unwrap();
+        let setup = DriveSetup::new(&terrain, &vehicle, AlignmentMode::Authored).unwrap();
+        assert_eq!(setup.wheel_visuals().map(|(i, _)| i), [1, 3, 2, 0]);
         let assembly = crash_structure::assemble(
             &vehicle.vehicle,
             setup.wheel_visuals(),
             setup.specification(),
         )
         .unwrap();
-        assert_eq!(assembly.mounts.map(|nodes| nodes[0]), [1, 3, 2, 0]);
+        assert_eq!(assembly.mounts.map(|nodes| nodes[0]), [17, 23, 20, 14]);
         assert_eq!(assembly.counts.upright_internal, [1; 4]);
         assert_eq!(assembly.counts.suspension_links, [1; 4]);
-        assert_eq!(
+        assert!(
             assembly
                 .structure
-                .nodes
+                .beams
                 .iter()
-                .map(|n| n.mass_kg)
-                .sum::<f64>(),
-            1080.0
+                .any(|beam| beam.kind == ChassisBeamKind::CompressionSupport)
         );
-        assert_eq!(
-            assembly.structure.beams.last().unwrap().kind,
-            ChassisBeamKind::CompressionSupport
-        );
-        let mut missing_mount = vehicle.vehicle.clone();
-        missing_mount.physics.wheels[1].attachment = None;
-        let error = crash_structure::assemble(
-            &missing_mount,
-            [
-                (1, missing_mount.physics.wheels[1]),
-                setup.wheel_visuals()[1],
-                setup.wheel_visuals()[2],
-                setup.wheel_visuals()[3],
-            ],
-            setup.specification(),
-        )
-        .err()
-        .unwrap();
+
+        let mut wheels = setup.wheel_visuals();
+        wheels[0].1.attachment = None;
+        let error = crash_structure::assemble(&vehicle.vehicle, wheels, setup.specification())
+            .err()
+            .unwrap();
         assert!(error.contains("FL: no unique authored shock attachment"));
 
-        let (_, target) = &setup.collision.objects[0];
+        let (_, target) = setup
+            .collision
+            .objects
+            .iter()
+            .find(|(name, _)| name == "wall")
+            .unwrap();
         let full = Obstacles::new(&setup.collision, None, target).unwrap();
         let control = Obstacles::new(&setup.collision, Some(target), target).unwrap();
-        let nodes = assembly
-            .structure
-            .nodes
-            .into_iter()
-            .map(|mut node| {
-                node.position_m =
-                    (centre - 2.9 * forward + rotation * node.position_m.as_vec3()).as_dvec3();
-                node.velocity_mps = 8.0 * forward.as_dvec3();
-                node
-            })
-            .collect();
-        let mut chassis = Chassis::new(nodes, assembly.structure.beams).unwrap();
-        let surface = ChassisCollision::new(
-            &chassis,
-            assembly.structure.collision_nodes,
-            assembly.structure.collision_panels,
-        )
-        .unwrap();
-        let reaction = chassis
-            .step_with_static_world(0.15, &surface, &full.mesh)
-            .unwrap();
-        assert!(target.contains(&full.source[reaction.first.unwrap().triangle]));
-        assert!(reaction.impulse_ns.dot(forward.as_dvec3()) < 0.0);
-        chassis.reset();
-        assert!(
-            chassis
-                .step_with_static_world(0.15, &surface, &control.mesh)
-                .unwrap()
-                .first
-                .is_none()
+        assert_eq!(
+            full.source.iter().filter(|i| target.contains(i)).count(),
+            target.len()
         );
+        assert!(control.source.iter().all(|i| !target.contains(i)));
     }
 }

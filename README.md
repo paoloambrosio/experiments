@@ -11,8 +11,9 @@ cargo run -p vehicle_lab -- --chassis-crash-report
 cargo run -p vehicle_lab -- --static-contact-report
 cargo run -p vehicle_lab -- --coupled-chassis-report
 cargo run -p vehicle_drive -- --drive
-cargo run -p vehicle_drive -- --alignment-report
-cargo run -p vehicle_drive -- --crash-report --crash-target CMWall
+cargo run -p vehicle_lab -- --drive-report
+cargo run -p vehicle_lab -- --alignment-report
+cargo run -p vehicle_lab -- --crash-report
 cargo run -p vehicle_lab -- --grip-lab
 cargo run -p vehicle_lab -- --grip-report
 cargo run -p vehicle_lab -- --corner-lab
@@ -31,8 +32,9 @@ cargo run -p vehicle_lab -- --drop-report
 Regular lab builds use compiler optimisations. Add `--no-vsync` to run without the display's refresh cap where supported, or `--benchmark` to time preparation and a real-time replay in the lab window. [Performance controls and measurement](docs/user/README.md#performance)
 
 - `vehicle_physics` advances deformable tyres and chassis with a windowless solver. The core supports analytic surfaces, triangle roads, and swept contact with static obstacles. Its optional Avian integration provides a configurable four-wheel assembly, authored wheel alignment, suspension, steering, drive torque, and braking.
-- `vehicle_lab` runs whole-car handling replays, the loaded suspension corner, wheel drop, moving-belt rig, kerb strike, puncture comparison, and fixed-bead tread press with visual labs and headless reports.
-- `vehicle_assets` defines shared terrain geometry and vehicle assets with rigid-body and soft-body inputs. [Imported terrain and vehicle roadmap](docs/drive-roadmap.md)
-- `vehicle_drive` selects Rigs of Rods definitions from ZIP archives, drives the imported Accord on the facility collision mesh, and runs headless crashes using the authored structure and terrain obstacles. It also provides terrain and parked vehicle viewers. [Drive setup and controls](docs/user/README.md#drive-on-imported-terrain)
+- `vehicle_lab` runs visual experiments and headless reports for tyre loading, grip, handling, and impacts. Its imported-car reports use the bundled reference car and test track.
+- `vehicle_assets` defines shared terrain geometry and vehicle assets with rigid-body and soft-body inputs. It includes the project-authored Rigs of Rods car and test track.
+- `vehicle_drive` opens the bundled test track for manual driving and provides terrain and parked vehicle viewers. [Driving and inspection](docs/user/README.md#drive-on-the-reference-track)
+- `vehicle_scene` shares imported vehicle setup, collision geometry, spawn placement, and simulation stepping across the driving app and lab.
 
 See the [user guide](docs/user/README.md) for setup, controls, and library usage. The [devlog](docs/devlog/README.md) records the development steps and the vehicle physics roadmap.

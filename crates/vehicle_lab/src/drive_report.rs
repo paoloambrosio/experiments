@@ -1,11 +1,12 @@
 use bevy::prelude::*;
 use vehicle_physics::vehicle_assembly::WHEEL_NAMES;
 
-use crate::{
+use vehicle_scene::{
     drive::{DriveSession, DriveSetup, DriverInput, TICKS_PER_SECOND},
     placement,
 };
 
+const RAMP: &str = "ramp";
 const DRIVE: DriverInput = DriverInput {
     throttle: 1.0,
     brake: 0.0,
@@ -76,35 +77,25 @@ pub(crate) fn run(mut run: DriveSession) -> Result<(), String> {
         clearance
     );
 
-    let Some(approach) = run.setup.report_ramp().cloned() else {
-        return Ok(());
-    };
     let mut matching = run
         .setup
         .collision
         .objects
         .iter()
-        .filter(|(name, _)| *name == approach.object);
+        .filter(|(name, _)| *name == RAMP);
     let (_, faces) = matching
         .next()
-        .ok_or_else(|| format!("no collision placement named {}", approach.object))?;
+        .ok_or_else(|| format!("no collision placement named {}", RAMP))?;
     if matching.next().is_some() {
-        return Err(format!("ambiguous collision placement {}", approach.object));
+        return Err(format!("ambiguous collision placement {}", RAMP));
     }
     let ramp = run.setup.collision.triangles[faces.clone()].to_vec();
-    let rotation = Quat::from_rotation_y(approach.heading_deg.to_radians());
     let pose = run
         .setup
-        .pose(approach.start_m.into(), rotation)
-        .map_err(|error| format!("{} approach: {error}", approach.object))?;
+        .pose(Vec3::new(16.0, 3.0, 12.0), Quat::IDENTITY)
+        .map_err(|error| format!("{} approach: {error}", RAMP))?;
     run.reset(pose)?;
-    check_ramp(
-        &mut run,
-        &ramp,
-        pose.origin_m,
-        &approach.object,
-        approach.heading_deg,
-    )?;
+    check_ramp(&mut run, &ramp, pose.origin_m, &RAMP, 0.0_f32)?;
     println!("Imported drive checks passed.");
     Ok(())
 }

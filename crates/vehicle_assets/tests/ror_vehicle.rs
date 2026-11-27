@@ -356,162 +356,86 @@ fn reports_missing_beam_node_with_file_section_and_line() {
 }
 
 #[test]
-#[ignore = "requires the local accord23.zip archive"]
-fn local_accord_variants_keep_their_authored_geometry_and_textures() {
-    let archive =
-        std::env::var_os("ROR_ACCORD_ARCHIVE").expect("set ROR_ACCORD_ARCHIVE to accord23.zip");
-    let values = [
-        ("accord.truck", 0.310, 0.190, 0.205, 0.205),
-        ("accordb.truck", 0.315, 0.241, 0.245, 0.245),
-        ("accordc.truck", 0.320, 0.241, 0.225, 0.225),
-        ("accordd.truck", 0.315, 0.200, 0.225, 0.245),
-    ];
-    let approx = |observed: f32, expected: f32| {
-        assert!(
-            (observed - expected).abs() < 1e-4,
-            "expected {expected}, got {observed}"
-        )
-    };
-    for (entry, radius, rim, front_width, rear_width) in values {
-        let imported = load_vehicle(Path::new(&archive), entry).unwrap();
+fn reference_car_variants_keep_their_authored_geometry_and_textures() {
+    let zip = Path::new(env!("CARGO_MANIFEST_DIR")).join("reference/car.zip");
+    for (entry, radius, rim, front, rear) in [
+        ("car.truck", 0.31, 0.19, 0.205, 0.205),
+        ("car-wide.truck", 0.33, 0.20, 0.225, 0.245),
+    ] {
+        let imported = load_vehicle(&zip, entry).unwrap();
         let vehicle = &imported.vehicle;
-        let structure = vehicle
-            .physics
-            .structure
-            .as_ref()
-            .expect("authored structure");
-        assert!(structure.nodes.iter().all(|node| node.mass_kg.is_some()));
-        assert!(
-            structure.beams.iter().all(Option::is_some),
-            "{entry}: {:?}",
-            imported.warnings
+        let physics = &vehicle.physics;
+        let structure = physics.structure.as_ref().unwrap();
+        let chassis = physics.chassis.unwrap();
+        assert_eq!(
+            chassis.mass_kg,
+            8.0 * 78.0 + 4.0 * 14.0 + 4.0 * 12.0 + 2.0 * 10.0
         );
-        let [rf, lf, rr, lr] = vehicle.wheels.as_slice() else {
-            panic!("{entry} did not import four wheels");
+        let sprung_moment: Vec3 = structure
+            .nodes
+            .iter()
+            .zip(&vehicle.nodes)
+            .filter(|(node, _)| node.upright.is_none())
+            .map(|(node, point)| node.mass_kg.unwrap() * *point)
+            .sum();
+        assert!((sprung_moment / chassis.mass_kg).abs_diff_eq(chassis.centre_of_mass_m, 1e-6));
+        assert!(
+            chassis
+                .size_m
+                .abs_diff_eq(Vec3::new(1.36, 0.83, 3.82), 1e-5)
+        );
+        assert_eq!(structure.nodes.len(), 26);
+        assert_eq!(structure.collision_triangles.len(), 4);
+        assert_eq!(
+            structure.contact_nodes,
+            [NodeId(8), NodeId(9), NodeId(10), NodeId(11)]
+        );
+        let support = structure
+            .beams
+            .iter()
+            .map(|beam| beam.unwrap())
+            .find(|beam| matches!(beam.kind, StructuralBeamKind::CompressionSupport { .. }))
+            .unwrap();
+        assert_eq!(support.stiffness_n_per_m, 500000.0);
+        assert_eq!(support.damping_ns_per_m, 2500.0);
+        assert_eq!(support.deformation_threshold_n, 38000.0);
+        assert_eq!(support.breaking_threshold_n, 500000.0);
+        let [body] = structure.deformable_meshes.as_slice() else {
+            panic!("expected a single deformable body");
         };
-        for wheel in &vehicle.wheels {
-            assert!(wheel.axle.x > 0.99);
-            approx(wheel.outer_radius, radius);
-            approx(wheel.rim_radius.unwrap(), rim);
-        }
-        for wheel in [rf, lf] {
-            approx(wheel.width, front_width);
-        }
-        for wheel in [rr, lr] {
-            approx(wheel.width, rear_width);
-        }
-        if entry == "accord.truck" {
-            assert_eq!(vehicle.nodes.len(), 281);
-            assert_eq!(vehicle.edges.len(), 1767);
-            approx(lf.centre.x - rf.centre.x, 1.375);
-            approx(lr.centre.x - rr.centre.x, 1.395);
-            approx(lf.centre.z - lr.centre.z, 2.600);
-            let physics = &vehicle.physics;
-            let chassis = physics.chassis.expect("rigid chassis properties");
-            assert_eq!(structure.collision_triangles.len(), 269);
-            assert_eq!(structure.contact_nodes.len(), 85);
-            assert_eq!(structure.deformable_meshes.len(), 13);
-            assert_eq!(
-                structure
-                    .beams
-                    .iter()
-                    .flatten()
-                    .filter(|beam| matches!(
-                        beam.kind,
-                        StructuralBeamKind::CompressionSupport { .. },
-                    ))
-                    .count(),
-                54,
-            );
-            for (index, stiffness, damping, deform, breaking) in [
-                (0, 2_500_000.0, 800.0, 8000.0, 25_000_000.0),
-                (140, 3_000_000.0, 950.0, 40_000.0, 57_500.0),
-            ] {
-                let beam = structure.beams[index].unwrap();
-                approx(beam.stiffness_n_per_m, stiffness * 0.80);
-                approx(beam.damping_ns_per_m, damping * 0.13);
-                approx(beam.deformation_threshold_n, deform * 0.56);
-                approx(beam.breaking_threshold_n, breaking * 0.61);
-                approx(beam.plasticity, 0.1);
-            }
-            let mut sprung_mass = 0.0;
-            let mut sprung_moment = Vec3::ZERO;
-            let mut upright_masses = [0.0; 4];
-            for (node, &point) in structure.nodes.iter().zip(&vehicle.nodes) {
-                let mass = node.mass_kg.unwrap();
-                if let Some(wheel) = node.upright {
-                    upright_masses[wheel] += mass;
-                } else {
-                    sprung_mass += mass;
-                    sprung_moment += point * mass;
-                }
-            }
-            approx(sprung_mass, chassis.mass_kg);
-            assert!((sprung_moment / sprung_mass).abs_diff_eq(chassis.centre_of_mass_m, 1e-5));
-            assert!((sprung_mass - 866.36).abs() < 0.01);
-            let node_mass: f32 = structure
-                .nodes
-                .iter()
-                .map(|node| node.mass_kg.unwrap())
-                .sum();
-            let wheel_mass: f32 = physics
-                .wheels
-                .iter()
-                .map(|wheel| wheel.mass_kg.unwrap())
-                .sum();
-            approx(wheel_mass, 156.0);
-            let total_mass = chassis.mass_kg + upright_masses.into_iter().sum::<f32>() + wheel_mass;
-            assert!((total_mass - (node_mass + wheel_mass)).abs() < 0.002);
-            assert!(chassis.size_m.min_element() > 0.0);
-            assert!(chassis.centre_of_mass_m.x.abs() < 0.03);
-            assert_eq!(physics.wheels.len(), 4);
-            for (i, detail) in physics.wheels.iter().enumerate() {
-                approx(detail.mass_kg.unwrap(), 39.0);
-                let [spring, damper, rise, run] = if i < 2 {
-                    [38000.0, 2650.0, 0.38, 0.3575_f32.hypot(0.05)]
-                } else {
-                    [31000.0, 2050.0, 0.444, 0.27]
-                };
-                let ratio_sq = rise * rise / (rise * rise + run * run);
-                let suspension = detail.suspension.expect("wheel shock");
-                let attachment = detail.attachment.expect("authored shock nodes");
-                assert_eq!(structure.nodes[attachment.upper_node.0].upright, None);
-                for node in [
-                    attachment.lower_node,
-                    attachment.axle_nodes[0],
-                    attachment.axle_nodes[1],
-                ] {
-                    assert_eq!(structure.nodes[node.0].upright, Some(i));
-                }
-                assert!((suspension.stiffness_n_per_m - spring * ratio_sq).abs() < 0.01);
-                assert!((suspension.damping_ns_per_m - damper * ratio_sq).abs() < 0.01);
-                approx(suspension.initial_length_m, rise);
-                assert!(suspension.free_length_m > suspension.initial_length_m);
-                assert!(detail.upright_mass_kg.unwrap() > 18.0);
-                approx(detail.upright_mass_kg.unwrap(), upright_masses[i]);
-                approx(detail.brake_torque_nm.unwrap(), 1800.0);
-                approx(
-                    detail.drive_torque_nm.unwrap(),
-                    if i < 2 {
-                        170.0 * 4.066 * 3.181 / 2.0
-                    } else {
-                        0.0
-                    },
-                );
-            }
-        }
-        let rim_objects = vehicle.objects.iter().filter(|object| {
-            object.name.starts_with("accordwheel") && object.name.ends_with(".mesh")
-        });
-        for (rim, wheel) in rim_objects.zip(&vehicle.wheels) {
-            assert!((rim.rotation * Vec3::X).x * wheel.centre.x > 0.0);
-        }
-        assert!(
-            vehicle
-                .objects
-                .iter()
-                .any(|object| object.name == "accordsteer.mesh")
+        assert_eq!(body.placement_nodes, [NodeId(0), NodeId(1), NodeId(4)]);
+        assert_eq!(
+            body.influence_nodes,
+            (0..12).chain([24, 25]).map(NodeId).collect::<Vec<_>>()
         );
+        assert_eq!(vehicle.wheels.len(), 4);
+        for (i, (wheel, detail)) in vehicle.wheels.iter().zip(&physics.wheels).enumerate() {
+            let base = 12 + 3 * i;
+            let is_front = i == 1 || i == 3;
+            assert_eq!(wheel.outer_radius, radius);
+            assert_eq!(wheel.rim_radius, Some(rim));
+            assert_eq!(wheel.width, if is_front { front } else { rear });
+            assert!(wheel.axle.x > 0.99);
+            assert!(wheel.axle.y.abs() > 0.01);
+            assert_eq!(wheel.axle.z.abs() > 0.01, is_front);
+            let attachment = detail.attachment.unwrap();
+            assert_eq!(attachment.axle_nodes, [NodeId(base + 1), NodeId(base)]);
+            assert_eq!(attachment.upper_node, NodeId(base + 2));
+            assert_eq!(attachment.lower_node, NodeId(base));
+            assert_eq!(structure.nodes[base + 2].upright, None);
+            for id in attachment.axle_nodes {
+                assert_eq!(structure.nodes[id.0].upright, Some(i));
+            }
+            assert_eq!(detail.upright_mass_kg, Some(6.0));
+            assert_eq!(detail.mass_kg, Some(32.0));
+            assert_eq!(detail.brake_torque_nm, Some(550.0));
+            assert_eq!(detail.drive_torque_nm.unwrap() > 0.0, is_front);
+            let suspension = detail.suspension.unwrap();
+            assert_eq!(suspension.stiffness_n_per_m, 32000.0);
+            assert!(suspension.free_length_m > suspension.initial_length_m);
+            let rim_object = &vehicle.objects[detail.rim_object];
+            assert!((rim_object.rotation * Vec3::X).x * wheel.centre.x > 0.0);
+        }
         assert!(
             imported
                 .appearance
@@ -519,13 +443,6 @@ fn local_accord_variants_keep_their_authored_geometry_and_textures() {
                 .iter()
                 .any(|m| m.transparent && m.base_texture.is_some())
         );
-        assert!(
-            !imported
-                .warnings
-                .iter()
-                .any(|w| w.message.contains("uses fallback")),
-            "{:?}",
-            imported.warnings
-        );
+        assert!(imported.warnings.is_empty(), "{:?}", imported.warnings);
     }
 }

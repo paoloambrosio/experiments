@@ -4,6 +4,7 @@ members = [
     "crates/vehicle_lab",
     "crates/vehicle_assets",
     "crates/vehicle_drive",
+    "crates/vehicle_scene",
 ]
 resolver = "3"
 

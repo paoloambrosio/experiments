@@ -158,75 +158,43 @@ fn reports_truncated_geometry_with_the_referring_definition() {
 }
 
 #[test]
-#[ignore = "requires the local CM 0.5.zip archive"]
-fn local_facility_matches_its_authored_layout() {
-    let archive = std::env::var_os("ROR_CM_ARCHIVE").expect("set ROR_CM_ARCHIVE to CM 0.5.zip");
-    let imported = load_terrain(Path::new(&archive), "CM.terrn2").unwrap();
+fn reference_track_preserves_the_level_start_and_authored_collision_placements() {
+    let zip = Path::new(env!("CARGO_MANIFEST_DIR")).join("reference/track.zip");
+    let imported = load_terrain(&zip, "track.terrn2").unwrap();
     let terrain = &imported.terrain;
-    assert_eq!(terrain.name, "N-Labs Testing Facility 0.5");
-    assert_eq!(imported.start_position, Some(Vec3::new(256.0, 10.0, 256.0)));
+    assert_eq!(imported.start_position, Some(Vec3::new(34.0, 3.0, 10.0)));
     let grid = terrain.heightfield.as_ref().unwrap();
-    assert_eq!((grid.samples_x, grid.samples_z), (5, 5));
-    assert_eq!((grid.spacing_x, grid.spacing_z), (128.0, 128.0));
-    assert_eq!(terrain.objects.len(), 16);
-    assert_eq!(terrain.meshes.len(), 18);
-    assert_eq!(
-        terrain
-            .objects
-            .iter()
-            .filter(|instance| instance.collision_mesh.is_some())
-            .count(),
-        15
-    );
+    assert_eq!((grid.samples_x, grid.samples_z), (2, 2));
+    assert_eq!((grid.spacing_x, grid.spacing_z), (90.0, 130.0));
+    assert!(grid.heights.iter().all(|&h| h == 0.0));
 
-    let instance = |name| {
-        terrain
-            .objects
-            .iter()
-            .find(|instance| instance.name == name)
-            .unwrap()
+    let [ramp, wall, line] = terrain.objects.as_slice() else {
+        panic!("expected the ramp, wall, and start line");
     };
-    let floor = instance("CMFloor");
-    let visual = floor.visual_mesh.unwrap();
-    let collision = floor.collision_mesh.unwrap();
+    assert_eq!(ramp.name, "ramp");
+    assert_eq!(ramp.visual_mesh, ramp.collision_mesh);
+    assert!(ramp.collision_mesh.is_some());
+    assert_eq!(wall.name, "wall");
+    let visual = wall.visual_mesh.unwrap();
+    let collision = wall.collision_mesh.unwrap();
     assert_ne!(visual, collision);
-    let bounds = |id: vehicle_assets::MeshId| {
-        terrain.meshes[id.0]
-            .vertices
-            .iter()
-            .map(|&point| floor.transform_point(point))
-            .fold(
-                (Vec3::splat(f32::INFINITY), Vec3::splat(f32::NEG_INFINITY)),
-                |(min, max), point| (min.min(point), max.max(point)),
-            )
+    assert_eq!(
+        terrain.meshes[visual.0].vertices,
+        terrain.meshes[collision.0].vertices
+    );
+    assert!(
+        wall.transform_point(Vec3::new(4.0, 2.5, 0.0))
+            .abs_diff_eq(Vec3::new(65.9611, 2.5, 59.4433), 1e-4)
+    );
+    assert_eq!(line.name, "start-line");
+    assert!(line.collision_mesh.is_none());
+    let [section] = imported.appearance.sections[&visual].as_slice() else {
+        panic!("expected one wall material");
     };
-    let (visual_min, visual_max) = bounds(visual);
-    let (collision_min, collision_max) = bounds(collision);
-    assert!((visual_max.y - visual_min.y).abs() < 0.01);
-    assert!(
-        visual_min.abs_diff_eq(collision_min, 0.2),
-        "{visual_min:?} {collision_min:?}"
-    );
-    assert!(
-        visual_max.abs_diff_eq(collision_max, 0.2),
-        "{visual_max:?} {collision_max:?}"
-    );
-    for name in ["CMRamp1", "CMRamp2", "CMRamp3"] {
-        let ramp = instance(name);
-        assert_eq!(ramp.visual_mesh, ramp.collision_mesh);
-        assert!(ramp.visual_mesh.is_some());
-    }
-    assert!(instance("CMRuler").collision_mesh.is_none());
-    let material = imported.appearance.sections[&visual][0].material;
-    let base = imported.appearance.materials[material.0]
+    let texture = imported.appearance.materials[section.material.0]
         .base_texture
         .unwrap();
-    let base = &imported.appearance.textures[base.0];
-    assert_eq!((base.width, base.height), (512, 512));
-    assert!(
-        imported
-            .warnings
-            .iter()
-            .any(|warning| warning.message.contains("CMFloor_TEXT_AO.png"))
-    );
+    let texture = &imported.appearance.textures[texture.0];
+    assert_eq!((texture.width, texture.height), (2, 2));
+    assert!(imported.warnings.is_empty(), "{:?}", imported.warnings);
 }

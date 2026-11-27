@@ -1,7 +1,7 @@
 use std::{
     fmt,
     fs::File,
-    io::Read,
+    io::{Cursor, Read, Seek},
     path::{Path, PathBuf},
 };
 
@@ -43,27 +43,48 @@ pub(super) fn warn(warnings: &mut Vec<ImportWarning>, entry: &str, message: impl
     });
 }
 
+trait ArchiveReader: Read + Seek {}
+impl<T: Read + Seek> ArchiveReader for T {}
+
 pub(super) struct Archive {
     path: PathBuf,
-    zip: ZipArchive<File>,
+    zip: ZipArchive<Box<dyn ArchiveReader>>,
     names: Vec<String>,
 }
 
 impl Archive {
     pub(super) fn select(path: &Path, entry: &str) -> Import<(Self, String)> {
-        let archive = Self::open(path).map_err(|error| ImportError {
-            archive: path.to_owned(),
-            entry: entry.to_owned(),
-            detail: error.to_string(),
-        })?;
+        Self::select_reader(path, entry, || Ok(File::open(path)?))
+    }
+
+    pub(super) fn select_embedded(
+        path: &Path,
+        bytes: &'static [u8],
+        entry: &str,
+    ) -> Import<(Self, String)> {
+        Self::select_reader(path, entry, || Ok(Cursor::new(bytes)))
+    }
+
+    fn select_reader<R: ArchiveReader + 'static>(
+        path: &Path,
+        entry: &str,
+        reader: impl FnOnce() -> Result<R, ZipError>,
+    ) -> Import<(Self, String)> {
+        let archive = reader()
+            .and_then(|reader| Self::open(path, Box::new(reader)))
+            .map_err(|error| ImportError {
+                archive: path.to_owned(),
+                entry: entry.to_owned(),
+                detail: error.to_string(),
+            })?;
         let resolved = archive
             .resolve("", entry)
             .map_err(|error| archive.error(entry, error))?;
         Ok((archive, resolved))
     }
 
-    fn open(path: &Path) -> Result<Self, ZipError> {
-        let zip = ZipArchive::new(File::open(path)?)?;
+    fn open(path: &Path, reader: Box<dyn ArchiveReader>) -> Result<Self, ZipError> {
+        let zip = ZipArchive::new(reader)?;
         let names = zip
             .file_names()
             .map(|entry| entry.map(|name| name.into_owned()))

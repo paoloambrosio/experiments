@@ -16,16 +16,16 @@ The hub shares the chassis axes and slides along chassis-local −Y. The revolut
 
 For each successful triangle-road substep, `TriangleReaction::lateral_load_centre_m` weights each tread node's offset along rim-local +X by its scalar normal force. An unloaded tread returns `None` for this measurement.
 
-The base Accord was measured on the level start surface in N-Labs Testing Facility 0.5. Positive camber leans outward and positive toe points inward. Load-centre offsets are positive toward vehicle left. Settled offsets use the final second of a five-second settle. Rolling forces are the mean absolute lateral friction reaction per wheel with centred steering at 2–4 m/s.
+These measurements use the bundled reference car on the level straight of the test track. Positive camber leans outward and positive toe points inward. Load-centre offsets are positive toward vehicle left. Settled offsets use the final second of a five-second settle. Rolling forces are the mean absolute lateral friction reaction per wheel with centred steering at 2–4 m/s.
 
 | Wheel | Authored camber | Authored toe | Load centre, upright → authored | Lateral force, upright → authored |
 | --- | ---: | ---: | ---: | ---: |
-| FL | −0.588° | 1.175° | +0.00 → +0.42 mm | 0.13 → 45.35 N |
-| FR | −0.588° | 1.175° | +0.00 → −0.42 mm | 0.15 → 37.87 N |
-| RL | 3.521° | 0.000° | +0.01 → +1.41 mm | 1.97 → 159.56 N |
-| RR | 3.521° | 0.000° | +0.01 → −1.49 mm | 1.97 → 158.77 N |
+| FL | 2.290° | 1.146° | 0.00 → −1.20 mm | 0.03 → 31.68 N |
+| FR | 2.290° | 1.146° | 0.00 → +1.20 mm | 0.03 → 32.56 N |
+| RL | 2.291° | 0.000° | 0.00 → −1.44 mm | 0.19 → 65.54 N |
+| RR | 2.291° | 0.000° | 0.00 → +1.44 mm | 0.19 → 65.50 N |
 
-The rear load centres shifted outward by about 1.5 mm. Both rear tyres developed lateral force while rolling with authored camber and zero rear toe. The paired simulations include the response of the whole car. The isolated checks exercise camber and toe independently on a level triangle road.
+The rear load centres shifted inward by 1.44 mm on both tyres. With authored camber and zero rear toe, each rear tyre developed about 65.5 N of mean absolute lateral force. The isolated checks exercise camber and toe independently on a level triangle road.
 
 ## Reproduce the checks
 
@@ -33,8 +33,9 @@ The rear load centres shifted outward by about 1.5 mm. Both rear tyres developed
 cargo test -p vehicle_physics --features avian wheel_alignment
 cargo test -p vehicle_physics --features avian aligned_wheel_steers_and_spins_on_a_vertical_slider
 cargo test -p vehicle_physics camber_shifts_settled_load_and_toe_causes_lateral_scrub
+cargo run -p vehicle_lab -- --alignment-report
 ```
 
 The joint test uses a rotated chassis and checks the steered hinge axis, positive drive spin, brake response, return to rest alignment, and vertical travel. The tyre test reverses camber to reverse the load offset, then reverses toe to reverse the signed lateral force while the rim translates straight ahead.
 
-The imported Accord also passed the existing settle, acceleration, steering, brake, and ramp checks with authored alignment. [Imported alignment comparison](../../user/README.md#compare-wheel-alignment)
+See the [reference car and track reports](../../user/README.md#run-reports-on-the-reference-car-and-track) for the other whole-car checks.

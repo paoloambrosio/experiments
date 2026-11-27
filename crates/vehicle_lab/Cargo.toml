@@ -7,4 +7,9 @@ publish = false
 [dependencies]
 avian3d.workspace = true
 bevy = { workspace = true, features = ["3d", "ui"] }
+vehicle_assets = { path = "../vehicle_assets" }
 vehicle_physics = { path = "../vehicle_physics", features = ["avian"] }
+vehicle_scene = { path = "../vehicle_scene" }
+
+[dev-dependencies]
+tempfile.workspace = true

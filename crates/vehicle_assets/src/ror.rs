@@ -4,6 +4,7 @@ mod archive;
 mod dds;
 mod materials;
 mod ogre;
+pub mod reference;
 mod terrain;
 mod vehicle;
 

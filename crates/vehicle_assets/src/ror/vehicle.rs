@@ -11,7 +11,7 @@ use crate::{
 };
 
 use super::{
-    archive::{Archive, ImportError, ImportWarning, warn},
+    archive::{Archive, Import, ImportError, ImportWarning, warn},
     materials::Materials,
     ogre::{Mesh, MeshCache},
 };
@@ -56,7 +56,20 @@ impl<'a> Record<'a> {
 
 /// Loads the authored rest pose of a RoR vehicle from its ZIP archive.
 pub fn load_vehicle(path: &Path, entry: &str) -> Result<VehicleImport, ImportError> {
-    let (mut archive, entry) = Archive::select(path, entry)?;
+    let (archive, entry) = Archive::select(path, entry)?;
+    import(archive, entry)
+}
+
+pub(super) fn load_embedded(
+    path: &Path,
+    bytes: &'static [u8],
+    entry: &str,
+) -> Import<VehicleImport> {
+    let (archive, entry) = Archive::select_embedded(path, bytes, entry)?;
+    import(archive, entry)
+}
+
+fn import(mut archive: Archive, entry: String) -> Import<VehicleImport> {
     let text = archive.text(&entry)?;
     let mut warnings = Vec::new();
     let (title, records) = parse_truck(&text).map_err(|error| archive.error(&entry, error))?;

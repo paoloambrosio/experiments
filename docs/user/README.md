@@ -1,102 +1,45 @@
 # Vehicle physics user guide
 
-## Select a terrain and vehicle
-
-Copy the workspace-root `config.example.toml` to `config.toml` and set the two ZIP paths under `[assets]`. TOML single-quoted paths can contain Windows backslashes directly. Git ignores the local `config.toml`.
-
-Run from the workspace root.
-
-```sh
-cargo run -p vehicle_drive
-```
-
-A ZIP with a single matching definition selects it automatically. In a terminal, use the numbered menu when a ZIP has multiple definitions. For a repeatable selection, add `vehicle_entry = 'accord.truck'` under `[assets]`. Use `terrain_entry` the same way. Copy the full entry name from the menu, including any directories and the original spelling. An unattended run with multiple candidates lists them and asks for an explicit entry in the config.
-
-Use `--config <path>` to select a different TOML file. Relative ZIP paths are interpreted from the directory containing that file. On success the command prints each ZIP path and the selected definition. [Drive roadmap](../drive-roadmap.md)
-
-## View an imported terrain
-
-Run from the workspace root.
-
-```sh
-cargo run -p vehicle_drive -- --view-terrain
-```
-
-The viewer uses the terrain ZIP and optional `terrain_entry` from the local config. It also accepts `--config <path>`. You can open terrain with just `[assets].terrain` configured.
-
-| Control | Action |
-| --- | --- |
-| **WASD** | Fly forward, left, backward, or right |
-| **Q / E** | Descend or rise |
-| **Right mouse button + drag** | Look around |
-| **Home** | Restore the initial overview |
-| **C** | Toggle collision triangle edges |
-
-The startup report lists the heightfield size, placements, collision-bearing objects, and skipped features. In N-Labs Testing Facility 0.5, the floor uses its DDS base texture. The report identifies the skipped secondary shading layer. [Drive roadmap](../drive-roadmap.md)
-
-## Inspect an imported vehicle
-
-Run from the workspace root.
-
-```sh
-cargo run -p vehicle_drive -- --view-vehicle
-```
-
-Set both archive paths under `[assets]`. Use `terrain_entry` and `vehicle_entry` to select entries directly, or choose from the terminal menus. The viewer also accepts `--config <path>`.
-
-The car is parked facing +Z at the terrain's authored start. The viewer uses the heightfield centre if the terrain has no start position. It moves the whole car vertically to clear the imported surface beneath the tyres. Differences in front and rear ride height remain visible in this static rest pose.
-
-| Control | Action |
-| --- | --- |
-| **Right mouse button + drag** | Orbit the vehicle |
-| **Mouse wheel** | Zoom |
-| **Home** | Restore the front three-quarter view |
-| **B** | Switch between textured and structural views |
-| **C** | Toggle terrain collision edges |
-
-The structural view shows nodes, beams, wheel outlines, axle directions, and a forward arrow. The startup report lists the selected truck entry, authored wheel geometry, and skipped features. Glass retains its diffuse alpha. Dashboard instruments use a flat material in the parked preview. [Drive roadmap](../drive-roadmap.md)
-
-## Drive on imported terrain
-
-Point `[assets]` in your local `config.toml` at the terrain and vehicle ZIPs. For the reference drive, use `CM 0.5.zip` with `terrain_entry = "CM.terrn2"` and `accord23.zip` with `vehicle_entry = "accord.truck"`.
+## Drive on the reference track
 
 ```sh
 cargo run -p vehicle_drive -- --drive
-cargo run -p vehicle_drive -- --drive-report
-cargo run -p vehicle_drive -- --alignment-report
 ```
 
-The drive and reports use the same imported vehicle and collision road. The simulated wheels use the axle directions authored in the truck file. Steering turns each front wheel from its authored camber and toe. `--drive` opens the chase view with a speed readout. `--drive-report` checks settling, acceleration, steering, and braking without a window. To also cross a ramp, enable the optional `[drive.report_ramp]` table in the example config. The example approaches CMRamp1 from X = 265.1 m and Z = 192 m, facing +Z. The Y value bounds the search for the road beneath the wheels.
+The app opens the project-authored car and test track bundled with the executable. Run without flags to start driving. The chase view shows speed and follows the car as its four deformable tyres roll over the track. In the starting chase view, the ramp is to the right and the wall is farther ahead to the left.
 
 | Key | Action |
 | --- | --- |
 | **W** | Apply forward throttle |
 | **S** | Apply service brake |
 | **A / D** | Steer left / right |
-| **R** | Return to the terrain start |
-| **C** | Toggle the terrain collision overlay |
+| **R** | Reset the car and chase camera to the start |
+| **C** | Toggle terrain collision edges |
 
-The RoR importer derives chassis mass and centre of mass from the authored node loads and supported beams, with the axle nodes assigned to the uprights. Body mesh bounds set the chassis inertia box. A single supported shock near each wheel supplies the vertical spring, damper, and travel through a linear projection at the authored pose. The chassis is collider-free. Only the tyres contact the road.
+The drive uses authored camber and toe, fixed first-gear torque, and an imported suspension at each wheel. Only the tyres contact the track in this interactive mode. Startup diagnostics list the derived mass, suspension, tyre, and solver settings.
 
-The current drive uses fixed first-gear torque split across the driven wheels and each eligible wheel's authored service-brake limit. It uses the reference tyre material, 150 kPa gauge pressure, a 22% tyre share of wheel mass, 28° equivalent front steer, and uniform road contact settings. The report prints the effective values and their sources. A vehicle with incomplete physics properties can still be opened with `--view-vehicle`. [Drive roadmap](../drive-roadmap.md)
-
-### Compare wheel alignment
-
-`--alignment-report` repeats the level-road drive with upright and authored alignment. It measures the lateral centre of normal load across each tread during the last second of settling, then reports mean absolute lateral friction force per wheel from 2 to 4 m/s with the steering centred. Offset is positive toward vehicle left. Positive camber leans the wheel top outward and positive toe points the wheel inward. The comparison uses the terrain start and needs a level stretch of road ahead. [Core 014 results](../devlog/014-authored-wheel-alignment/README.md)
-
-### Crash the imported chassis
-
-Use the same asset configuration as the drive. The target is the name of a placed object with a collision mesh. For the N-Labs terrain, run the CMWall strike from the workspace root.
+## Inspect the track or parked car
 
 ```sh
-cargo run -p vehicle_drive -- --crash-report --crash-target CMWall
+cargo run -p vehicle_drive -- --view-terrain
+cargo run -p vehicle_drive -- --view-vehicle
 ```
 
-The headless report checks all four wheel loads, then launches the vehicle at 8 m/s toward a face of the selected object. A control removes the object from both obstacle collision and tyre support. The report compares damage at the same time while the control is still over terrain, then follows the strike through unloading and repeats it after reset. It prints the source of the first chassis contact, the wall impulse, nose shortening, and permanent changes in beam length.
+In the terrain viewer, move with **WASD** and **Q / E**. Hold the right mouse button and drag to look around. In the parked-car viewer, hold the right mouse button and drag to orbit, scroll to zoom, and press **B** to switch between textured and structural views. The structural view shows nodes, beams, wheel outlines, and axle directions. In either viewer, **Home** restores the camera and **C** toggles the collision overlay.
 
-The importer supplies the axle and shock attachments. Beam stiffness, damping, and deformation-force thresholds come from the asset. The crash uses a yield-only approximation of the authored plasticity. Wheel uprights and projected suspension represent their associated structural links. The report counts those links and identifies unsupported records separately.
+## Run reports on the reference car and track
 
-With the reference archives, the Accord hits CMWall at 7.53 m/s. At the matched 0.633 s sample, the nose gauge reads 203.64 mm of shortening against 1.70 mm in the control. The two-second strike retains an 89.44 mm change in the most affected beam. These figures describe the configured yield-only simulation.
+```sh
+cargo run -p vehicle_lab -- --drive-report
+cargo run -p vehicle_lab -- --alignment-report
+cargo run -p vehicle_lab -- --crash-report
+```
+
+The drive report checks four-wheel support, acceleration, steering, braking, rim clearance, and loaded contact on the ramp. The alignment report compares upright and authored wheel alignment on the same level straight. It measures tread load centres in the final second of settling and mean absolute lateral force per wheel while accelerating from 2 to 4 m/s. Positive load-centre offset points left, positive camber leans the wheel top outward, and positive toe points the wheel inward.
+
+The crash report launches the deformable car toward the bundled wall at 8 m/s. The control removes the wall from chassis collision and tyre support. The report compares matched runs, measures chassis contact and nose shortening, checks for at least 1 mm of permanent beam-length change beyond the control, and repeats the strike after reset. With the current fixture, the chassis hits the wall at 7.52 m/s and retains 13.42 mm of beam-length change beyond the control.
+
+See the [reference asset source and regeneration command](../../crates/vehicle_assets/reference/README.md).
 
 ## Crash test a deformable chassis
 
@@ -122,7 +65,7 @@ cargo run -p vehicle_lab -- --coupled-chassis-report
 
 ## Use imported asset geometry
 
-Use the `vehicle_assets` crate to represent terrain meshes, height samples, and vehicle and wheel geometry in memory. `VehicleAsset::physics` exposes optional rigid-body and structural inputs in SI units. Call `TerrainAsset::validate()` or `VehicleAsset::validate()` before consuming these values. Validation errors identify the field and any relevant element indices. Positions and dimensions use metres, with +Y up, +Z forward, and +X to vehicle left. [Imported terrain and vehicle roadmap](../drive-roadmap.md)
+Use the `vehicle_assets` crate to represent terrain meshes, height samples, and vehicle and wheel geometry in memory. `VehicleAsset::physics` exposes optional rigid-body and structural inputs in SI units. Call `TerrainAsset::validate()` or `VehicleAsset::validate()` before consuming these values. Validation errors identify the field and any relevant element indices. Positions and dimensions use metres, with +Y up, +Z forward, and +X to vehicle left.
 
 The Rigs of Rods importer exposes node masses and upright assignments, ordinary and compression-support beam properties, contact panels and nodes, and the placement and influence nodes for each deformable mesh instance. Chassis and upright masses partition the authored node mass. The rim and tyre mass is supplied separately for each wheel. The structural data is available through `VehicleAsset::physics.structure`. The drive app currently uses the rigid chassis and soft-body tyres.
 

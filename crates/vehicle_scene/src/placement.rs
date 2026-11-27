@@ -4,7 +4,7 @@ use std::ops::Range;
 use vehicle_assets::{Heightfield, TerrainAsset, TriangleMesh, VehicleAsset, ror::TerrainImport};
 
 /// Positions a vehicle root at a terrain start with its authored rest pose intact.
-pub(crate) fn park(terrain: &TerrainImport, vehicle: &VehicleAsset) -> Result<Vec3, String> {
+pub fn park(terrain: &TerrainImport, vehicle: &VehicleAsset) -> Result<Vec3, String> {
     let hint = start_hint(terrain)?;
     let geometry = collision_geometry(&terrain.terrain);
 
@@ -36,7 +36,7 @@ pub(crate) fn park(terrain: &TerrainImport, vehicle: &VehicleAsset) -> Result<Ve
     Ok(Vec3::new(origin.x, lift, origin.z))
 }
 
-pub(crate) fn start_hint(terrain: &TerrainImport) -> Result<Vec3, String> {
+pub fn start_hint(terrain: &TerrainImport) -> Result<Vec3, String> {
     Ok(if let Some(hint) = terrain.start_position {
         hint
     } else {
@@ -54,12 +54,12 @@ pub(crate) fn start_hint(terrain: &TerrainImport) -> Result<Vec3, String> {
     })
 }
 
-pub(crate) struct CollisionGeometry {
+pub struct CollisionGeometry {
     pub triangles: Vec<[Vec3; 3]>,
     pub objects: Vec<(String, Range<usize>)>,
 }
 
-pub(crate) fn collision_geometry(terrain: &TerrainAsset) -> CollisionGeometry {
+pub fn collision_geometry(terrain: &TerrainAsset) -> CollisionGeometry {
     let ground = terrain.heightfield.as_ref().map(triangulate);
     let mut triangles = Vec::new();
     if let Some(mesh) = &ground {
@@ -84,7 +84,7 @@ pub(crate) fn collision_geometry(terrain: &TerrainAsset) -> CollisionGeometry {
     CollisionGeometry { triangles, objects }
 }
 
-pub(crate) fn support_below(triangles: &[[Vec3; 3]], point: Vec3) -> Option<f32> {
+pub fn support_below(triangles: &[[Vec3; 3]], point: Vec3) -> Option<f32> {
     triangles
         .iter()
         .filter_map(|triangle| height_at(*triangle, point))
@@ -92,7 +92,7 @@ pub(crate) fn support_below(triangles: &[[Vec3; 3]], point: Vec3) -> Option<f32>
         .max_by(f32::total_cmp)
 }
 
-pub(crate) fn height_at([a, b, c]: [Vec3; 3], point: Vec3) -> Option<f32> {
+pub fn height_at([a, b, c]: [Vec3; 3], point: Vec3) -> Option<f32> {
     let cross_xz = |u: Vec3, v: Vec3| u.x * v.z - u.z * v.x;
     let (ab, ac, ap) = (b - a, c - a, point - a);
     let det = cross_xz(ab, ac);
@@ -105,7 +105,7 @@ pub(crate) fn height_at([a, b, c]: [Vec3; 3], point: Vec3) -> Option<f32> {
     (u >= -epsilon && v >= -epsilon && u + v <= 1.0 + epsilon).then_some(a.y + u * ab.y + v * ac.y)
 }
 
-pub(crate) fn triangulate(grid: &Heightfield) -> TriangleMesh {
+pub fn triangulate(grid: &Heightfield) -> TriangleMesh {
     let vertices = (0..grid.samples_z)
         .flat_map(|z| {
             (0..grid.samples_x)

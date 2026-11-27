@@ -18,12 +18,9 @@ use vehicle_physics::{
     },
 };
 
-use crate::{
-    config::RampApproach,
-    placement::{self, CollisionGeometry},
-};
+use crate::placement::{self, CollisionGeometry};
 
-pub(crate) const TICKS_PER_SECOND: u32 = 60;
+pub const TICKS_PER_SECOND: u32 = 60;
 const SUBSTEPS: u32 = 64;
 const SPAWN_CLEARANCE_M: f32 = 0.010;
 const TYRE_MASS_FRACTION: f64 = 0.22;
@@ -38,7 +35,7 @@ const ROAD_TRANSITION_SPEED_MPS: f64 = 0.1;
 const ROAD_CONTACT_DEPTH_M: f64 = 0.05;
 
 #[derive(Clone, Copy)]
-pub(crate) enum AlignmentMode {
+pub enum AlignmentMode {
     Authored,
     Upright,
 }
@@ -53,8 +50,7 @@ struct WheelInput {
     brake_nm: f32,
 }
 
-pub(crate) struct DriveSetup {
-    report_ramp: Option<RampApproach>,
+pub struct DriveSetup {
     specification: VehicleSpec,
     wheels: [WheelInput; 4],
     prepared: PreparedVehicle,
@@ -64,8 +60,7 @@ pub(crate) struct DriveSetup {
 }
 
 impl DriveSetup {
-    pub(crate) fn new(
-        report_ramp: Option<RampApproach>,
+    pub fn new(
         terrain: &TerrainImport,
         vehicle: &VehicleImport,
         alignment: AlignmentMode,
@@ -109,7 +104,6 @@ impl DriveSetup {
         )
         .map_err(|error| format!("{} terrain start: {error}", terrain.terrain.name))?;
         Ok(Self {
-            report_ramp,
             specification,
             wheels,
             prepared,
@@ -119,7 +113,7 @@ impl DriveSetup {
         })
     }
 
-    pub(crate) fn pose(&self, hint: Vec3, rotation: Quat) -> Result<VehiclePose, String> {
+    pub fn pose(&self, hint: Vec3, rotation: Quat) -> Result<VehiclePose, String> {
         spawn_pose(
             &self.collision.triangles,
             hint,
@@ -129,23 +123,23 @@ impl DriveSetup {
         )
     }
 
-    pub(crate) fn centre_of_mass(&self) -> Vec3 {
+    pub fn centre_of_mass(&self) -> Vec3 {
         self.specification.chassis.centre_of_mass_m
     }
 
-    pub(crate) fn specification(&self) -> VehicleSpec {
+    pub fn specification(&self) -> VehicleSpec {
         self.specification
     }
 
-    pub(crate) fn road(&self) -> &VehicleRoad {
+    pub fn road(&self) -> &VehicleRoad {
         &self.road
     }
 
-    pub(crate) fn wheel_visuals(&self) -> [(usize, WheelPhysics); 4] {
+    pub fn wheel_visuals(&self) -> [(usize, WheelPhysics); 4] {
         self.wheels.map(|wheel| (wheel.geometry_index, wheel.data))
     }
 
-    pub(crate) fn weight_n(&self) -> f64 {
+    pub fn weight_n(&self) -> f64 {
         let total = self
             .wheels
             .iter()
@@ -158,15 +152,11 @@ impl DriveSetup {
         (f64::from(self.specification.chassis.mass_kg) + total) * G
     }
 
-    pub(crate) fn alignments(&self) -> [WheelAlignment; 4] {
+    pub fn alignments(&self) -> [WheelAlignment; 4] {
         self.prepared.wheel_alignments()
     }
 
-    pub(crate) fn report_ramp(&self) -> Option<&RampApproach> {
-        self.report_ramp.as_ref()
-    }
-
-    pub(crate) fn print_setup(&self, entry: &str, terrain_entry: &str) {
+    pub fn print_setup(&self, entry: &str, terrain_entry: &str) {
         let geometry = self.prepared.geometry();
         let radii = self.prepared.unloaded_radii_m();
         println!("Drive sources: {} and {}", entry, terrain_entry);
@@ -340,9 +330,7 @@ fn build_wheel(
     })
 }
 
-pub(crate) fn road_from_triangles(
-    faces: impl Iterator<Item = [Vec3; 3]>,
-) -> Result<VehicleRoad, String> {
+pub fn road_from_triangles(faces: impl Iterator<Item = [Vec3; 3]>) -> Result<VehicleRoad, String> {
     let mut vertices = Vec::new();
     let mut triangles = Vec::new();
     for face in faces {
@@ -360,7 +348,7 @@ pub(crate) fn road_from_triangles(
     Ok(VehicleRoad::Triangles { road, contact })
 }
 
-pub(crate) fn spawn_pose(
+pub fn spawn_pose(
     triangles: &[[Vec3; 3]],
     hint: Vec3,
     rotation: Quat,
@@ -392,20 +380,21 @@ pub(crate) fn spawn_pose(
 }
 
 #[derive(Clone, Copy, Default)]
-pub(crate) struct DriverInput {
+/// Normalized driver commands. Throttle and brake span 0 to 1, and steer spans −1 to 1.
+pub struct DriverInput {
     pub throttle: f32,
     pub brake: f32,
     pub steer: f32,
 }
 
-pub(crate) struct DriveSession {
+pub struct DriveSession {
     pub setup: DriveSetup,
     app: App,
     car: VehicleAssembly,
     commands: DriverInput,
 }
 
-pub(crate) fn physics_app(substeps: u32, configure: impl FnOnce(&mut App)) -> App {
+pub fn physics_app(substeps: u32, configure: impl FnOnce(&mut App)) -> App {
     let mut app = App::new();
     app.add_plugins((
         MinimalPlugins,
@@ -428,7 +417,7 @@ pub(crate) fn physics_app(substeps: u32, configure: impl FnOnce(&mut App)) -> Ap
 }
 
 impl DriveSession {
-    pub(crate) fn new(setup: DriveSetup) -> Result<Self, String> {
+    pub fn new(setup: DriveSetup) -> Result<Self, String> {
         let mut app = physics_app(SUBSTEPS, |_| {});
         let car = setup
             .prepared
@@ -442,7 +431,7 @@ impl DriveSession {
         })
     }
 
-    pub(crate) fn reset(&mut self, pose: VehiclePose) -> Result<(), String> {
+    pub fn reset(&mut self, pose: VehiclePose) -> Result<(), String> {
         let world = self.app.world_mut();
         let replacement = self
             .setup
@@ -454,7 +443,7 @@ impl DriveSession {
         Ok(())
     }
 
-    pub(crate) fn step(&mut self, input: DriverInput) -> Result<(), String> {
+    pub fn step(&mut self, input: DriverInput) -> Result<(), String> {
         let approach = |old: f32, target: f32, per_second: f32| {
             let step = per_second / TICKS_PER_SECOND as f32;
             old + (target - old).clamp(-step, step)
@@ -497,7 +486,7 @@ impl DriveSession {
         Ok(())
     }
 
-    pub(crate) fn chassis(&self) -> (Vec3, Quat, Vec3) {
+    pub fn chassis(&self) -> (Vec3, Quat, Vec3) {
         let world = self.app.world();
         let id = self.car.chassis;
         (
@@ -507,7 +496,7 @@ impl DriveSession {
         )
     }
 
-    pub(crate) fn rims(&self) -> [RimMotion; 4] {
+    pub fn rims(&self) -> [RimMotion; 4] {
         self.car.wheels.map(|wheel| {
             self.app
                 .world()
@@ -518,7 +507,7 @@ impl DriveSession {
         })
     }
 
-    pub(crate) fn reactions(&self) -> [TriangleReaction; 4] {
+    pub fn reactions(&self) -> [TriangleReaction; 4] {
         self.car.wheels.map(|wheel| {
             self.app
                 .world()
@@ -529,12 +518,12 @@ impl DriveSession {
         })
     }
 
-    pub(crate) fn support(&self) -> [f64; 4] {
+    pub fn support(&self) -> [f64; 4] {
         self.reactions()
             .map(|reaction| reaction.normal_force.y + reaction.tangential_force.y)
     }
 
-    pub(crate) fn clearance_m(&self) -> f32 {
+    pub fn clearance_m(&self) -> f32 {
         self.rims()
             .into_iter()
             .zip(self.specification_wheels())
@@ -556,14 +545,14 @@ impl DriveSession {
 }
 
 #[cfg(test)]
-pub(crate) mod tests {
+mod tests {
     use super::*;
     use vehicle_assets::{
         ChassisPhysics, Heightfield, MeshAppearance, MeshId, MeshInstance, TerrainAsset,
         TriangleMesh, VehicleAsset, VehiclePhysics, VerticalSuspension,
     };
 
-    pub(crate) fn fixture_vehicle() -> VehicleImport {
+    fn fixture_vehicle() -> VehicleImport {
         // Deliberately shuffle the two axles and the left/right order.
         let points = [(-0.8, -1.4), (0.7, 1.25), (0.8, -1.4), (-0.7, 1.25)];
         let wheels = points
@@ -625,7 +614,7 @@ pub(crate) mod tests {
         }
     }
 
-    pub(crate) fn fixture_terrain() -> TerrainImport {
+    fn fixture_terrain() -> TerrainImport {
         let square = TriangleMesh {
             vertices: vec![
                 -Vec3::X - Vec3::Z,
@@ -669,7 +658,7 @@ pub(crate) mod tests {
     fn shuffled_wheels_share_transformed_road_and_reset_cleanly() {
         let mut vehicle = fixture_vehicle();
         let terrain = fixture_terrain();
-        let setup = DriveSetup::new(None, &terrain, &vehicle, AlignmentMode::Authored).unwrap();
+        let setup = DriveSetup::new(&terrain, &vehicle, AlignmentMode::Authored).unwrap();
         assert_eq!(setup.wheel_visuals().map(|(i, _)| i), [1, 3, 2, 0]);
         for (i, spec) in setup
             .specification

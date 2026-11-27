@@ -466,6 +466,16 @@ fn apply_controls(
 mod tests {
     use super::*;
 
+    #[test]
+    fn suspension_orientation_error_is_independent_of_quaternion_sign() {
+        let upright = DQuat::from_rotation_y(0.14);
+        let delta_rad = DVec3::Z * 0.001;
+        let mount = DQuat::from_scaled_axis(delta_rad) * upright;
+        for (mount, upright) in [(mount, upright), (-mount, upright), (mount, -upright)] {
+            assert!(suspension_orientation_error(mount, upright).abs_diff_eq(delta_rad, 1e-12));
+        }
+    }
+
     fn triangle() -> Vec<ChassisNode> {
         [DVec3::NEG_X, DVec3::X, DVec3::Y]
             .map(|position_m| ChassisNode {
@@ -558,6 +568,15 @@ mod tests {
         assert!(matches!(result, Err(DeformableError::InvalidMount(2))));
         assert_eq!(chassis.nodes(), initial);
     }
+}
+
+fn suspension_orientation_error(mount: DQuat, upright: DQuat) -> DVec3 {
+    let mut relative = mount * upright.conjugate();
+    // Pick the shortest correction even if the mount frame changes quaternion sign.
+    if relative.w < 0.0 {
+        relative = -relative;
+    }
+    relative.to_scaled_axis()
 }
 
 fn couple(
@@ -859,7 +878,7 @@ impl WheelTrial {
             DVec3::ZERO,
         );
         let orientation_error =
-            (patch.rotation * self.previous.rotation.conjugate()).to_scaled_axis();
+            suspension_orientation_error(patch.rotation, self.previous.rotation);
         for local_axis in [DVec3::X, DVec3::Y, DVec3::Z] {
             let axis = patch.rotation * local_axis;
             let relative_spin = self.hub.angular_velocity.as_dvec3() + self.dw

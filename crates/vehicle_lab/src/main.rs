@@ -1,11 +1,14 @@
 mod assembly_report;
 mod chassis_crash_report;
+mod crash_report;
+mod crash_structure;
 mod corner_experiment;
 mod corner_lab;
 mod coupled_chassis_report;
 mod drop_experiment;
 mod drop_lab;
 mod drop_report;
+mod drive_report;
 mod elastic_experiment;
 mod grip_experiment;
 mod grip_lab;
@@ -17,6 +20,7 @@ mod impact_experiment;
 mod impact_lab;
 mod impact_report;
 mod inflation_report;
+mod imported_reports;
 mod loaded_tyre;
 mod performance;
 mod puncture_experiment;
@@ -165,7 +169,13 @@ fn main() -> AppExit {
     let mut handling_lab = false;
     let mut window = WindowOptions::default();
     for argument in std::env::args_os().skip(1) {
-        let result = if argument == "--assembly-report" {
+        let result = if argument == "--drive-report" {
+            imported_reports::drive()
+        } else if argument == "--alignment-report" {
+            imported_reports::alignment()
+        } else if argument == "--crash-report" {
+            imported_reports::crash()
+        } else if argument == "--assembly-report" {
             assembly_report::report()
         } else if argument == "--chassis-crash-report" {
             chassis_crash_report::report()

@@ -6015,16 +6015,13 @@ dependencies = [
 name = "vehicle_drive"
 version = "0.1.0"
 dependencies = [
- "avian3d",
  "bevy",
  "clap",
  "image",
- "serde",
  "tempfile",
- "toml",
  "vehicle_assets",
  "vehicle_physics",
- "zip",
+ "vehicle_scene",
 ]
 
 [[package]]
@@ -6033,7 +6030,10 @@ version = "0.1.0"
 dependencies = [
  "avian3d",
  "bevy",
+ "tempfile",
+ "vehicle_assets",
  "vehicle_physics",
+ "vehicle_scene",
 ]
 
 [[package]]
@@ -6043,6 +6043,16 @@ dependencies = [
  "avian3d",
  "bevy",
  "bevy_math",
+]
+
+[[package]]
+name = "vehicle_scene"
+version = "0.1.0"
+dependencies = [
+ "avian3d",
+ "bevy",
+ "vehicle_assets",
+ "vehicle_physics",
 ]
 
 [[package]]

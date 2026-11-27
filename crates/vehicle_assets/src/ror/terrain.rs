@@ -26,6 +26,15 @@ pub fn load_terrain(path: &Path, entry: &str) -> Result<TerrainImport, ImportErr
     import(&mut archive, &definition)
 }
 
+pub(super) fn load_embedded(
+    path: &Path,
+    bytes: &'static [u8],
+    entry: &str,
+) -> Import<TerrainImport> {
+    let (mut archive, definition) = Archive::select_embedded(path, bytes, entry)?;
+    import(&mut archive, &definition)
+}
+
 fn import(archive: &mut Archive, entry: &str) -> Import<TerrainImport> {
     let mut warnings = Vec::new();
     let text = archive.text(entry)?;

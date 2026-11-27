@@ -17,7 +17,7 @@ use vehicle_assets::{
     ror::{TerrainImport, VehicleImport},
 };
 
-use crate::placement::triangulate;
+use vehicle_scene::placement::triangulate;
 
 #[derive(Resource)]
 pub(crate) struct Scene {

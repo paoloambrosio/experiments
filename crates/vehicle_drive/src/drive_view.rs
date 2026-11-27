@@ -4,11 +4,9 @@ use bevy::{
     prelude::*,
 };
 use vehicle_assets::ror::{TerrainImport, VehicleImport};
+use vehicle_scene::drive::{DriveSession, DriverInput, TICKS_PER_SECOND};
 
-use crate::{
-    drive::{DriveSession, DriverInput, TICKS_PER_SECOND},
-    view::{self, MeshAssets},
-};
+use crate::view::{self, MeshAssets};
 
 #[derive(Resource)]
 struct DriveScene {
@@ -188,4 +186,48 @@ fn draw(
         Some(error) => format!("{speed:.0} km/h\n{error}"),
         None => format!("{speed:.0} km/h"),
     };
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use vehicle_assets::ror::reference;
+    use vehicle_scene::drive::{AlignmentMode, DriveSetup};
+
+    #[test]
+    fn driving_keys_move_and_reset_the_bundled_car() {
+        let terrain = reference::terrain().unwrap();
+        let vehicle = reference::vehicle().unwrap();
+        let setup = DriveSetup::new(&terrain, &vehicle, AlignmentMode::Authored).unwrap();
+        let mut app = App::new();
+        app.insert_non_send(DriveSession::new(setup).unwrap());
+        app.init_resource::<ButtonInput<KeyCode>>()
+            .init_resource::<DriveStatus>()
+            .add_systems(PreUpdate, request_reset)
+            .add_systems(FixedUpdate, advance);
+        let world = app.world_mut();
+        let start = world.non_send::<DriveSession>().chassis().0;
+
+        world
+            .resource_mut::<ButtonInput<KeyCode>>()
+            .press(KeyCode::KeyW);
+        for _ in 0..TICKS_PER_SECOND {
+            world.run_schedule(FixedUpdate);
+        }
+        let (position, _, velocity) = world.non_send::<DriveSession>().chassis();
+        assert!(position.z - start.z > 0.5);
+        assert!(velocity.z > 1.0);
+
+        let mut keys = world.resource_mut::<ButtonInput<KeyCode>>();
+        keys.release(KeyCode::KeyW);
+        keys.press(KeyCode::KeyR);
+        world.run_schedule(PreUpdate);
+        world.run_schedule(FixedUpdate);
+        let (position, _, velocity) = world.non_send::<DriveSession>().chassis();
+        assert!(position.abs_diff_eq(start, 1e-5));
+        assert!(velocity.abs_diff_eq(Vec3::ZERO, 1e-5));
+        let status = world.resource::<DriveStatus>();
+        assert!(status.error.is_none());
+        assert!(status.camera_reset);
+    }
 }

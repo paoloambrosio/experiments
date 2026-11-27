@@ -35,7 +35,7 @@ The reference car settles at 2,452.5 N per corner at both rates. At 3,840 subste
 
 ## Inputs for the first imported drive
 
-Use the authored wheel centres as the four local centres and supply the common world pose independently. Map outer tyre radius and tread width to the rest tread radius and shoulder width. An authored rim radius can supply the bead radius. The approximation profile must provide missing rim dimensions, shoulder radius, bead width, masses, chassis inertia dimensions and centre of mass, suspension geometry and rates, tyre material and pressure, and drive and brake commands. Upright orientation supplies the first drive baseline for the later camber and toe comparison. [Imported drive roadmap](../../drive-roadmap.md)
+Use the authored wheel centres as the four local centres and supply the common world pose independently. Map outer tyre radius and tread width to the rest tread radius and shoulder width. An authored rim radius can supply the bead radius. The approximation profile must provide missing rim dimensions, shoulder radius, bead width, masses, chassis inertia dimensions and centre of mass, suspension geometry and rates, tyre material and pressure, and drive and brake commands. Upright orientation supplies the first drive baseline for the later camber and toe comparison. [Reference car reports](../../user/README.md#run-reports-on-the-reference-car-and-track)
 
 ## Reproduce the checks
 
