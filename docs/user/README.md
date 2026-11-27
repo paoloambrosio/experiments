@@ -18,6 +18,20 @@ The app opens the project-authored car and test track bundled with the executabl
 
 The drive uses authored camber and toe, fixed first-gear torque, and an imported suspension at each wheel. Only the tyres contact the track in this interactive mode. Startup diagnostics list the derived mass, suspension, tyre, and solver settings.
 
+## Use your own terrain and vehicle
+
+Copy `config.example.toml` to `config.toml` and set `terrain` and `vehicle` under `[assets]` to your Rigs of Rods ZIPs. Relative paths are resolved from the TOML file’s directory. Use single-quoted paths for Windows backslashes. Git ignores the workspace’s `config.toml`.
+
+```sh
+cargo run --locked --release -p vehicle_drive -- --drive --config config.toml
+cargo run --locked --release -p vehicle_drive -- --view-vehicle --config config.toml
+cargo run --locked --release -p vehicle_drive -- --view-terrain --config config.toml
+```
+
+Terrain-only inspection requires just the terrain ZIP. A ZIP with one eligible definition selects it automatically. If there are several, choose from the terminal menu or set `terrain_entry` or `vehicle_entry` to the full entry name inside the ZIP. Unattended launches with multiple entries require that setting.
+
+Manual driving uses the rigid chassis with deformable tyres. Tests, reports, and the scripted crash replay use project-owned fixtures.
+
 ## Inspect the track or parked car
 
 ```sh

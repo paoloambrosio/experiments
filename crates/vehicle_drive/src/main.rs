@@ -1,10 +1,11 @@
+mod config;
 mod crash_replay;
 mod drive_view;
 mod view;
 
-use std::{collections::BTreeMap, process::ExitCode};
+use std::{collections::BTreeMap, path::PathBuf, process::ExitCode};
 
-use clap::{Arg, ArgAction, Command};
+use clap::{Arg, ArgAction, Command, value_parser};
 use vehicle_assets::ror::{ImportWarning, TerrainImport, VehicleImport, reference};
 use vehicle_scene::{
     drive::{AlignmentMode, DriveSession, DriveSetup},
@@ -13,37 +14,45 @@ use vehicle_scene::{
 
 fn main() -> ExitCode {
     let args = Command::new("vehicle_drive")
-        .about("Drive or inspect the bundled reference car and test track")
+        .about("Drive or inspect the bundled reference assets or configured Rigs of Rods archives")
+        .arg(
+            Arg::new("config")
+                .long("config")
+                .value_name("PATH")
+                .value_parser(value_parser!(PathBuf))
+                .help("Read terrain and vehicle ZIP paths for manual driving or inspection"),
+        )
         .arg(
             Arg::new("drive")
                 .long("drive")
                 .action(ArgAction::SetTrue)
                 .conflicts_with_all(["view-terrain", "view-vehicle", "crash-replay"])
-                .help("Drive the reference car (default)"),
+                .help("Drive the selected car (default)"),
         )
         .arg(
             Arg::new("view-terrain")
                 .long("view-terrain")
                 .action(ArgAction::SetTrue)
-                .help("Open the reference test track in a 3D viewer"),
+                .help("Open the selected terrain in a 3D viewer"),
         )
         .arg(
             Arg::new("view-vehicle")
                 .long("view-vehicle")
                 .action(ArgAction::SetTrue)
                 .conflicts_with("view-terrain")
-                .help("Inspect the reference car parked on the track"),
+                .help("Inspect the selected car parked on the terrain"),
         )
         .arg(
             Arg::new("crash-replay")
                 .long("crash-replay")
                 .action(ArgAction::SetTrue)
-                .conflicts_with_all(["view-terrain", "view-vehicle"])
+                .conflicts_with_all(["view-terrain", "view-vehicle", "config"])
                 .help("Inspect the textured reference car's recorded crash"),
         )
         .get_matches();
 
     match run(
+        args.get_one::<PathBuf>("config").map(PathBuf::as_path),
         args.get_flag("view-terrain"),
         args.get_flag("view-vehicle"),
         args.get_flag("crash-replay"),
@@ -57,8 +66,17 @@ fn main() -> ExitCode {
     }
 }
 
-fn run(view_terrain: bool, view_vehicle: bool, crash_replay: bool) -> Result<bool, String> {
-    let terrain = reference::terrain().map_err(|error| error.to_string())?;
+fn run(
+    config_path: Option<&std::path::Path>,
+    view_terrain: bool,
+    view_vehicle: bool,
+    crash_replay: bool,
+) -> Result<bool, String> {
+    let config = config_path.map(config::Config::read).transpose()?;
+    let terrain = match &config {
+        Some(config) => config.terrain()?,
+        None => reference::terrain().map_err(|error| error.to_string())?,
+    };
     print_import_summary(&terrain);
     if view_terrain {
         return Ok(view::run(view::Scene {
@@ -67,7 +85,10 @@ fn run(view_terrain: bool, view_vehicle: bool, crash_replay: bool) -> Result<boo
         }));
     }
 
-    let vehicle = reference::vehicle().map_err(|error| error.to_string())?;
+    let vehicle = match &config {
+        Some(config) => config.vehicle()?,
+        None => reference::vehicle().map_err(|error| error.to_string())?,
+    };
     print_vehicle_summary(&vehicle);
     if view_vehicle {
         let translation = placement::park(&terrain, &vehicle.vehicle)?;

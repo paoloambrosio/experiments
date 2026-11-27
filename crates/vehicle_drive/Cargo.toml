@@ -7,6 +7,8 @@ edition.workspace = true
 bevy = { workspace = true, features = ["3d", "ui"] }
 clap = "4.6"
 image = { version = "0.25.10", default-features = false }
+serde = { version = "1", features = ["derive"] }
+toml = "1.2"
 vehicle_assets = { path = "../vehicle_assets" }
 vehicle_physics = { path = "../vehicle_physics", features = ["avian"] }
 vehicle_scene = { path = "../vehicle_scene" }

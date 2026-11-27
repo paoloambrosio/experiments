@@ -1,0 +1,9 @@
+# Copy this file to config.toml and set the ZIP paths for manual driving and viewing.
+# Relative archive paths are resolved from the directory containing this file.
+[assets]
+terrain = 'crates/vehicle_assets/reference/track.zip'
+vehicle = 'crates/vehicle_assets/reference/car.zip'
+
+# Use the full definition name inside each ZIP, including any directories.
+terrain_entry = 'track.terrn2'
+vehicle_entry = 'car.truck'
