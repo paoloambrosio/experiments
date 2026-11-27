@@ -6,15 +6,19 @@ fn reference_reports_run_without_a_local_asset_configuration() {
     for (flag, checkpoints) in [
         (
             "--drive-report",
-            ["Ramp ramp:", "Imported drive checks passed."],
+            &["Ramp ramp:", "Imported drive checks passed."][..],
         ),
         (
             "--alignment-report",
-            ["Upright alignment", "Authored alignment"],
+            &["Upright alignment", "Authored alignment"],
         ),
         (
             "--crash-report",
-            ["First body contact", "reset replay matched"],
+            &[
+                "Peak chassis and rendered body wall penetration",
+                "Peak chassis rebound speed",
+                "reset replay matched",
+            ],
         ),
     ] {
         let output = Command::new(env!("CARGO_BIN_EXE_vehicle_lab"))
@@ -28,7 +32,7 @@ fn reference_reports_run_without_a_local_asset_configuration() {
             output.status.success(),
             "{flag} failed:\n{stdout}\n{stderr}"
         );
-        for checkpoint in checkpoints {
+        for &checkpoint in checkpoints {
             assert!(
                 stdout.contains(checkpoint),
                 "{flag} missed {checkpoint}:\n{stdout}"

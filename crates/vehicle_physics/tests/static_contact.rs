@@ -62,6 +62,72 @@ fn fast_oblique_and_overhead_strikes_preserve_tangential_motion_across_a_seam() 
 }
 
 #[test]
+fn nearly_simultaneous_nodes_stop_at_the_wall_in_time_order() {
+    let wall_z = 64.0;
+    let world = StaticCollisionMesh::new(
+        &[
+            DVec3::new(-2.0, -2.0, wall_z),
+            DVec3::new(2.0, -2.0, wall_z),
+            DVec3::new(0.0, 2.0, wall_z),
+        ],
+        &[[0, 1, 2]],
+    )
+    .unwrap();
+    let mut chassis = Chassis::new(
+        vec![
+            node(DVec3::new(-0.5, 0.0, wall_z - 0.5 - 5e-11), DVec3::Z, 2.0),
+            node(DVec3::new(0.5, 0.0, wall_z - 0.5), DVec3::Z, 2.0),
+        ],
+        vec![],
+    )
+    .unwrap();
+    let surface = ChassisCollision::new(&chassis, vec![0, 1], vec![]).unwrap();
+    let reaction = chassis
+        .step_with_static_world(1.0, &surface, &world)
+        .unwrap();
+    assert!(
+        chassis
+            .nodes()
+            .iter()
+            .all(|node| node.position_m.z < wall_z)
+    );
+    assert_eq!(reaction.first.unwrap().feature, ContactFeature::Node(1));
+    assert_eq!(reaction.contacts, 2);
+    assert_eq!(reaction.impulse_ns, -4.0 * DVec3::Z);
+}
+
+#[test]
+fn simultaneous_nodes_stop_on_an_oblique_wall_despite_roundoff() {
+    let wall = [
+        DVec3::new(60.0, 0.0, 60.0),
+        DVec3::new(68.0, 0.0, 59.0),
+        DVec3::new(60.0, 3.0, 60.0),
+    ];
+    let normal = (wall[1] - wall[0]).cross(wall[2] - wall[0]).normalize();
+    let world = StaticCollisionMesh::new(&wall, &[[0, 1, 2]]).unwrap();
+    let incoming = DVec3::new(0.01, 0.0, 0.1);
+    let mut chassis = Chassis::new(
+        [0.5, 1.0]
+            .map(|y| node(DVec3::new(63.001, y, 59.6), incoming, 2.0))
+            .to_vec(),
+        vec![],
+    )
+    .unwrap();
+    let surface = ChassisCollision::new(&chassis, vec![0, 1], vec![]).unwrap();
+    let reaction = chassis
+        .step_with_static_world(1.0, &surface, &world)
+        .unwrap();
+    assert_eq!(reaction.contacts, 2);
+    for node in chassis.nodes() {
+        assert!((node.position_m - wall[0]).dot(normal) < 0.0);
+        assert!(
+            node.velocity_mps
+                .abs_diff_eq(incoming.reject_from_normalized(normal), 1e-12)
+        );
+    }
+}
+
+#[test]
 fn edge_crossing_catches_two_panels_with_mutually_exterior_vertices() {
     let quad = [[0, 1, 2], [0, 2, 3]];
     let world = StaticCollisionMesh::new(

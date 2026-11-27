@@ -7,7 +7,9 @@ use bevy_math::DVec3;
 
 use crate::beam_damage::{BeamDamage, BeamDamageConfig};
 pub use crate::elastic_tyre::BeamCoefficients;
-use crate::static_collision::{CONTACT_GAP_M, StaticCollisionMesh, StaticReaction, face_normal};
+use crate::static_collision::{
+    CONTACT_GAP_M, StaticCollisionMesh, StaticReaction, SweepMode, face_normal,
+};
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct ChassisNode {
@@ -317,9 +319,14 @@ impl Chassis {
                 }
             }
             let hit = world.and_then(|(surface, world)| {
-                world.first_hit(&positions, &travel, &surface.nodes, &surface.panels, |_| {
-                    true
-                })
+                world.first_hit(
+                    &positions,
+                    &travel,
+                    &surface.nodes,
+                    &surface.panels,
+                    SweepMode::AdvanceToContact,
+                    |_| true,
+                )
             });
             let fraction = hit.map_or(1.0, |hit| hit.time);
             for (point, &delta) in positions.iter_mut().zip(&travel) {

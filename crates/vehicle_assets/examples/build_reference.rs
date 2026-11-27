@@ -102,6 +102,14 @@ fn sides(rear: Quad, front: Quad) -> [Quad; 4] {
 
 const CORNERS: [(f32, f32); 4] = [(-0.75, -1.24), (0.75, 1.24), (0.75, -1.24), (-0.75, 1.24)];
 
+fn body_sections() -> [Quad; 3] {
+    [
+        section(0.68, 0.36, 0.72, -1.82),
+        section(0.68, 0.36, 0.72, 1.18),
+        section(0.64, 0.38, 0.62, 2.0),
+    ]
+}
+
 fn truck(wide: bool) -> String {
     let name = if wide {
         "Reference Car Wide"
@@ -109,9 +117,7 @@ fn truck(wide: bool) -> String {
         "Reference Car"
     };
     let mut text = format!("{name}\nglobals\n0,0\nminimass\n2\nnodes\n");
-    let rear = section(0.68, 0.36, 0.72, -1.82);
-    let bulkhead = section(0.68, 0.36, 0.72, 1.18);
-    let nose = section(0.64, 0.38, 0.62, 2.0);
+    let [rear, bulkhead, nose] = body_sections();
     let mut node = |id, p: Vec3, mass| {
         // RoR truck coordinates are -X forward, +Y up, +Z left.
         writeln!(text, "{id},{:.4},{:.4},{:.4},l {mass}", -p.z, p.y, p.x).unwrap();
@@ -153,11 +159,20 @@ fn truck(wide: bool) -> String {
         }
     }
     writeln!(text, "24,25").unwrap();
-    text.push_str("set_beam_defaults 500000,2500,38000,500000,0.04,tracks/beam,0.1\n");
-    for a in 4..12 {
-        for b in (a + 1).max(8)..12 {
+    // Give the longitudinal crush zone a low yield force so the nose keeps
+    // most of its shortening after the wall unloads it.
+    text.push_str("set_beam_defaults 500000,2500,5500,500000,0.04,tracks/beam,0.1\n");
+    for a in 4..8 {
+        for b in 8..12 {
             let flags = if (a, b) == (4, 8) { ",s" } else { "" };
             writeln!(text, "{a},{b}{flags}").unwrap();
+        }
+    }
+    // Keep the forward cross-section braced as the beams behind it shorten.
+    text.push_str("set_beam_defaults 500000,2500,38000,500000,0.04,tracks/beam,0.1\n");
+    for a in 8..12 {
+        for b in a + 1..12 {
+            writeln!(text, "{a},{b}").unwrap();
         }
     }
     text.push_str("shocks\n");
@@ -177,7 +192,10 @@ fn truck(wide: bool) -> String {
         };
         writeln!(text, "{radius},{rim},{width},16,{},{axle},9999,1,{driven},0,32,1000,100,{side},rim.mesh,tread", axle + 1).unwrap();
     }
-    text.push_str("submesh\ncab\n8,9,10,c\n8,10,11,c\n7,6,25,c\n7,25,24,c\ncontacters\n8\n9\n10\n11\nflexbodies\n0,1,4,0,0,0,0,0,0,body.mesh\nforset 0-11,24,25\nmanagedmaterials\npaint flexmesh_standard paint.png\nglass flexmesh_transparent glass.png\nalloy mesh_standard alloy.png\ntread mesh_standard rubber.png\nend\n");
+    text.push_str("submesh\ncab\n8,9,10,c\n8,10,11,c\n7,6,25,c\n7,25,24,c\ncontacters\n8\n9\n10\n11\nflexbodies\n0,1,4,0,0,0,0,0,0,body.mesh\nforset 0-11\n");
+    // The roof and glass follow the cabin placement frame. Its origin is the
+    // only influence, so motion of the nose cannot change the cabin's shape.
+    text.push_str("0,1,4,0,0,0,0,0,0,cabin.mesh\nforset 0\nmanagedmaterials\npaint flexmesh_standard paint.png\nglass flexmesh_transparent glass.png\nalloy mesh_standard alloy.png\ntread mesh_standard rubber.png\nend\n");
     text
 }
 
@@ -187,20 +205,27 @@ fn write_car(path: &Path) -> Result<()> {
     entry(&mut zip, "car-wide.truck", truck(true))?;
     let offset = Vec3::new(0.68, -0.36, 1.82);
     let local = |quad: Quad| quad.map(|point| point + offset);
-    let rear = section(0.68, 0.36, 0.72, -1.82);
-    let nose = section(0.64, 0.38, 0.62, 2.0);
-    let mut paint = sides(rear, nose).map(local).to_vec();
-    paint.extend([local([rear[3], rear[2], rear[1], rear[0]]), local(nose)]);
-    let cabin_rear = section(0.53, 0.71, 0.71, -1.20);
-    let cabin_front = section(0.53, 0.71, 0.71, 0.92);
+    let [rear, bulkhead, nose] = body_sections();
+    // Put the panel boundary directly on the structural bulkhead nodes so
+    // both sides of the boundary follow the same points as the nose crushes.
+    let shell: Vec<_> = sides(rear, bulkhead)
+        .into_iter()
+        .chain(sides(bulkhead, nose))
+        .chain([[rear[3], rear[2], rear[1], rear[0]], nose])
+        .map(local)
+        .collect();
+    entry(&mut zip, "body.mesh", mesh(&[("paint", &shell)]))?;
+
+    let cabin_rear = section(0.53, 0.72, 0.72, -1.20);
+    let cabin_front = section(0.53, 0.72, 0.72, 0.92);
     let roof_rear = section(0.43, 1.19, 1.19, -0.73);
     let roof_front = section(0.43, 1.19, 1.19, 0.35);
-    paint.push(local([
+    let roof = [local([
         roof_rear[0],
         roof_front[0],
         roof_front[1],
         roof_rear[1],
-    ]));
+    ])];
     let glass = [
         [cabin_front[0], cabin_front[1], roof_front[1], roof_front[0]],
         [cabin_rear[1], cabin_rear[0], roof_rear[0], roof_rear[1]],
@@ -210,8 +235,8 @@ fn write_car(path: &Path) -> Result<()> {
     .map(local);
     entry(
         &mut zip,
-        "body.mesh",
-        mesh(&[("paint", &paint), ("glass", &glass)]),
+        "cabin.mesh",
+        mesh(&[("paint", &roof), ("glass", &glass)]),
     )?;
     let rim: Vec<_> = (0..16)
         .map(|i| {

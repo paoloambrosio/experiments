@@ -14,7 +14,8 @@ enum NodeOwner {
     Upright(usize),
 }
 
-pub(crate) struct SourceIndices {
+#[derive(Clone)]
+pub struct SourceIndices {
     pub nodes: Vec<usize>,
     pub beams: Vec<usize>,
     pub panels: Vec<usize>,
@@ -33,7 +34,7 @@ impl SourceIndices {
 }
 
 #[derive(Default)]
-pub(crate) struct ConversionCounts {
+pub struct ConversionCounts {
     pub upright_internal: [usize; 4],
     pub suspension_links: [usize; 4],
     pub cross_upright: usize,
@@ -44,7 +45,7 @@ pub(crate) struct ConversionCounts {
     pub ground_exclusions: usize,
 }
 
-pub(crate) struct ImportedStructure {
+pub struct ImportedStructure {
     pub structure: StructureSpec,
     pub specification: VehicleSpec,
     pub source: SourceIndices,
@@ -52,7 +53,7 @@ pub(crate) struct ImportedStructure {
     pub mounts: [[usize; 3]; 4],
 }
 
-pub(crate) fn assemble(
+pub fn assemble(
     asset: &VehicleAsset,
     wheels: [(usize, WheelPhysics); 4],
     mut specification: VehicleSpec,
@@ -293,7 +294,7 @@ fn mount_nodes(
 }
 
 /// Use a padded explicit spring/damper stability bound for the imported graph.
-pub(crate) fn substeps(
+pub(super) fn substeps(
     structure: &StructureSpec,
     ticks_per_second: u32,
     minimum: u32,

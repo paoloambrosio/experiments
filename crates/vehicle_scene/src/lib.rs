@@ -2,5 +2,8 @@
 //! Positions are in metres, with +Y up, +Z forward, and +X to vehicle left at rest.
 //! Rotations act on local axes to produce world-space axes.
 
+pub mod body_skin;
+pub mod crash;
+mod crash_structure;
 pub mod drive;
 pub mod placement;

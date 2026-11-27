@@ -1,3 +1,4 @@
+mod crash_replay;
 mod drive_view;
 mod view;
 
@@ -17,7 +18,7 @@ fn main() -> ExitCode {
             Arg::new("drive")
                 .long("drive")
                 .action(ArgAction::SetTrue)
-                .conflicts_with_all(["view-terrain", "view-vehicle"])
+                .conflicts_with_all(["view-terrain", "view-vehicle", "crash-replay"])
                 .help("Drive the reference car (default)"),
         )
         .arg(
@@ -33,9 +34,20 @@ fn main() -> ExitCode {
                 .conflicts_with("view-terrain")
                 .help("Inspect the reference car parked on the track"),
         )
+        .arg(
+            Arg::new("crash-replay")
+                .long("crash-replay")
+                .action(ArgAction::SetTrue)
+                .conflicts_with_all(["view-terrain", "view-vehicle"])
+                .help("Inspect the textured reference car's recorded crash"),
+        )
         .get_matches();
 
-    match run(args.get_flag("view-terrain"), args.get_flag("view-vehicle")) {
+    match run(
+        args.get_flag("view-terrain"),
+        args.get_flag("view-vehicle"),
+        args.get_flag("crash-replay"),
+    ) {
         Ok(true) => ExitCode::SUCCESS,
         Ok(false) => ExitCode::FAILURE,
         Err(error) => {
@@ -45,7 +57,7 @@ fn main() -> ExitCode {
     }
 }
 
-fn run(view_terrain: bool, view_vehicle: bool) -> Result<bool, String> {
+fn run(view_terrain: bool, view_vehicle: bool, crash_replay: bool) -> Result<bool, String> {
     let terrain = reference::terrain().map_err(|error| error.to_string())?;
     print_import_summary(&terrain);
     if view_terrain {
@@ -67,6 +79,9 @@ fn run(view_terrain: bool, view_vehicle: bool) -> Result<bool, String> {
     }
 
     let setup = DriveSetup::new(&terrain, &vehicle, AlignmentMode::Authored)?;
+    if crash_replay {
+        return crash_replay::run(setup, terrain, vehicle);
+    }
     setup.print_setup(&vehicle.entry, &terrain.terrain.name);
     Ok(drive_view::run(DriveSession::new(setup)?, terrain, vehicle))
 }

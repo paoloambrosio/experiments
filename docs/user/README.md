@@ -27,6 +27,23 @@ cargo run -p vehicle_drive -- --view-vehicle
 
 In the terrain viewer, move with **WASD** and **Q / E**. Hold the right mouse button and drag to look around. In the parked-car viewer, hold the right mouse button and drag to orbit, scroll to zoom, and press **B** to switch between textured and structural views. The structural view shows nodes, beams, wheel outlines, and axle directions. In either viewer, **Home** restores the camera and **C** toggles the collision overlay.
 
+## Inspect the textured crash replay
+
+```sh
+cargo run -p vehicle_drive -- --crash-replay
+```
+
+The viewer records a two-second frontal strike against the bundled wall at a launch speed of 8 m/s. It opens paused at launch and holds the final frame after the car backs clear of the wall. The beams ahead of the front bulkhead yield under load and the nose stays shortened. The roof and glass move together as a rigid cabin, and the four wheels follow the recorded rim poses. The default side view keeps the nose in view at impact. Compare the final frame with the launch frame to see the permanent crush.
+
+| Control | Action |
+| --- | --- |
+| **Space** | Play at recorded speed or pause |
+| **Left / Right** | Pause and step one 60 Hz frame backward / forward |
+| **R** | Return to the original shape at frame zero and pause, keeping the camera angle and zoom |
+| Right mouse button + drag | Orbit around the car |
+| Scroll wheel | Zoom |
+| **Home** | Restore the starting camera angle and zoom |
+
 ## Run reports on the reference car and track
 
 ```sh
@@ -37,7 +54,7 @@ cargo run -p vehicle_lab -- --crash-report
 
 The drive report checks four-wheel support, acceleration, steering, braking, rim clearance, and loaded contact on the ramp. The alignment report compares upright and authored wheel alignment on the same level straight. It measures tread load centres in the final second of settling and mean absolute lateral force per wheel while accelerating from 2 to 4 m/s. Positive load-centre offset points left, positive camber leans the wheel top outward, and positive toe points the wheel inward.
 
-The crash report launches the deformable car toward the bundled wall at 8 m/s. The control removes the wall from chassis collision and tyre support. The report compares matched runs, measures chassis contact and nose shortening, checks for at least 1 mm of permanent beam-length change beyond the control, and repeats the strike after reset. With the current fixture, the chassis hits the wall at 7.52 m/s and retains 13.42 mm of beam-length change beyond the control.
+The crash report launches the deformable car toward the bundled wall at 8 m/s. The control removes the wall from chassis collision and tyre support. The report compares matched runs, measures chassis contact and nose shortening, checks for at least 1 mm of permanent beam-length change beyond the control, and repeats the strike after reset. Every replay frame checks the chassis nodes and rendered body against the wall plane with a 0.1 mm allowance for rounding. The textured nose must shorten relative to the cabin by at least 100 mm more than the control at the matched time. It must retain at least 100 mm and 80% of peak shortening throughout the final quarter-second clear of the wall. Peak chassis rebound speed along the approach must stay at or below 10% of the speed at first body contact. In the bundled strike, the chassis hits at 7.52 m/s, rebounds at up to 0.59 m/s, and the rendered nose retains 162 mm of its 187 mm peak shortening.
 
 See the [reference asset source and regeneration command](../../crates/vehicle_assets/reference/README.md).
 
@@ -67,7 +84,7 @@ cargo run -p vehicle_lab -- --coupled-chassis-report
 
 Use the `vehicle_assets` crate to represent terrain meshes, height samples, and vehicle and wheel geometry in memory. `VehicleAsset::physics` exposes optional rigid-body and structural inputs in SI units. Call `TerrainAsset::validate()` or `VehicleAsset::validate()` before consuming these values. Validation errors identify the field and any relevant element indices. Positions and dimensions use metres, with +Y up, +Z forward, and +X to vehicle left.
 
-The Rigs of Rods importer exposes node masses and upright assignments, ordinary and compression-support beam properties, contact panels and nodes, and the placement and influence nodes for each deformable mesh instance. Chassis and upright masses partition the authored node mass. The rim and tyre mass is supplied separately for each wheel. The structural data is available through `VehicleAsset::physics.structure`. The drive app currently uses the rigid chassis and soft-body tyres.
+The Rigs of Rods importer exposes node masses and upright assignments, ordinary and compression-support beam properties, contact panels and nodes, and the placement and influence nodes for each deformable mesh instance. Chassis and upright masses partition the authored node mass. The rim and tyre mass is supplied separately for each wheel. The structural data is available through `VehicleAsset::physics.structure`. Manual driving uses a rigid chassis with soft-body tyres. The crash replay uses the deformable chassis and its imported mesh bindings.
 
 ## Spawn the reference assembly
 

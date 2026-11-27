@@ -2,12 +2,13 @@ use std::collections::{HashMap, HashSet};
 
 use bevy::{
     asset::RenderAssetUsages,
+    camera::primitives::{Aabb, MeshAabb},
     color::palettes::css::AQUAMARINE,
     ecs::system::SystemParam,
     gizmos::config::{DefaultGizmoConfigGroup, GizmoConfigStore},
     image::{ImageAddressMode, ImageSampler, ImageSamplerDescriptor},
     input::mouse::{AccumulatedMouseMotion, AccumulatedMouseScroll, MouseScrollUnit},
-    mesh::{Indices, PrimitiveTopology},
+    mesh::{Indices, PrimitiveTopology, VertexAttributeValues},
     prelude::*,
     render::render_resource::{Extent3d, Face, TextureDimension, TextureFormat},
 };
@@ -172,6 +173,55 @@ pub(crate) fn spawn_meshes<'a>(
     geometry: &[TriangleMesh],
     instances: impl IntoIterator<Item = (&'a MeshInstance, Option<Entity>)>,
 ) {
+    spawn_mesh_instances(
+        commands,
+        assets,
+        appearance,
+        geometry,
+        instances
+            .into_iter()
+            .map(|(instance, parent)| (instance, parent, false)),
+    );
+}
+
+pub(crate) struct MutableSection {
+    pub entity: Entity,
+    pub mesh: Handle<Mesh>,
+    reflected: bool,
+    rest_normals: Vec<[f32; 3]>,
+}
+
+impl MutableSection {
+    pub(crate) fn update(&self, mesh: &mut Mesh, vertices: &[Vec3], at_rest: bool) -> Aabb {
+        mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, vertices.to_vec());
+        if at_rest {
+            mesh.insert_attribute(Mesh::ATTRIBUTE_NORMAL, self.rest_normals.clone());
+        } else {
+            mesh.compute_area_weighted_normals();
+            if let Some(VertexAttributeValues::Float32x3(normals)) =
+                mesh.attribute_mut(Mesh::ATTRIBUTE_NORMAL)
+            {
+                for (normal, rest) in normals.iter_mut().zip(&self.rest_normals) {
+                    if *normal == [0.0; 3] {
+                        *normal = *rest;
+                    } else if self.reflected {
+                        *normal = normal.map(|v| -v);
+                    }
+                }
+            }
+        }
+        mesh.get_aabb().expect("deformable section has vertices")
+    }
+}
+
+/// Return mutable sections grouped by input instance index.
+pub(crate) fn spawn_mesh_instances<'a>(
+    commands: &mut Commands,
+    assets: &mut MeshAssets,
+    appearance: &MeshAppearance,
+    geometry: &[TriangleMesh],
+    instances: impl IntoIterator<Item = (&'a MeshInstance, Option<Entity>, bool)>,
+) -> HashMap<usize, Vec<MutableSection>> {
     let MeshAssets {
         meshes,
         materials,
@@ -204,7 +254,8 @@ pub(crate) fn spawn_meshes<'a>(
         .collect();
 
     let mut rendered = HashMap::new();
-    for (instance, parent) in instances {
+    let mut mutable_sections = HashMap::<_, Vec<_>>::new();
+    for (index, (instance, parent, dynamic)) in instances.into_iter().enumerate() {
         let Some(id) = instance.visual_mesh else {
             continue;
         };
@@ -216,22 +267,29 @@ pub(crate) fn spawn_meshes<'a>(
             .count()
             % 2
             == 1;
-        let sections = rendered.entry((id, reflected)).or_insert_with(|| {
-            let mesh = &geometry[id.0];
-            appearance.sections[&id]
-                .iter()
-                .map(|section| {
-                    (
-                        meshes.add(to_bevy_mesh(
-                            mesh,
-                            &mesh.triangles[section.triangles.clone()],
-                            reflected,
-                        )),
-                        surface_materials[section.material.0].clone(),
-                    )
-                })
-                .collect::<Vec<_>>()
-        });
+        let sections = rendered
+            .entry((id, reflected, dynamic.then_some(index)))
+            .or_insert_with(|| {
+                let mesh = &geometry[id.0];
+                appearance.sections[&id]
+                    .iter()
+                    .map(|section| {
+                        (
+                            meshes.add(to_bevy_mesh_with_usage(
+                                mesh,
+                                &mesh.triangles[section.triangles.clone()],
+                                reflected,
+                                if dynamic {
+                                    RenderAssetUsages::default()
+                                } else {
+                                    RenderAssetUsages::RENDER_WORLD
+                                },
+                            )),
+                            surface_materials[section.material.0].clone(),
+                        )
+                    })
+                    .collect::<Vec<_>>()
+            });
         for (mesh, material) in sections {
             let mut entity = commands.spawn((
                 Name::new(instance.name.clone()),
@@ -246,16 +304,45 @@ pub(crate) fn spawn_meshes<'a>(
             if let Some(parent) = parent {
                 entity.insert(ChildOf(parent));
             }
+            if dynamic {
+                let source = meshes.get(mesh.id()).unwrap();
+                entity.insert(source.get_aabb().unwrap());
+                let rest_normals = source
+                    .attribute(Mesh::ATTRIBUTE_NORMAL)
+                    .unwrap()
+                    .as_float3()
+                    .unwrap()
+                    .to_vec();
+                mutable_sections
+                    .entry(index)
+                    .or_default()
+                    .push(MutableSection {
+                        entity: entity.id(),
+                        mesh: mesh.clone(),
+                        reflected,
+                        rest_normals,
+                    });
+            }
         }
     }
+    mutable_sections
 }
 
 #[derive(Component)]
-struct OrbitCamera {
-    home: Transform,
-    target: Vec3,
-    minimum_distance: f32,
-    maximum_distance: f32,
+pub(crate) struct OrbitCamera {
+    pub home: Transform,
+    pub target: Vec3,
+    pub minimum_distance: f32,
+    pub maximum_distance: f32,
+}
+
+impl OrbitCamera {
+    pub fn follow(&mut self, transform: &mut Transform, target: Vec3) {
+        let delta = target - self.target;
+        self.target = target;
+        self.home.translation += delta;
+        transform.translation += delta;
+    }
 }
 
 #[derive(Resource)]
@@ -331,7 +418,7 @@ fn setup_vehicle(commands: &mut Commands, parked: &ParkedVehicle, assets: &mut M
     });
 }
 
-fn orbit_camera(
+pub(crate) fn orbit_camera(
     mut camera: Single<(&mut Transform, &OrbitCamera)>,
     keys: Res<ButtonInput<KeyCode>>,
     mouse: Res<ButtonInput<MouseButton>>,
@@ -473,11 +560,17 @@ fn texture_image(texture: &DiffuseTexture) -> Image {
 }
 
 fn to_bevy_mesh(mesh: &TriangleMesh, triangles: &[[u32; 3]], reflected: bool) -> Mesh {
-    let mut render = Mesh::new(
-        PrimitiveTopology::TriangleList,
-        RenderAssetUsages::RENDER_WORLD,
-    )
-    .with_inserted_attribute(Mesh::ATTRIBUTE_POSITION, mesh.vertices.clone());
+    to_bevy_mesh_with_usage(mesh, triangles, reflected, RenderAssetUsages::RENDER_WORLD)
+}
+
+fn to_bevy_mesh_with_usage(
+    mesh: &TriangleMesh,
+    triangles: &[[u32; 3]],
+    reflected: bool,
+    usage: RenderAssetUsages,
+) -> Mesh {
+    let mut render = Mesh::new(PrimitiveTopology::TriangleList, usage)
+        .with_inserted_attribute(Mesh::ATTRIBUTE_POSITION, mesh.vertices.clone());
     if let Some(uvs) = &mesh.uvs {
         render.insert_attribute(Mesh::ATTRIBUTE_UV_0, uvs.clone());
     }

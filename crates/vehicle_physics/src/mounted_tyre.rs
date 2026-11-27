@@ -10,7 +10,9 @@ use crate::{
     kerb::Kerb,
     pressure::{ChamberReading, triangulate},
     puncture::{PunctureReading, TornPanel},
-    static_collision::{CONTACT_GAP_M, ContactFeature, Hit, StaticCollisionMesh, StaticReaction},
+    static_collision::{
+        CONTACT_GAP_M, ContactFeature, Hit, StaticCollisionMesh, StaticReaction, SweepMode,
+    },
     triangle_road::TriangleRoad,
     tyre::TyreTopology,
 };
@@ -381,18 +383,22 @@ impl TyreObstacles {
                     return Err(ElasticTyreError::NonFiniteStep);
                 }
             }
-            let Some(hit) =
-                self.world
-                    .first_hit(positions, travel, &self.nodes, &self.panels, |hit| {
-                        let inward_m =
-                            -(1.0 - hit.time) * hit.interpolate(travel).dot(hit.contact.normal);
-                        // Node sweeps against a fixed face have a fixed normal.
-                        // Keep those strict, even when the crossing is tiny.
-                        (matches!(hit.contact.feature, ContactFeature::Node(_))
-                            || inward_m > EDGE_CONTACT_TOLERANCE_M)
-                            && !road_owns(hit.contact.position_m, hit.contact.normal)
-                    })
-            else {
+            let Some(hit) = self.world.first_hit(
+                positions,
+                travel,
+                &self.nodes,
+                &self.panels,
+                SweepMode::FullStep,
+                |hit| {
+                    let inward_m =
+                        -(1.0 - hit.time) * hit.interpolate(travel).dot(hit.contact.normal);
+                    // Node sweeps against a fixed face have a fixed normal.
+                    // Keep those strict, even when the crossing is tiny.
+                    (matches!(hit.contact.feature, ContactFeature::Node(_))
+                        || inward_m > EDGE_CONTACT_TOLERANCE_M)
+                        && !road_owns(hit.contact.position_m, hit.contact.normal)
+                },
+            ) else {
                 let mut reaction = StaticReaction::default();
                 for contact in contacts {
                     if contact.impulse_ns > 0.0 {

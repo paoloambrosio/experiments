@@ -72,17 +72,8 @@ fn setup(
             .id()
     });
     let vehicle = &scene.vehicle.vehicle;
-    let mut instances = vehicle.objects.clone();
-    let mut parents = vec![chassis; instances.len()];
-    for (wheel, (index, detail)) in wheels.into_iter().zip(session.setup.wheel_visuals()) {
-        let inverse = instances[detail.tyre_object].rotation.inverse();
-        for i in [detail.rim_object, detail.tyre_object] {
-            let instance = &mut instances[i];
-            instance.translation = inverse * (instance.translation - vehicle.wheels[index].centre);
-            instance.rotation = inverse * instance.rotation;
-            parents[i] = wheel;
-        }
-    }
+    let (instances, parents) =
+        wheel_instances(vehicle, session.setup.wheel_visuals(), chassis, wheels);
     view::spawn_meshes(
         &mut commands,
         &mut assets,
@@ -118,6 +109,26 @@ fn setup(
             ));
         });
     commands.remove_resource::<DriveScene>();
+}
+
+pub(crate) fn wheel_instances(
+    vehicle: &vehicle_assets::VehicleAsset,
+    wheel_visuals: [(usize, vehicle_assets::WheelPhysics); 4],
+    chassis: Entity,
+    wheels: [Entity; 4],
+) -> (Vec<vehicle_assets::MeshInstance>, Vec<Entity>) {
+    let mut instances = vehicle.objects.clone();
+    let mut parents = vec![chassis; instances.len()];
+    for (wheel, (index, detail)) in wheels.into_iter().zip(wheel_visuals) {
+        let inverse = instances[detail.tyre_object].rotation.inverse();
+        for i in [detail.rim_object, detail.tyre_object] {
+            let instance = &mut instances[i];
+            instance.translation = inverse * (instance.translation - vehicle.wheels[index].centre);
+            instance.rotation = inverse * instance.rotation;
+            parents[i] = wheel;
+        }
+    }
+    (instances, parents)
 }
 
 fn request_reset(keys: Res<ButtonInput<KeyCode>>, mut status: ResMut<DriveStatus>) {

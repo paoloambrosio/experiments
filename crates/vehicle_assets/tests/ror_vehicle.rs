@@ -398,16 +398,20 @@ fn reference_car_variants_keep_their_authored_geometry_and_textures() {
             .unwrap();
         assert_eq!(support.stiffness_n_per_m, 500000.0);
         assert_eq!(support.damping_ns_per_m, 2500.0);
-        assert_eq!(support.deformation_threshold_n, 38000.0);
+        assert_eq!(support.deformation_threshold_n, 5500.0);
         assert_eq!(support.breaking_threshold_n, 500000.0);
-        let [body] = structure.deformable_meshes.as_slice() else {
-            panic!("expected a single deformable body");
+        let [body, cabin] = structure.deformable_meshes.as_slice() else {
+            panic!("expected bindings for the shell and cabin");
         };
+        assert_eq!(vehicle.objects[body.object].name, "body.mesh");
+        assert_eq!(vehicle.objects[cabin.object].name, "cabin.mesh");
         assert_eq!(body.placement_nodes, [NodeId(0), NodeId(1), NodeId(4)]);
+        assert_eq!(cabin.placement_nodes, body.placement_nodes);
         assert_eq!(
             body.influence_nodes,
-            (0..12).chain([24, 25]).map(NodeId).collect::<Vec<_>>()
+            (0..12).map(NodeId).collect::<Vec<_>>()
         );
+        assert_eq!(cabin.influence_nodes, [NodeId(0)]);
         assert_eq!(vehicle.wheels.len(), 4);
         for (i, (wheel, detail)) in vehicle.wheels.iter().zip(&physics.wheels).enumerate() {
             let base = 12 + 3 * i;

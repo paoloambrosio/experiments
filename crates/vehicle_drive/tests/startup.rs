@@ -15,7 +15,12 @@ fn help_lists_the_human_driving_modes_without_requiring_a_config() {
     let output = command(&["--help"]);
     assert!(output.status.success());
     let help = String::from_utf8(output.stdout).unwrap();
-    for mode in ["--drive", "--view-terrain", "--view-vehicle"] {
+    for mode in [
+        "--drive",
+        "--view-terrain",
+        "--view-vehicle",
+        "--crash-replay",
+    ] {
         assert!(help.contains(mode), "{help}");
     }
     assert!(!help.contains("--config"));
@@ -44,6 +49,9 @@ fn selects_only_one_driving_mode_at_a_time() {
         ["--view-terrain", "--view-vehicle"],
         ["--drive", "--view-terrain"],
         ["--drive", "--view-vehicle"],
+        ["--crash-replay", "--drive"],
+        ["--crash-replay", "--view-terrain"],
+        ["--crash-replay", "--view-vehicle"],
     ] {
         let output = command(&modes);
         assert_eq!(output.status.code(), Some(2));

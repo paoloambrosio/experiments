@@ -7,6 +7,7 @@ use bevy_math::DVec3;
 // A distance tolerance for closed edges and a smaller minimum approach per sweep.
 pub(crate) const CONTACT_GAP_M: f64 = 1e-8;
 const EDGE_EPS: f64 = 1e-10;
+const NODE_PLANE_EPS_M: f64 = 1e-10;
 const MIN_APPROACH_M: f64 = 1e-12;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -32,6 +33,12 @@ impl Error for StaticCollisionError {}
 #[derive(Debug)]
 pub struct StaticCollisionMesh {
     tree: BoundsTree,
+}
+
+#[derive(Clone, Copy)]
+pub(crate) enum SweepMode {
+    AdvanceToContact,
+    FullStep,
 }
 
 impl StaticCollisionMesh {
@@ -89,8 +96,16 @@ impl StaticCollisionMesh {
         travel: &[DVec3],
         nodes: &[usize],
         panels: &[[usize; 3]],
+        mode: SweepMode,
         allow: impl Fn(&Hit) -> bool,
     ) -> Option<Hit> {
+        // Advancing to a later hit can leave the earlier feature beyond the
+        // plane. A full-step solver can prefer features within a time tie
+        // because it sweeps again from the original positions.
+        let time_tolerance = match mode {
+            SweepMode::AdvanceToContact => 0.0,
+            SweepMode::FullStep => EDGE_EPS,
+        };
         let mut best = None::<Hit>;
         let mut consider = |hit: Hit| {
             if !allow(&hit) {
@@ -98,8 +113,8 @@ impl StaticCollisionMesh {
             }
             let key = |hit: &Hit| (hit.contact.feature, hit.contact.triangle);
             if best.as_ref().is_none_or(|old| {
-                hit.time < old.time - EDGE_EPS
-                    || ((hit.time - old.time).abs() <= EDGE_EPS && key(&hit) < key(old))
+                hit.time < old.time - time_tolerance
+                    || ((hit.time - old.time).abs() <= time_tolerance && key(&hit) < key(old))
             }) {
                 best = Some(hit);
             }
@@ -113,11 +128,21 @@ impl StaticCollisionMesh {
                     if speed.abs() <= MIN_APPROACH_M {
                         return;
                     }
-                    let t = (face.points[0] - start).dot(face.normal) / speed;
-                    if !(0.0..=1.0).contains(&t) {
+                    let distance = (face.points[0] - start).dot(face.normal);
+                    let t = distance / speed;
+                    // A previous hit can advance a simultaneous contact a
+                    // rounding error past the plane. Resolve it at time zero.
+                    let recover_roundoff = matches!(mode, SweepMode::AdvanceToContact)
+                        && t < 0.0
+                        && distance.abs() <= NODE_PLANE_EPS_M;
+                    if !recover_roundoff && !(0.0..=1.0).contains(&t) {
                         return;
                     }
-                    let point = start + t * delta;
+                    let (t, point) = if recover_roundoff {
+                        (0.0, start + distance * face.normal)
+                    } else {
+                        (t, start + t * delta)
+                    };
                     if barycentric(face.points, point, face.normal).is_some() {
                         consider(Hit::new(
                             t,

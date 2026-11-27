@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 268" role="img" aria-labelledby="title desc">
+  <title id="title">Ordering wall contacts within a substep</title>
+  <desc id="desc">On the timeline, the first node reaches the wall just before the second. In the wall cross-section, both resolved nodes are on the approach side of the contact plane. Spacing is exaggerated.</desc>
+  <rect x="1" y="1" width="718" height="266" rx="12" fill="#f8fafc" stroke="#cbd5e1"/>
+  <g font-family="sans-serif" fill="#172554">
+    <text x="32" y="38" font-size="19" font-weight="bold">Contact times in one substep</text>
+    <text x="436" y="38" font-size="19" font-weight="bold">Resolved node positions</text>
+    <text x="95" y="98" font-size="16">First contact</text>
+    <text x="223" y="178" font-size="16">Second contact</text>
+    <text x="32" y="178" font-size="14">Start</text>
+    <text x="338" y="178" font-size="14">End</text>
+    <text x="438" y="224" font-size="16">Approach side</text>
+    <text x="611" y="224" font-size="16">Wall</text>
+    <text x="32" y="238" font-size="14">Spacing exaggerated</text>
+  </g>
+  <path d="M46 132H360m-8-6 8 6-8 6M46 123v18m314-18v18" fill="none" stroke="#475569" stroke-width="2"/>
+  <path d="M182 104v28m46 0v27" fill="none" stroke="#64748b" stroke-width="2"/>
+  <circle cx="182" cy="132" r="6" fill="#0369a1"/>
+  <circle cx="228" cy="132" r="6" fill="#9a3412"/>
+  <path d="M398 64v150" stroke="#cbd5e1"/>
+  <path d="M574 72h33v127h-33z" fill="#e2e8f0"/>
+  <path d="M574 72v127" stroke="#172554" stroke-width="3"/>
+  <path d="M460 111h72m-8-6 8 6-8 6m-64 49h72m-8-6 8 6-8 6" fill="none" stroke="#475569" stroke-width="2"/>
+  <circle cx="555" cy="111" r="7" fill="#0369a1"/>
+  <circle cx="555" cy="166" r="7" fill="#9a3412"/>
+</svg>
