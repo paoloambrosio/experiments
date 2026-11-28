@@ -134,7 +134,7 @@ end
 }
 
 #[test]
-fn imports_shock_attachments_in_shuffled_wheel_order() {
+fn imports_shock_attachments_and_braced_uprights_in_shuffled_wheel_order() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("attachments.zip");
     let corners = [(-0.7, -1.2), (0.7, 1.2), (0.7, -1.2), (-0.7, 1.2)];
@@ -145,7 +145,14 @@ fn imports_shock_attachments_in_shuffled_wheel_order() {
         writeln!(truck, "{},{},{},{}", n + 1, -z, 0.3, x + 0.1).unwrap();
         writeln!(truck, "{},{},{},{}", n + 2, -z, 0.7, x).unwrap();
     }
-    truck.push_str("beams\n2,5\n2,8,s\n5,8\n2,11\n5,11\n8,11\nshocks\n");
+    for (i, &(x, z)) in corners.iter().enumerate() {
+        writeln!(truck, "{},{},0.4,{x}", 12 + i, -z).unwrap();
+    }
+    truck.push_str("24,1.2,0.4,-0.7\nbeams\n2,5\n2,8,s\n5,8\n2,11\n5,11\n8,11\n0,24\n0,24\n");
+    for i in 0..4 {
+        writeln!(truck, "{},{}\n{},{}", 3 * i, 12 + i, 3 * i + 1, 12 + i).unwrap();
+    }
+    truck.push_str("shocks\n");
     for i in 0..4 {
         writeln!(truck, "{},{},32000,2000,0.2,0.2,1.1,i", 3 * i + 2, 3 * i).unwrap();
     }
@@ -178,7 +185,18 @@ fn imports_shock_attachments_in_shuffled_wheel_order() {
             assert_eq!(structure.nodes[axle.0].upright, Some(i));
             assert!(structure.nodes[axle.0].mass_kg.unwrap() > 0.0);
         }
+        let added = &structure.nodes[12 + i];
+        assert_eq!(added.upright, Some(i));
+        let expected_mass = attachment
+            .axle_nodes
+            .into_iter()
+            .map(|id| structure.nodes[id.0].mass_kg.unwrap())
+            .sum::<f32>()
+            + added.mass_kg.unwrap();
+        assert_eq!(asset.physics.wheels[i].upright_mass_kg, Some(expected_mass));
     }
+    // Repeating one brace cannot turn a chassis node into an upright node.
+    assert_eq!(structure.nodes[16].upright, None);
     assert!(matches!(
         structure.beams[1].unwrap().kind,
         StructuralBeamKind::CompressionSupport { .. }

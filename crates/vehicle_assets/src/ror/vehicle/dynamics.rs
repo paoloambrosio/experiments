@@ -1,7 +1,7 @@
 use super::{Record, WheelRecord, number, resolve_nodes};
 use crate::{
-    ChassisPhysics, NodeId, StructuralNode, VehicleAsset, VehiclePhysics, VerticalSuspension,
-    WheelAttachment,
+    ChassisPhysics, NodeId, StructuralBeamKind, VehicleAsset, VehiclePhysics, VehicleStructure,
+    VerticalSuspension, WheelAttachment,
 };
 use bevy_math::Vec3;
 use std::collections::HashMap;
@@ -12,7 +12,7 @@ pub(super) fn convert(
     nodes: &HashMap<u32, NodeId>,
     mut wheels: Vec<WheelRecord>,
     body_objects: &[usize],
-    structural_nodes: &mut [StructuralNode],
+    structure: &mut VehicleStructure,
 ) -> VehiclePhysics {
     let shocks: Vec<_> = records
         .iter()
@@ -61,18 +61,24 @@ pub(super) fn convert(
                 }
             }
         }
-        for ((node, &mass), owner) in structural_nodes.iter_mut().zip(&masses).zip(owners) {
+        include_braced_upright_nodes(vehicle, structure, &wheels, &mut owners);
+        for ((node, &mass), &owner) in structure.nodes.iter_mut().zip(&masses).zip(&owners) {
             node.mass_kg = Some(mass);
             node.upright = owner;
         }
-        for (wheel, nodes) in wheels.iter_mut().zip(upright_nodes) {
-            let upright_mass: f32 = nodes.iter().map(|id| masses[id.0]).sum();
-            wheel.physics.upright_mass_kg = (upright_mass > 0.0).then_some(upright_mass);
+        let mut upright_mass = vec![0.0; wheels.len()];
+        for (&mass, owner) in masses.iter().zip(owners) {
+            if let Some(i) = owner {
+                upright_mass[i] += mass;
+            }
+        }
+        for (wheel, mass) in wheels.iter_mut().zip(upright_mass) {
+            wheel.physics.upright_mass_kg = (mass > 0.0).then_some(mass);
         }
         let size_m = body_size(vehicle, body_objects)?;
         let mut mass_kg = 0.0;
         let mut moment = Vec3::ZERO;
-        for ((&point, mass), node) in vehicle.nodes.iter().zip(masses).zip(structural_nodes) {
+        for ((&point, mass), node) in vehicle.nodes.iter().zip(masses).zip(&structure.nodes) {
             if node.upright.is_none() {
                 mass_kg += mass;
                 moment += point * mass;
@@ -124,6 +130,58 @@ pub(super) fn convert(
         chassis,
         wheels,
         structure: None,
+    }
+}
+
+fn include_braced_upright_nodes(
+    vehicle: &VehicleAsset,
+    structure: &VehicleStructure,
+    wheels: &[WheelRecord],
+    owners: &mut [Option<usize>],
+) {
+    let mut neighbours = vec![Vec::new(); owners.len()];
+    for (&[a, b], beam) in vehicle.edges.iter().zip(&structure.beams) {
+        if beam.is_some_and(|beam| {
+            beam.kind == StructuralBeamKind::Bilateral && beam.stiffness_n_per_m > 0.0
+        }) {
+            neighbours[a.0].push(b.0);
+            neighbours[b.0].push(a.0);
+        }
+    }
+    let mut body_node = vec![false; owners.len()];
+    for node in wheels
+        .iter()
+        .filter_map(|wheel| wheel.physics.attachment.map(|a| a.upper_node))
+        .chain(structure.collision_triangles.iter().flatten().copied())
+        .chain(structure.deformable_meshes.iter().flat_map(|mesh| {
+            mesh.placement_nodes
+                .into_iter()
+                .chain(mesh.influence_nodes.iter().copied())
+        }))
+    {
+        body_node[node.0] = true;
+    }
+
+    // Auxiliary running-gear nodes can be braced to the axle without being
+    // named by the wheel record. Classify against the original anchors so
+    // ownership cannot propagate from a wheel into the body beam network.
+    let anchors = owners.to_vec();
+    for (i, (owner, adjacent)) in owners.iter_mut().zip(&mut neighbours).enumerate() {
+        if owner.is_some() || body_node[i] {
+            continue;
+        }
+        adjacent.sort_unstable();
+        adjacent.dedup();
+        let mut wheels = adjacent.iter().filter_map(|&node| anchors[node]);
+        if let Some(wheel) = wheels.next()
+            && wheels.next() == Some(wheel)
+            && wheels.all(|other| other == wheel)
+        {
+            let geometry = &vehicle.wheels[wheel];
+            if vehicle.nodes[i].distance(geometry.centre) <= geometry.outer_radius {
+                *owner = Some(wheel);
+            }
+        }
     }
 }
 
@@ -368,17 +426,21 @@ mod tests {
             brake: Some(0),
         };
         let nodes = (0..4).map(|i| (i, NodeId(i as usize))).collect();
-        let mut structural_nodes = vec![StructuralNode::default(); vehicle.nodes.len()];
+        let mut structure = VehicleStructure {
+            nodes: vec![Default::default(); vehicle.nodes.len()],
+            ..Default::default()
+        };
         let physics = convert(
             &records,
             &vehicle,
             &nodes,
             vec![wheel],
             &[0],
-            &mut structural_nodes,
+            &mut structure,
         );
         assert_eq!(
-            structural_nodes
+            structure
+                .nodes
                 .iter()
                 .map(|node| node.upright)
                 .collect::<Vec<_>>(),

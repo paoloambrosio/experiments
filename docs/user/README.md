@@ -47,6 +47,8 @@ Terrain-only inspection requires just the terrain ZIP. A ZIP with one eligible d
 
 Driving with `--config` uses the deformable chassis by default. Startup checks the first loaded tick and its textured body, then resets to the starting pose. If initialization fails, the app prints the cause and uses a rigid chassis with deformable tyres. For a mesh with a narrow placement triangle, the app uses more widely spaced influence nodes when available to reduce rotation from small chassis movements. Tests, benchmarks, reports, and the scripted crash replay use project-owned fixtures.
 
+The importer includes nearby running-gear nodes in a wheel upright when structural beams brace them to at least two of its original attachment nodes. Their mass moves with the upright. Body mesh and collision panel nodes and upper shock mounts stay on the chassis.
+
 RoR `commands` and `commands2` links, such as door actuators, carry load using their authored stress-free lengths. The driving controls leave those stress-free lengths fixed. [Rigs of Rods command beam reference](https://docs.rigsofrods.org/vehicle-creation/fileformat-truck/#commands2)
 
 ## Inspect the track or parked car

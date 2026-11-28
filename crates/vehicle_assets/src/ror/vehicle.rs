@@ -357,7 +357,7 @@ fn import(mut archive: Archive, entry: String) -> Import<VehicleImport> {
         &nodes,
         wheel_details,
         &body_objects,
-        &mut structure.nodes,
+        &mut structure,
     );
     if structure.beams.iter().any(Option::is_some)
         || !structure.collision_triangles.is_empty()
