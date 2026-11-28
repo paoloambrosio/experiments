@@ -13,8 +13,8 @@ use vehicle_physics::{
     reference_car::{self, G},
     triangle_road::TriangleRoad,
     vehicle_assembly::{
-        ChassisSpec, PreparedVehicle, VehicleAssembly, VehiclePose, VehicleRoad, VehicleSpec,
-        WHEEL_NAMES, WheelAlignment, WheelSpec,
+        ChassisSpec, PreparedVehicle, VehicleAssembly, VehicleGeometry, VehiclePose, VehicleRoad,
+        VehicleSpec, WHEEL_NAMES, WheelAlignment, WheelSpec,
     },
 };
 
@@ -156,7 +156,7 @@ impl DriveSetup {
         self.prepared.wheel_alignments()
     }
 
-    pub fn print_setup(&self, entry: &str, terrain_entry: &str) {
+    pub fn print_setup(&self, entry: &str, terrain_entry: &str, substeps: u32) {
         let geometry = self.prepared.geometry();
         let radii = self.prepared.unloaded_radii_m();
         println!("Drive sources: {} and {}", entry, terrain_entry);
@@ -230,7 +230,7 @@ impl DriveSetup {
             tyre.geometry.segments, tyre.ambient_pressure_pa, tyre.material, tyre.reinforcement
         );
         println!(
-            "Solver: {TICKS_PER_SECOND} ticks/s, {SUBSTEPS} substeps per tick, gravity {G} m/s², initial tread clearance {SPAWN_CLEARANCE_M} m"
+            "Solver: {TICKS_PER_SECOND} ticks/s, {substeps} substeps per tick, gravity {G} m/s², initial tread clearance {SPAWN_CLEARANCE_M} m"
         );
         println!(
             "Derived spawn: {:?} m, {} collision triangles from imported terrain",
@@ -387,11 +387,80 @@ pub struct DriverInput {
     pub steer: f32,
 }
 
+pub const BENCHMARK_TICKS: u32 = 10 * TICKS_PER_SECOND;
+
+/// Repeatable level-track driving sequence shared by the lab and window benchmark.
+pub fn benchmark_input(tick: u32) -> DriverInput {
+    match tick {
+        0..=119 => DriverInput::default(),
+        120..=249 => DriverInput {
+            throttle: 1.0,
+            ..Default::default()
+        },
+        250..=309 => DriverInput {
+            throttle: 0.25,
+            steer: 0.35,
+            ..Default::default()
+        },
+        _ => DriverInput {
+            brake: 1.0,
+            ..Default::default()
+        },
+    }
+}
+
 pub struct DriveSession {
     pub setup: DriveSetup,
     app: App,
     car: VehicleAssembly,
+    controls: DriverControls,
+}
+
+pub(crate) struct DriverControls {
     commands: DriverInput,
+    drive_nm: [f32; 4],
+    brake_nm: [f32; 4],
+}
+
+impl DriverControls {
+    pub(crate) fn new(setup: &DriveSetup) -> Self {
+        Self {
+            commands: DriverInput::default(),
+            drive_nm: setup.wheels.map(|wheel| wheel.drive_nm),
+            brake_nm: setup.wheels.map(|wheel| wheel.brake_nm),
+        }
+    }
+
+    pub(crate) fn reset(&mut self) {
+        self.commands = DriverInput::default();
+    }
+
+    pub(crate) fn advance(
+        &mut self,
+        input: DriverInput,
+        geometry: VehicleGeometry,
+    ) -> [WheelControl; 4] {
+        let approach = |old: f32, target: f32, per_second: f32| {
+            let step = per_second / TICKS_PER_SECOND as f32;
+            old + (target - old).clamp(-step, step)
+        };
+        self.commands.throttle = approach(self.commands.throttle, input.throttle, 2.0);
+        self.commands.brake = approach(self.commands.brake, input.brake, 5.0);
+        self.commands.steer = approach(self.commands.steer, input.steer, 1.8);
+        let [left, right] = geometry
+            .front_steer(self.commands.steer * MAX_STEER_DEG.to_radians())
+            .expect("validated steering limit");
+        let throttle = if input.brake > 0.0 || self.commands.brake > 0.0 {
+            0.0
+        } else {
+            self.commands.throttle
+        };
+        std::array::from_fn(|i| WheelControl {
+            steer_rad: [left, right, 0.0, 0.0][i],
+            drive_nm: throttle * self.drive_nm[i],
+            brake_nm: self.commands.brake * self.brake_nm[i],
+        })
+    }
 }
 
 pub fn physics_app(substeps: u32, configure: impl FnOnce(&mut App)) -> App {
@@ -417,17 +486,20 @@ pub fn physics_app(substeps: u32, configure: impl FnOnce(&mut App)) -> App {
 }
 
 impl DriveSession {
+    pub const SUBSTEPS: u32 = SUBSTEPS;
+
     pub fn new(setup: DriveSetup) -> Result<Self, String> {
         let mut app = physics_app(SUBSTEPS, |_| {});
         let car = setup
             .prepared
             .spawn(app.world_mut(), setup.start, &setup.road)
             .map_err(|error| error.to_string())?;
+        let controls = DriverControls::new(&setup);
         Ok(Self {
             setup,
             app,
             car,
-            commands: DriverInput::default(),
+            controls,
         })
     }
 
@@ -439,37 +511,17 @@ impl DriveSession {
             .spawn(world, pose, &self.setup.road)
             .map_err(|error| error.to_string())?;
         std::mem::replace(&mut self.car, replacement).despawn(world);
-        self.commands = DriverInput::default();
+        self.controls.reset();
         Ok(())
     }
 
     pub fn step(&mut self, input: DriverInput) -> Result<(), String> {
-        let approach = |old: f32, target: f32, per_second: f32| {
-            let step = per_second / TICKS_PER_SECOND as f32;
-            old + (target - old).clamp(-step, step)
-        };
-        self.commands.throttle = approach(self.commands.throttle, input.throttle, 2.0);
-        self.commands.brake = approach(self.commands.brake, input.brake, 5.0);
-        self.commands.steer = approach(self.commands.steer, input.steer, 1.8);
-        let [left, right] = self
-            .car
-            .geometry
-            .front_steer(self.commands.steer * MAX_STEER_DEG.to_radians())
-            .expect("validated steering limit");
+        let controls = self.controls.advance(input, self.car.geometry);
         let world = self.app.world_mut();
-        for (i, wheel) in self.car.wheels.iter().enumerate() {
-            let input_wheel = self.setup.wheels[i];
+        for (wheel, control) in self.car.wheels.iter().zip(controls) {
             *world
                 .get_mut::<WheelControl>(wheel.spin_joint)
-                .expect("spawned wheel") = WheelControl {
-                steer_rad: [left, right, 0.0, 0.0][i],
-                drive_nm: if input.brake > 0.0 || self.commands.brake > 0.0 {
-                    0.0
-                } else {
-                    self.commands.throttle * input_wheel.drive_nm
-                },
-                brake_nm: self.commands.brake * input_wheel.brake_nm,
-            };
+                .expect("spawned wheel") = control;
         }
         self.app.update();
         for (i, wheel) in self.car.wheels.iter().enumerate() {

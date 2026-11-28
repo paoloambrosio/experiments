@@ -94,11 +94,20 @@ pub struct MountReaction {
 /// Reusable, validated rest state. Respawn from this value to reset the full assembly.
 pub struct PreparedDeformableVehicle {
     structure: StructureSpec,
+    implicit_chassis_beams: bool,
     mounts: [Mount; 4],
     vehicle: VehicleSpec,
     alignments: [WheelAlignment; 4],
     geometry: VehicleGeometry,
     pub inertia_kg_m2: DMat3,
+}
+
+/// World-space swept collision meshes for the chassis and the tyres.
+/// Supply tyre obstacles alongside the tread's driving surface.
+#[derive(Clone, Default)]
+pub struct DeformableObstacles {
+    pub chassis: Option<Arc<StaticCollisionMesh>>,
+    pub tyres: Option<Arc<StaticCollisionMesh>>,
 }
 
 impl PreparedDeformableVehicle {
@@ -148,12 +157,21 @@ impl PreparedDeformableVehicle {
         );
         Ok(Self {
             structure,
+            implicit_chassis_beams: false,
             vehicle,
             alignments,
             geometry,
             mounts: [fl?, fr?, rl?, rr?],
             inertia_kg_m2,
         })
+    }
+
+    /// Integrate chassis beam forces implicitly on the coupled substep clock.
+    /// Tyre, suspension and collision integration still use the caller's
+    /// Avian substep rate. Beam coefficients stay in N/m and N·s/m.
+    pub fn with_implicit_chassis_beams(mut self) -> Self {
+        self.implicit_chassis_beams = true;
+        self
     }
 
     pub fn spawn(
@@ -164,6 +182,28 @@ impl PreparedDeformableVehicle {
         launch_velocity_mps: DVec3,
         road: &VehicleRoad,
         obstacles: Option<Arc<StaticCollisionMesh>>,
+    ) -> Result<DeformableVehicle, DeformableError> {
+        self.spawn_with_obstacles(
+            world,
+            tyres,
+            pose,
+            launch_velocity_mps,
+            road,
+            DeformableObstacles {
+                chassis: obstacles.clone(),
+                tyres: obstacles,
+            },
+        )
+    }
+
+    pub fn spawn_with_obstacles(
+        &self,
+        world: &mut World,
+        tyres: [&ElasticTyre; 4],
+        pose: VehiclePose,
+        launch_velocity_mps: DVec3,
+        road: &VehicleRoad,
+        obstacles: DeformableObstacles,
     ) -> Result<DeformableVehicle, DeformableError> {
         if !pose.origin_m.is_finite()
             || !pose.rotation.is_normalized()
@@ -185,7 +225,10 @@ impl PreparedDeformableVehicle {
                 ..node
             })
             .collect();
-        let chassis = Chassis::new(nodes, self.structure.beams.clone())?;
+        let mut chassis = Chassis::new(nodes, self.structure.beams.clone())?;
+        if self.implicit_chassis_beams {
+            chassis.use_implicit_beams();
+        }
         let collision = ChassisCollision::new(
             &chassis,
             self.structure.collision_nodes.clone(),
@@ -211,7 +254,7 @@ impl PreparedDeformableVehicle {
             if let VehicleRoad::Triangles { road, contact } = road {
                 tyre.set_triangle_road(road.clone(), *contact);
             }
-            if let Some(obstacles) = &obstacles {
+            if let Some(obstacles) = &obstacles.tyres {
                 tyre.set_obstacles(obstacles.clone(), spec.bare_rim_mass_kg)
                     .map_err(tyre_error)?;
             }
@@ -260,7 +303,9 @@ impl PreparedDeformableVehicle {
             .spawn(DeformableBody {
                 chassis,
                 collision,
-                obstacles,
+                obstacles: obstacles.chassis,
+                tyre_obstacles: obstacles.tyres.is_some(),
+                free_impulses: Vec::new(),
                 corners,
                 snapshots: None,
                 last_mounts: [MountReaction::default(); 4],
@@ -318,6 +363,8 @@ pub struct DeformableBody {
     chassis: Chassis,
     collision: ChassisCollision,
     obstacles: Option<Arc<StaticCollisionMesh>>,
+    tyre_obstacles: bool,
+    free_impulses: Vec<DVec3>,
     corners: [Corner; 4],
     snapshots: Option<[Snapshot; 4]>,
     last_mounts: [MountReaction; 4],
@@ -682,10 +729,12 @@ impl DeformableBody {
             let mut tyre = tyres
                 .get_mut(self.corners[i].wheel.rim)
                 .map_err(|_| DeformableError::InvalidWheelState(i))?;
-            let mut free_impulses = Vec::new();
-            if self.obstacles.is_some() {
+            let free_impulses = &mut self.free_impulses;
+            if self.tyre_obstacles {
                 free_impulses.resize(tyre.tyre().positions().len(), DVec3::ZERO);
+                free_impulses.fill(DVec3::ZERO);
             }
+            let mut swept_contact = false;
             // Mount and hinge impulses change the bead trajectory after the
             // initial tyre solve. Check the resulting path before committing.
             for pass in 0..=8 {
@@ -703,17 +752,23 @@ impl DeformableBody {
                                 inverse_mass: wheel.inverse_mass,
                                 inverse_inertia: wheel.rim_inverse_inertia(),
                             },
-                            &mut free_impulses,
+                            free_impulses,
                         )
                         .map_err(|error| DeformableError::Tyre(i, error))?
                 {
                     if pass == 8 {
                         return Err(DeformableError::Tyre(i, ElasticTyreError::ContactLimit));
                     }
+                    swept_contact = true;
                     wheel.apply_obstacle_impulse(linear, angular);
                     continue;
                 }
-                tyre.sync_motion(rim, &free_impulses, dt)
+                let impulses = if swept_contact {
+                    free_impulses.as_slice()
+                } else {
+                    &[]
+                };
+                tyre.sync_motion(rim, impulses, dt)
                     .map_err(|error| DeformableError::Tyre(i, error))?;
                 final_bodies[i] = states;
                 break;

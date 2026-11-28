@@ -3,20 +3,35 @@
 ## Drive on the reference track
 
 ```sh
-cargo run -p vehicle_drive -- --drive
+cargo run --release -p vehicle_drive -- --drive
 ```
 
-The app opens the project-authored car and test track bundled with the executable. Run without flags to start driving. The chase view shows speed and follows the car as its four deformable tyres roll over the track. In the starting chase view, the ramp is to the right and the wall is farther ahead to the left.
+The app opens the project-authored car and test track bundled with the executable. Run without flags to start the same drive. The chase camera follows the cabin and the speed display uses horizontal chassis speed. The ramp is to the right of the starting view and the wall is farther ahead to the left.
 
 | Key | Action |
 | --- | --- |
 | **W** | Apply forward throttle |
 | **S** | Apply service brake |
 | **A / D** | Steer left / right |
-| **R** | Reset the car and chase camera to the start |
+| **R** | Return to the track start, restore the body and tyres, and reset the chase camera |
 | **C** | Toggle terrain collision edges |
 
-The drive uses authored camber and toe, fixed first-gear torque, and an imported suspension at each wheel. Only the tyres contact the track in this interactive mode. Startup diagnostics list the derived mass, suspension, tyre, and solver settings.
+The drive uses authored camber and toe, fixed first-gear torque, and an imported suspension at each wheel. The four tyres support the live chassis on the level track and ramp. The chassis can hit the terrain and wall, and the tyres can strike the wall independently. If an impact yields the chassis beams, the textured body retains the deformation until reset. Startup diagnostics list the derived mass, suspension, tyre, and solver settings.
+
+Interactive driving targets 60 physics ticks per second and processes at most two ticks before returning to input and drawing. When the machine cannot keep up, simulation time slows under load so the window can keep responding.
+
+```sh
+cargo run --locked --release -p vehicle_drive -- --benchmark
+```
+
+The window benchmark warms the renderer for two seconds, runs ten seconds of scripted driving, then measures a two-second frontal strike with braking just after contact. It disables VSync where supported. Each phase reports completed physics ticks, lag at frame boundaries, physics and mesh-update times, and the time from sampling a control transition to updating the render state on the CPU. The ordinary phase must complete at least 599 of 600 ticks by the deadline. The strike runs to completion and reports any slowdown.
+
+On Windows with an AMD Ryzen 7 5800X3D and the release build, ordinary driving completed 599 ticks in the ten-second window with zero lag at frame boundaries. The strike completed 102 ticks by its two-second deadline and finished all 120 in 2.30 s.
+
+| Phase | Median tick | 95th-percentile tick | Worst tick | Sampled input to updated render state |
+| --- | ---: | ---: | ---: | ---: |
+| Ordinary driving | 12.88 ms | 15.09 ms | 18.36 ms | 13.82 ms median across three transitions |
+| Frontal strike | 17.29 ms | 21.62 ms | 26.37 ms | 19.44 ms for the brake transition |
 
 ## Use your own terrain and vehicle
 
@@ -30,7 +45,9 @@ cargo run --locked --release -p vehicle_drive -- --view-terrain --config config.
 
 Terrain-only inspection requires just the terrain ZIP. A ZIP with one eligible definition selects it automatically. If there are several, choose from the terminal menu or set `terrain_entry` or `vehicle_entry` to the full entry name inside the ZIP. Unattended launches with multiple entries require that setting.
 
-Manual driving uses the rigid chassis with deformable tyres. Tests, reports, and the scripted crash replay use project-owned fixtures.
+Driving with `--config` uses the deformable chassis by default. Startup checks the first loaded tick and its textured body, then resets to the starting pose. If initialization fails, the app prints the cause and uses a rigid chassis with deformable tyres. For a mesh with a narrow placement triangle, the app uses more widely spaced influence nodes when available to reduce rotation from small chassis movements. Tests, benchmarks, reports, and the scripted crash replay use project-owned fixtures.
+
+RoR `commands` and `commands2` links, such as door actuators, carry load using their authored stress-free lengths. The driving controls leave those stress-free lengths fixed. [Rigs of Rods command beam reference](https://docs.rigsofrods.org/vehicle-creation/fileformat-truck/#commands2)
 
 ## Inspect the track or parked car
 
@@ -64,11 +81,14 @@ The viewer records a two-second frontal strike against the bundled wall at a lau
 cargo run -p vehicle_lab -- --drive-report
 cargo run -p vehicle_lab -- --alignment-report
 cargo run -p vehicle_lab -- --crash-report
+cargo run --locked --release -p vehicle_lab -- --deformable-drive-report
 ```
 
 The drive report checks four-wheel support, acceleration, steering, braking, rim clearance, and loaded contact on the ramp. The alignment report compares upright and authored wheel alignment on the same level straight. It measures tread load centres in the final second of settling and mean absolute lateral force per wheel while accelerating from 2 to 4 m/s. Positive load-centre offset points left, positive camber leans the wheel top outward, and positive toe points the wheel inward.
 
 The crash report launches the deformable car toward the bundled wall at 8 m/s. The control removes the wall from chassis collision and tyre support. The report compares matched runs, measures chassis contact and nose shortening, checks for at least 1 mm of permanent beam-length change beyond the control, and repeats the strike after reset. Every replay frame checks the chassis nodes and rendered body against the wall plane with a 0.1 mm allowance for rounding. The textured nose must shorten relative to the cabin by at least 100 mm more than the control at the matched time. It must retain at least 100 mm and 80% of peak shortening throughout the final quarter-second clear of the wall. Peak chassis rebound speed along the approach must stay at or below 10% of the speed at first body contact. In the bundled strike, the chassis hits at 7.52 m/s, rebounds at up to 0.59 m/s, and the rendered nose retains 162 mm of its 187 mm peak shortening.
+
+The deformable drive report uses the same simulation and commands as manual driving. The dense fixtures measure stationary node and mesh motion, permanent beam change, and sustained stepping speed under throttle, steering, and braking. The larger fixture adds scattered barriers around a clear driving lane to exercise terrain collision indexing. The bundled car also checks four-wheel support, ramp traction, both wall impact orders, and repeatable driving after reset. The drive and alignment reports use the rigid-chassis assembly for comparison.
 
 See the [reference asset source and regeneration command](../../crates/vehicle_assets/reference/README.md).
 
@@ -98,7 +118,11 @@ cargo run -p vehicle_lab -- --coupled-chassis-report
 
 Use the `vehicle_assets` crate to represent terrain meshes, height samples, and vehicle and wheel geometry in memory. `VehicleAsset::physics` exposes optional rigid-body and structural inputs in SI units. Call `TerrainAsset::validate()` or `VehicleAsset::validate()` before consuming these values. Validation errors identify the field and any relevant element indices. Positions and dimensions use metres, with +Y up, +Z forward, and +X to vehicle left.
 
-The Rigs of Rods importer exposes node masses and upright assignments, ordinary and compression-support beam properties, contact panels and nodes, and the placement and influence nodes for each deformable mesh instance. Chassis and upright masses partition the authored node mass. The rim and tyre mass is supplied separately for each wheel. The structural data is available through `VehicleAsset::physics.structure`. Manual driving uses a rigid chassis with soft-body tyres. The crash replay uses the deformable chassis and its imported mesh bindings.
+The Rigs of Rods importer exposes node masses and upright assignments, ordinary and compression-support beam properties, contact panels and nodes, and the placement and influence nodes for each deformable mesh instance. Chassis and upright masses partition the authored node mass. The rim and tyre mass is supplied separately for each wheel. The structural data is available through `VehicleAsset::physics.structure`. Manual driving and the crash replay use the deformable chassis and its imported mesh bindings.
+
+`PreparedDeformableVehicle::spawn_with_obstacles` takes separate optional chassis and tyre obstacle meshes in world metres. Use the tyre mesh alongside the tread's driving surface. `spawn` selects a shared obstacle mesh for both.
+
+`PreparedDeformableVehicle::with_implicit_chassis_beams` enables the implicit axial beam solver. It keeps the caller's Avian substep rate for suspension, tyre integration, and collision. Configured driving uses this solver when the explicit chassis beams would otherwise raise the shared substep rate.
 
 ## Spawn the reference assembly
 

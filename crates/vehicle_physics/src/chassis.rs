@@ -11,6 +11,9 @@ use crate::static_collision::{
     CONTACT_GAP_M, StaticCollisionMesh, StaticReaction, SweepMode, face_normal,
 };
 
+#[cfg(feature = "avian")]
+mod implicit;
+
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct ChassisNode {
     pub mass_kg: f64,
@@ -136,6 +139,8 @@ pub enum ChassisError {
     ContactLimit,
     InvalidTimestep,
     CollapsedBeam(usize),
+    #[cfg(feature = "avian")]
+    BeamSolveDidNotConverge,
     NonFiniteStep,
 }
 
@@ -163,6 +168,10 @@ impl fmt::Display for ChassisError {
             Self::CollapsedBeam(index) => {
                 write!(f, "chassis beam {index} collapsed to zero length")
             }
+            #[cfg(feature = "avian")]
+            Self::BeamSolveDidNotConverge => {
+                f.write_str("the implicit chassis beam solve did not converge")
+            }
             Self::NonFiniteStep => {
                 f.write_str("the chassis step produced non-finite motion, geometry, or impulse")
             }
@@ -187,6 +196,8 @@ pub struct Chassis {
     forces: Vec<DVec3>,
     next_nodes: Vec<ChassisNode>,
     next_damage: Vec<BeamDamage>,
+    #[cfg(feature = "avian")]
+    implicit_beams: Option<implicit::BeamSolver>,
 }
 
 impl Chassis {
@@ -228,6 +239,8 @@ impl Chassis {
             next_nodes: nodes.clone(),
             forces: vec![DVec3::ZERO; nodes.len()],
             next_damage: beams.iter().map(|beam| beam.damage).collect(),
+            #[cfg(feature = "avian")]
+            implicit_beams: None,
             nodes,
             beams,
         })
@@ -248,6 +261,10 @@ impl Chassis {
         self.nodes.copy_from_slice(&self.initial);
         for beam in &mut self.beams {
             beam.damage.reset();
+        }
+        #[cfg(feature = "avian")]
+        if let Some(solver) = &mut self.implicit_beams {
+            solver.reset();
         }
     }
 
@@ -319,6 +336,17 @@ impl Chassis {
                 }
             }
             let hit = world.and_then(|(surface, world)| {
+                let mut min = DVec3::splat(f64::INFINITY);
+                let mut max = DVec3::splat(f64::NEG_INFINITY);
+                for &i in &surface.nodes {
+                    let start = positions[i];
+                    let end = start + travel[i];
+                    min = min.min(start.min(end));
+                    max = max.max(start.max(end));
+                }
+                if !world.overlaps_bounds(min, max) {
+                    return None;
+                }
                 world.first_hit(
                     &positions,
                     &travel,
@@ -380,11 +408,29 @@ impl Chassis {
         dt_seconds: f64,
         gravity: DVec3,
     ) -> Result<&mut [ChassisNode], ChassisError> {
+        if let Some(solver) = &mut self.implicit_beams {
+            solver.predict(
+                &self.nodes,
+                &self.beams,
+                &mut self.next_nodes,
+                dt_seconds,
+                gravity,
+            )?;
+            return Ok(&mut self.next_nodes);
+        }
         self.predict(dt_seconds, gravity)?;
         for (trial, previous) in self.next_nodes.iter_mut().zip(&self.nodes) {
             trial.position_m = previous.position_m;
         }
         Ok(&mut self.next_nodes)
+    }
+
+    #[cfg(feature = "avian")]
+    pub(crate) fn use_implicit_beams(&mut self) {
+        self.implicit_beams = Some(implicit::BeamSolver::new(
+            self.nodes.len(),
+            self.beams.len(),
+        ));
     }
 
     fn predict(&mut self, dt_seconds: f64, gravity: DVec3) -> Result<(), ChassisError> {

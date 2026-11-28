@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="720" height="280" viewBox="0 0 720 280" role="img" aria-labelledby="title description">
+  <title id="title">Contact surfaces in side elevation</title>
+  <desc id="description">Two tyres rest on a raised ramp. The track and ramp supply tread support. An upright wall ahead of the vehicle supplies swept tyre contact. The chassis can hit the track, ramp, and wall.</desc>
+  <defs>
+    <marker id="arrow" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto">
+      <path d="M0 0 7 3.5 0 7z" fill="context-stroke"/>
+    </marker>
+  </defs>
+  <rect width="720" height="280" rx="12" fill="#f4f6f9"/>
+  <path d="M45 202H152L246 167H424L516 202H674" fill="none" stroke="#146966" stroke-width="5" stroke-linejoin="round"/>
+  <path d="M624 202V69" stroke="#a04718" stroke-width="6"/>
+  <path d="M241 132H421V108L387 100 358 77H286L253 102 235 111z" fill="#e3e9f2" stroke="#25354c" stroke-width="3" stroke-linejoin="round"/>
+  <g fill="#f4f6f9" stroke="#25354c" stroke-width="4">
+    <circle cx="271" cy="145" r="20"/>
+    <circle cx="399" cy="145" r="20"/>
+  </g>
+  <g fill="none" stroke-width="2" marker-end="url(#arrow)">
+    <path d="M143 236 187 195" stroke="#146966"/>
+    <path d="M566 110H611" stroke="#a04718"/>
+    <path d="M350 46 353 70" stroke="#25354c"/>
+  </g>
+  <g font-family="sans-serif" font-size="16" font-weight="600">
+    <text x="45" y="254" fill="#146966">Tread support on track and ramp</text>
+    <text x="505" y="87" fill="#a04718">Swept tyre contact</text>
+    <text x="350" y="33" text-anchor="middle" fill="#25354c">Chassis sweeps against all surfaces</text>
+  </g>
+</svg>

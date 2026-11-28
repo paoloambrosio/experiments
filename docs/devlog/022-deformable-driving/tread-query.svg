@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="680" height="265" viewBox="0 0 680 265" role="img" aria-labelledby="title description">
+  <title id="title">Shared tread query volume in side elevation</title>
+  <desc id="description">A tyre’s tread nodes fit inside a dashed rectangle. Extending its upper edge by the allowed vertical contact depth gives a query volume. Road faces whose bounds overlap this volume are candidates for the individual tread points.</desc>
+  <rect x="1" y="1" width="678" height="263" rx="12" fill="#f4f6f9"/>
+  <path d="M216 30H412V204H216z" fill="#d9eee9" stroke="#216963" stroke-width="2"/>
+  <path d="M216 49H412" stroke="#216963" stroke-width="2" stroke-dasharray="5 5"/>
+  <path d="M52 191H637" stroke="#8998a9" stroke-width="4"/>
+  <path d="M175 191H453" stroke="#216963" stroke-width="5"/>
+  <g stroke="#314660" stroke-width="2" fill="#f4f6f9">
+    <circle cx="314" cy="127" r="75" fill="none"/>
+    <circle cx="239" cy="127" r="4"/>
+    <circle cx="261" cy="180" r="4"/>
+    <circle cx="314" cy="202" r="4"/>
+    <circle cx="367" cy="180" r="4"/>
+    <circle cx="389" cy="127" r="4"/>
+  </g>
+  <g fill="#24364c" font-family="sans-serif" font-size="15">
+    <text x="428" y="43">Vertical depth allowance</text>
+    <text x="428" y="80">Shared tread query</text>
+    <text x="185" y="233">Candidate road faces</text>
+  </g>
+</svg>

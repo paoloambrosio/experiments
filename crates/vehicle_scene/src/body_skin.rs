@@ -37,12 +37,24 @@ struct Vertex {
     weights: Vec<(usize, f64)>,
 }
 
+fn minimum_altitude([a, b, c]: [DVec3; 3]) -> f64 {
+    let ab = b - a;
+    let ac = c - a;
+    let longest = ab.length().max(ac.length()).max(b.distance(c));
+    if longest == 0.0 {
+        0.0
+    } else {
+        ab.cross(ac).length() / longest
+    }
+}
+
 pub struct MeshSkin {
     pub object: usize,
     instance: MeshInstance,
     placement: [usize; 3],
     placement_ids: [NodeId; 3],
     rest_frame: Frame,
+    placement_altitude_m: f64,
     influences: Vec<(usize, DVec3)>,
     vertices: Vec<Vertex>,
 }
@@ -76,21 +88,48 @@ impl MeshSkin {
                 })
         };
         let [a, b, c] = binding.placement_nodes.map(resolve);
-        let [(a, pa), (b, pb), (c, pc)] = [a?, b?, c?];
-        let rest_frame = Frame::new([pa, pb, pc]).ok_or_else(|| {
+        let mut placement = [a?, b?, c?];
+        let influences = binding
+            .influence_nodes
+            .iter()
+            .map(|&id| resolve(id))
+            .collect::<Result<Vec<_>, _>>()?;
+        if influences.is_empty() {
+            return Err(format!("{label}: missing influence nodes"));
+        }
+        let origin = placement[0];
+        let candidates = placement.into_iter().chain(influences.iter().copied());
+        let axis = candidates
+            .clone()
+            .max_by(|&(_, a), &(_, b)| {
+                a.distance_squared(origin.1)
+                    .total_cmp(&b.distance_squared(origin.1))
+            })
+            .unwrap();
+        let plane = candidates
+            .max_by(|&(_, a), &(_, b)| {
+                let altitude = |point| minimum_altitude([origin.1, axis.1, point]);
+                altitude(a).total_cmp(&altitude(b))
+            })
+            .unwrap();
+        let broad = [origin, axis, plane];
+        let authored_altitude = minimum_altitude(placement.map(|(_, p)| p));
+        // A thin locator amplifies small deflections into large rotations.
+        // Keep its origin and use supported points with more leverage.
+        if authored_altitude < 0.1 * minimum_altitude(broad.map(|(_, p)| p)) {
+            placement = broad;
+        }
+        let points = placement.map(|(_, p)| p);
+        let rest_frame = Frame::new(points).ok_or_else(|| {
             format!(
                 "{label}: degenerate placement nodes {:?}",
                 binding.placement_nodes
             )
         })?;
-        let influences = binding
-            .influence_nodes
-            .iter()
-            .map(|&id| resolve(id).map(|(index, point)| (index, rest_frame.to_local(point))))
-            .collect::<Result<Vec<_>, _>>()?;
-        if influences.is_empty() {
-            return Err(format!("{label}: missing influence nodes"));
-        }
+        let influences: Vec<_> = influences
+            .into_iter()
+            .map(|(index, point)| (index, rest_frame.to_local(point)))
+            .collect();
         let vertices = mesh
             .vertices
             .iter()
@@ -101,13 +140,18 @@ impl MeshSkin {
                     .enumerate()
                     .map(|(i, &(_, node))| (i, rest.distance_squared(node)))
                     .collect();
-                distances.sort_by(|a, b| a.1.total_cmp(&b.1));
+                let by_distance =
+                    |a: &(usize, f64), b: &(usize, f64)| a.1.total_cmp(&b.1).then(a.0.cmp(&b.0));
+                if distances.len() > 4 {
+                    distances.select_nth_unstable_by(4, by_distance);
+                    distances.truncate(4);
+                }
+                distances.sort_unstable_by(by_distance);
                 // Imported positions and transforms are f32. Snap coincidences within 1 µm.
                 let (nearest, distance) = distances[0];
                 let weights = if distance <= 1e-12 {
                     vec![(nearest, 1.0)]
                 } else {
-                    distances.truncate(4);
                     let total = distances.iter().map(|&(_, d)| d.recip()).sum::<f64>();
                     distances
                         .into_iter()
@@ -120,9 +164,10 @@ impl MeshSkin {
         Ok(Self {
             object: binding.object,
             instance: instance.clone(),
-            placement: [a, b, c],
-            placement_ids: binding.placement_nodes,
+            placement: placement.map(|(index, _)| index),
+            placement_ids: placement.map(|(index, _)| NodeId(source.nodes[index])),
             rest_frame,
+            placement_altitude_m: minimum_altitude(points),
             influences,
             vertices,
         })
@@ -166,6 +211,7 @@ impl MeshSkin {
 pub struct BodySkin {
     pub meshes: Vec<MeshSkin>,
     node_count: usize,
+    body_mesh: usize,
 }
 
 /// Body transform in world metres and mesh-local vertices for each binding in order.
@@ -189,9 +235,17 @@ impl BodySkin {
         if meshes.is_empty() {
             return Err("vehicle has no deformable mesh bindings".into());
         }
+        let body_mesh = meshes.iter().enumerate().fold(0, |best, (i, mesh)| {
+            if mesh.placement_altitude_m > meshes[best].placement_altitude_m {
+                i
+            } else {
+                best
+            }
+        });
         Ok(Self {
             meshes,
             node_count: source.nodes.len(),
+            body_mesh,
         })
     }
 
@@ -204,9 +258,10 @@ impl BodySkin {
             .iter()
             .map(|mesh| mesh.frame(nodes_m))
             .collect::<Result<Vec<_>, _>>()?;
-        // The reference body's first placement is anchored behind its crush zone.
-        let rest = self.meshes[0].rest_frame;
-        let current = frames[0];
+        // Rigid attachments and the chase camera follow the placement with
+        // the broadest anchors, independent of authored mesh order.
+        let rest = self.meshes[self.body_mesh].rest_frame;
+        let current = frames[self.body_mesh];
         let rotation = (current.rotation * rest.rotation.inverse()).normalize();
         let body = Frame {
             origin: current.origin - rotation * rest.origin,

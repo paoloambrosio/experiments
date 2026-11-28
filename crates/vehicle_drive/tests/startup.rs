@@ -87,10 +87,12 @@ fn unattended_import_lists_eligible_definitions() {
 }
 
 #[test]
-fn crash_replay_rejects_manual_config() {
-    let output = command(&["--crash-replay", "--config", "unused.toml"]);
-    assert_eq!(output.status.code(), Some(2));
-    assert!(String::from_utf8_lossy(&output.stderr).contains("cannot be used with"));
+fn fixture_modes_reject_manual_config() {
+    for mode in ["--crash-replay", "--benchmark"] {
+        let output = command(&[mode, "--config", "unused.toml"]);
+        assert_eq!(output.status.code(), Some(2));
+        assert!(String::from_utf8_lossy(&output.stderr).contains("cannot be used with"));
+    }
 }
 
 #[test]

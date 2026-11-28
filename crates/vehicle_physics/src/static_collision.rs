@@ -160,12 +160,16 @@ impl StaticCollisionMesh {
             let start = ids.map(|i| positions[i]);
             let delta = ids.map(|i| travel[i]);
             let end = std::array::from_fn::<_, 3, _>(|i| start[i] + delta[i]);
-            self.tree
-                .visit(Bounds::of(start.into_iter().chain(end)), &mut |face| {
-                    sweep_panel(start, delta, ids, panel, face, &mut consider)
-                });
+            let bounds = Bounds::of(start.into_iter().chain(end));
+            self.tree.visit(bounds, &mut |face| {
+                sweep_panel(start, delta, ids, panel, bounds, face, &mut consider);
+            });
         }
         best
+    }
+
+    pub(crate) fn overlaps_bounds(&self, min: DVec3, max: DVec3) -> bool {
+        self.tree.has_overlap(Bounds { min, max })
     }
 }
 
@@ -244,6 +248,7 @@ fn sweep_panel(
     delta: [DVec3; 3],
     ids: [usize; 3],
     panel: usize,
+    bounds: Bounds,
     face: &Face,
     mut consider: impl FnMut(Hit),
 ) {
@@ -257,6 +262,13 @@ fn sweep_panel(
     let n1 = du.cross(v) + u.cross(dv);
     let n2 = du.cross(dv);
     for point in face.points {
+        // Barycentric coordinates may reach EDGE_EPS beyond the panel.
+        if !bounds
+            .with_feature_tolerance()
+            .overlaps(Bounds::of([point]))
+        {
+            continue;
+        }
         let r = a - point;
         for t in roots([
             r.dot(n0),
@@ -291,7 +303,14 @@ fn sweep_panel(
             continue;
         }
         let p = face.points[edge];
-        let fixed = face.points[(edge + 1) % 3] - p;
+        let q = face.points[(edge + 1) % 3];
+        if !bounds
+            .with_feature_tolerance()
+            .overlaps(Bounds::of([p, q]).with_feature_tolerance())
+        {
+            continue;
+        }
+        let fixed = q - p;
         for i in 0..3 {
             let j = (i + 1) % 3;
             let r = start[i] - p;
@@ -443,6 +462,14 @@ impl Bounds {
         let pad = DVec3::splat(CONTACT_GAP_M);
         (self.min - pad).cmple(other.max).all() && (self.max + pad).cmpge(other.min).all()
     }
+
+    fn with_feature_tolerance(self) -> Self {
+        let pad = (self.max - self.min) * (2.0 * EDGE_EPS);
+        Self {
+            min: self.min - pad,
+            max: self.max + pad,
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -511,5 +538,38 @@ impl BoundsTree {
                 }
             }
         }
+    }
+
+    fn has_overlap(&self, bounds: Bounds) -> bool {
+        self.bounds.overlaps(bounds)
+            && match &self.contents {
+                Contents::Leaf(faces) => faces.iter().any(|face| face.bounds.overlaps(bounds)),
+                Contents::Branch(children) => {
+                    children.iter().any(|child| child.has_overlap(bounds))
+                }
+            }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn swept_bounds_reject_the_empty_space_between_distant_obstacles() {
+        let mut vertices = Vec::new();
+        let mut triangles = Vec::new();
+        for x in [-12.0, -11.0, -10.0, -9.0, -8.0, 8.0, 9.0, 10.0, 11.0, 12.0] {
+            let first = vertices.len();
+            vertices.extend([
+                DVec3::new(x, 0.0, 0.0),
+                DVec3::new(x, 2.0, 0.0),
+                DVec3::new(x, 0.0, 3.0),
+            ]);
+            triangles.push([first, first + 1, first + 2]);
+        }
+        let mesh = StaticCollisionMesh::new(&vertices, &triangles).unwrap();
+        assert!(!mesh.overlaps_bounds(DVec3::new(-1.0, 0.1, 0.1), DVec3::new(1.0, 0.4, 1.0)));
+        assert!(mesh.overlaps_bounds(DVec3::new(7.9, 0.1, 0.1), DVec3::new(8.1, 0.4, 1.0)));
     }
 }

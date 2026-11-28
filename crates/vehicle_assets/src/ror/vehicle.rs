@@ -171,6 +171,40 @@ fn import(mut archive: Archive, entry: String) -> Import<VehicleImport> {
                     Err("expected two node IDs".into())
                 }
             }
+            "commands" | "commands2" => {
+                let required = if record.section == "commands2" { 8 } else { 7 };
+                let passive_link = (|| {
+                    let [a, b, ..] = fields.as_slice() else {
+                        return Err("expected command beam endpoints".into());
+                    };
+                    if fields.len() < required {
+                        return Err("incomplete command beam record".into());
+                    }
+                    let edge = resolve_nodes(&nodes, [a, b])?;
+                    for value in &fields[2..required] {
+                        number(value)?;
+                    }
+                    let flags = fields.get(required).copied().unwrap_or("");
+                    Ok::<_, String>((edge, beam_defaults.passive_command(flags)?))
+                })();
+                match passive_link {
+                    Ok((edge, beam)) => {
+                        vehicle.edges.push(edge);
+                        structure.beams.push(match beam {
+                            Ok(beam) => {
+                                deferred.insert("command beam actuation");
+                                Some(beam)
+                            }
+                            Err(detail) => {
+                                warn(&mut warnings, &entry, record.describe(&detail));
+                                None
+                            }
+                        });
+                    }
+                    Err(detail) => warn(&mut warnings, &entry, record.describe(&detail)),
+                }
+                Ok(())
+            }
             "cab" => {
                 if let [first, second, third, options @ ..] = fields.as_slice()
                     && options.len() <= 1

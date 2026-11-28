@@ -1,16 +1,17 @@
-//! Shared setup and capture for the imported vehicle wall strike.
+//! Imported deformable vehicle sessions and the scripted wall strike.
 
 use std::{collections::BTreeMap, ops::Range, sync::Arc};
 
 use bevy::{math::DVec3, prelude::*};
 use vehicle_assets::VehicleAsset;
 use vehicle_physics::{
+    avian_suspension::WheelControl,
     avian_tyre::AvianTyre,
     deformable_vehicle::{
-        DeformableBody, DeformableVehicle, DeformableVehiclePlugin, PreparedDeformableVehicle,
-        StructureSpec,
+        DeformableBody, DeformableObstacles, DeformableVehicle, DeformableVehiclePlugin,
+        PreparedDeformableVehicle, StructureSpec,
     },
-    mounted_tyre::RimMotion,
+    mounted_tyre::{RimMotion, TriangleReaction},
     static_collision::StaticCollisionMesh,
     vehicle_assembly::{
         PreparedVehicle, VehiclePose, VehicleRoad, VehicleSpec, WHEEL_NAMES, WheelAlignment,
@@ -20,7 +21,7 @@ use vehicle_physics::{
 pub use crate::crash_structure::{ImportedStructure, SourceIndices, assemble};
 use crate::{
     crash_structure,
-    drive::{self, DriveSetup, TICKS_PER_SECOND},
+    drive::{self, DriveSetup, DriverControls, DriverInput, TICKS_PER_SECOND},
     placement::{self, CollisionGeometry},
 };
 
@@ -30,16 +31,55 @@ const MIN_SUBSTEPS: u32 = 64;
 const APPROACH_GAP_M: f32 = 2.0;
 
 pub struct CrashSetup {
+    pub vehicle: DeformableSetup,
+    pub approach: Approach,
+}
+
+pub struct DeformableSetup {
     pub imported: ImportedStructure,
     pub substeps: u32,
-    pub approach: Approach,
     pub obstacles: Obstacles,
     tyres: PreparedVehicle,
     road: VehicleRoad,
     alignments: [WheelAlignment; 4],
+    controls: DriverControls,
+    implicit_chassis_beams: bool,
 }
 
 impl CrashSetup {
+    pub fn new(setup: &DriveSetup, asset: &VehicleAsset, target: &str) -> Result<Self, String> {
+        let vehicle = DeformableSetup::new(setup, asset, target)?;
+        let approach = approach(
+            &setup.collision,
+            &vehicle.obstacles.target,
+            &vehicle.imported.structure,
+            vehicle.imported.specification,
+            &vehicle.tyres,
+        )?;
+        Ok(Self { vehicle, approach })
+    }
+
+    pub fn start(self, configure: impl FnOnce(&mut App)) -> Result<DeformableSession, String> {
+        self.vehicle.start(self.approach.pose, configure)
+    }
+
+    pub fn record(self) -> Result<Vec<CrashFrame>, String> {
+        let velocity = self.approach.velocity();
+        let mut session = self.start(|_| {})?;
+        session.spawn(velocity, None)?;
+        let mut frames = Vec::with_capacity(CRASH_TICKS as usize + 1);
+        frames.push(session.frame());
+        for tick in 1..=CRASH_TICKS {
+            session
+                .advance()
+                .map_err(|error| format!("crash replay tick {tick}: {error}"))?;
+            frames.push(session.frame());
+        }
+        Ok(frames)
+    }
+}
+
+impl DeformableSetup {
     pub fn new(setup: &DriveSetup, asset: &VehicleAsset, target: &str) -> Result<Self, String> {
         let target_range = match setup
             .collision
@@ -61,68 +101,75 @@ impl CrashSetup {
                 ));
             }
         };
+        Self::prepare(setup, asset, target_range, false)
+    }
+
+    pub fn for_drive(setup: &DriveSetup, asset: &VehicleAsset) -> Result<Self, String> {
+        Self::prepare(setup, asset, 0..0, true)
+    }
+
+    fn prepare(
+        setup: &DriveSetup,
+        asset: &VehicleAsset,
+        target_range: Range<usize>,
+        manual_drive: bool,
+    ) -> Result<Self, String> {
         let imported = assemble(asset, setup.wheel_visuals(), setup.specification())?;
-        let substeps =
+        let explicit_substeps =
             crash_structure::substeps(&imported.structure, TICKS_PER_SECOND, MIN_SUBSTEPS)?;
+        let implicit_chassis_beams = manual_drive && explicit_substeps > MIN_SUBSTEPS;
+        let substeps = if implicit_chassis_beams {
+            MIN_SUBSTEPS
+        } else {
+            explicit_substeps
+        };
         let alignments = setup.alignments();
         let tyres = imported
             .specification
             .prepare(substeps * TICKS_PER_SECOND)
             .map_err(|error| error.to_string())?
             .with_wheel_alignments(alignments);
-        let approach = approach(
-            &setup.collision,
-            &target_range,
-            &imported.structure,
-            imported.specification,
-            &tyres,
-        )?;
         let obstacles = Obstacles::new(&setup.collision, None, &target_range)?;
         Ok(Self {
             imported,
             substeps,
-            approach,
             obstacles,
             tyres,
             road: setup.road().clone(),
             alignments,
+            controls: DriverControls::new(setup),
+            implicit_chassis_beams,
         })
     }
 
-    pub fn start(self, configure: impl FnOnce(&mut App)) -> Result<CrashSession, String> {
-        let vehicle = PreparedDeformableVehicle::new(
+    pub fn start(
+        self,
+        start: VehiclePose,
+        configure: impl FnOnce(&mut App),
+    ) -> Result<DeformableSession, String> {
+        let mut vehicle = PreparedDeformableVehicle::new(
             self.imported.specification,
             self.imported.structure,
             self.alignments,
         )
         .map_err(|error| error.to_string())?;
+        if self.implicit_chassis_beams {
+            vehicle = vehicle.with_implicit_chassis_beams();
+        }
         let app = drive::physics_app(self.substeps, |app| {
             app.add_plugins(DeformableVehiclePlugin);
             configure(app);
         });
-        Ok(CrashSession {
+        Ok(DeformableSession {
             app,
             vehicle,
             tyres: self.tyres,
             active: None,
             road: self.road,
-            approach: self.approach,
+            start,
             obstacles: self.obstacles,
+            controls: self.controls,
         })
-    }
-
-    pub fn record(self) -> Result<Vec<CrashFrame>, String> {
-        let mut session = self.start(|_| {})?;
-        session.spawn(session.approach.velocity(), None)?;
-        let mut frames = Vec::with_capacity(CRASH_TICKS as usize + 1);
-        frames.push(session.frame());
-        for tick in 1..=CRASH_TICKS {
-            session
-                .advance()
-                .map_err(|error| format!("crash replay tick {tick}: {error}"))?;
-            frames.push(session.frame());
-        }
-        Ok(frames)
     }
 }
 
@@ -133,41 +180,96 @@ pub struct CrashFrame {
     pub rims: [RimMotion; 4],
 }
 
-pub struct CrashSession {
+pub struct DeformableSession {
     app: App,
     vehicle: PreparedDeformableVehicle,
     tyres: PreparedVehicle,
     active: Option<DeformableVehicle>,
     road: VehicleRoad,
-    approach: Approach,
+    start: VehiclePose,
     pub obstacles: Obstacles,
+    controls: DriverControls,
 }
 
-impl CrashSession {
+impl DeformableSession {
     pub fn spawn(
         &mut self,
         velocity_mps: DVec3,
         control: Option<(&VehicleRoad, &Obstacles)>,
     ) -> Result<(Entity, [Entity; 4]), String> {
+        self.spawn_at(self.start, velocity_mps, control)
+    }
+
+    pub fn reset(&mut self) -> Result<(), String> {
+        self.spawn(DVec3::ZERO, None).map(|_| ())
+    }
+
+    pub fn spawn_at(
+        &mut self,
+        pose: VehiclePose,
+        velocity_mps: DVec3,
+        control: Option<(&VehicleRoad, &Obstacles)>,
+    ) -> Result<(Entity, [Entity; 4]), String> {
         let world = self.app.world_mut();
-        if let Some(previous) = self.active.take() {
-            previous.despawn(world);
-        }
         let (road, obstacles) = control.unwrap_or((&self.road, &self.obstacles));
         let vehicle = self
             .vehicle
-            .spawn(
+            .spawn_with_obstacles(
                 world,
                 self.tyres.tyres(),
-                self.approach.pose,
+                pose,
                 velocity_mps,
                 road,
-                Some(obstacles.mesh.clone()),
+                obstacles.meshes.clone(),
             )
             .map_err(|error| error.to_string())?;
         let entities = (vehicle.body, vehicle.wheels.map(|wheel| wheel.rim));
-        self.active = Some(vehicle);
+        if let Some(previous) = self.active.replace(vehicle) {
+            previous.despawn(world);
+        }
+        self.controls.reset();
         Ok(entities)
+    }
+
+    pub fn step(&mut self, input: DriverInput) -> Result<(), String> {
+        let vehicle = self
+            .active
+            .as_ref()
+            .expect("spawn the deformable vehicle first");
+        let controls = self.controls.advance(input, vehicle.geometry);
+        let world = self.app.world_mut();
+        for (wheel, control) in vehicle.wheels.iter().zip(controls) {
+            *world.get_mut::<WheelControl>(wheel.spin_joint).unwrap() = control;
+        }
+        self.advance()
+    }
+
+    pub fn wheel_controls(&self) -> [WheelControl; 4] {
+        self.active
+            .as_ref()
+            .unwrap()
+            .wheels
+            .map(|wheel| *self.world().get::<WheelControl>(wheel.spin_joint).unwrap())
+    }
+
+    /// Mass-weighted velocity of the sprung chassis in world metres per second.
+    pub fn velocity_mps(&self) -> DVec3 {
+        let nodes = self.body().chassis().nodes();
+        nodes
+            .iter()
+            .map(|n| n.mass_kg * n.velocity_mps)
+            .sum::<DVec3>()
+            / nodes.iter().map(|n| n.mass_kg).sum::<f64>()
+    }
+
+    pub fn reactions(&self) -> [TriangleReaction; 4] {
+        self.active.as_ref().unwrap().wheels.map(|wheel| {
+            self.world()
+                .get::<AvianTyre>(wheel.rim)
+                .unwrap()
+                .tyre()
+                .triangle_reaction()
+        })
     }
 
     pub fn world(&self) -> &World {
@@ -225,8 +327,9 @@ impl Approach {
 }
 
 pub struct Obstacles {
-    mesh: Arc<StaticCollisionMesh>,
+    meshes: DeformableObstacles,
     pub source: Arc<[usize]>,
+    pub tyre_source: Arc<[usize]>,
     pub target: Range<usize>,
 }
 
@@ -240,15 +343,18 @@ impl Obstacles {
         let mut vertices = Vec::new();
         let mut triangles = Vec::new();
         let mut source = Vec::new();
+        let mut tyre_triangles = Vec::new();
+        let mut tyre_source = Vec::new();
         for (i, &triangle) in terrain.triangles.iter().enumerate() {
             if excluded.is_some_and(|range| range.contains(&i)) {
                 continue;
             }
             let [a, b, c] = triangle.map(Vec3::as_dvec3);
-            if (b - a).cross(c - a).length_squared() == 0.0 {
+            let area = (b - a).cross(c - a);
+            if area.length_squared() == 0.0 {
                 continue;
             }
-            triangles.push([a, b, c].map(|point| {
+            let triangle = [a, b, c].map(|point| {
                 let key = point
                     .to_array()
                     .map(|v| if v == 0.0 { 0 } else { v.to_bits() });
@@ -257,14 +363,30 @@ impl Obstacles {
                     vertices.push(point);
                     index
                 })
-            }));
+            });
+            triangles.push(triangle);
             source.push(i);
+            // Vertical triangles have no road projection. Include the named
+            // obstacle even if its authored face leans slightly.
+            if target.contains(&i) || area.y.abs() <= 32.0 * f64::EPSILON * area.length() {
+                tyre_triangles.push(triangle);
+                tyre_source.push(i);
+            }
         }
-        let mesh = StaticCollisionMesh::new(&vertices, &triangles)
-            .map_err(|error| format!("static terrain collision: {error}"))?;
+        let build_mesh = |triangles: &[[usize; 3]]| {
+            StaticCollisionMesh::new(&vertices, triangles)
+                .map(Arc::new)
+                .map_err(|error| format!("static terrain collision: {error}"))
+        };
         Ok(Self {
-            mesh: Arc::new(mesh),
+            meshes: DeformableObstacles {
+                chassis: Some(build_mesh(&triangles)?),
+                tyres: (!tyre_triangles.is_empty())
+                    .then(|| build_mesh(&tyre_triangles))
+                    .transpose()?,
+            },
             source: source.into(),
+            tyre_source: tyre_source.into(),
             target: target.clone(),
         })
     }

@@ -1,6 +1,6 @@
 //! Axial springs and dampers on a tyre carcass with its bead rings fixed.
 
-use std::{error::Error, fmt};
+use std::{error::Error, fmt, sync::Arc};
 
 use bevy_math::DVec3;
 
@@ -151,11 +151,11 @@ impl ElasticBeam {
 /// +Y. Velocities are in m/s and all node arrays follow topology order.
 #[derive(Debug, Clone)]
 pub struct ElasticTyre {
-    topology: TyreTopology,
+    topology: Arc<TyreTopology>,
     pub(crate) rest_positions: Vec<DVec3>,
     pub(crate) positions: Vec<DVec3>,
     pub(crate) velocities: Vec<DVec3>,
-    beams: Vec<ElasticBeam>,
+    beams: Arc<Vec<ElasticBeam>>,
     beam_damage: Option<(BeamDamageConfig, Vec<BeamDamage>)>,
     next_damage: Vec<BeamDamage>,
     crown_springs: Vec<CrownSpring>,
@@ -231,14 +231,14 @@ impl ElasticTyre {
             .collect();
 
         Ok(Self {
-            topology,
+            topology: Arc::new(topology),
             positions: rest_positions.clone(),
             next_positions: rest_positions.clone(),
             rest_positions,
             velocities: vec![DVec3::ZERO; node_count],
             next_velocities: vec![DVec3::ZERO; node_count],
             forces: vec![DVec3::ZERO; node_count],
-            beams,
+            beams: Arc::new(beams),
             beam_damage: None,
             next_damage: Vec::new(),
             crown_springs: Vec::new(),
@@ -290,7 +290,10 @@ impl ElasticTyre {
         {
             return Err(ElasticTyreError::InvalidTreadReinforcement);
         }
-        for (beam, topology_beam) in self.beams.iter_mut().zip(self.topology.beams()) {
+        for (beam, topology_beam) in Arc::make_mut(&mut self.beams)
+            .iter_mut()
+            .zip(self.topology.beams())
+        {
             let in_tread = beam.endpoints.iter().all(|&index| {
                 matches!(
                     self.topology.nodes()[index].ring,
@@ -625,7 +628,7 @@ mod tests {
         let other = *target.iter().find(|&&index| index != node).unwrap();
         let direction = (tyre.positions[node] - tyre.positions[other]).normalize();
         // Isolate the selected beam so its force can be checked without other beams.
-        for (index, beam) in tyre.beams.iter_mut().enumerate() {
+        for (index, beam) in Arc::make_mut(&mut tyre.beams).iter_mut().enumerate() {
             if index != beam_index {
                 beam.coefficients = BeamCoefficients {
                     stiffness: 0.0,
@@ -905,7 +908,7 @@ mod tests {
     fn accumulates_equal_and_opposite_endpoint_forces() {
         let mut tyre = default_tyre();
         let [a, b] = [tyre.free_nodes[0], tyre.free_nodes[1]];
-        tyre.beams.retain(|beam| beam.endpoints == [a, b]);
+        Arc::make_mut(&mut tyre.beams).retain(|beam| beam.endpoints == [a, b]);
         let offset = tyre.positions[b] - tyre.positions[a];
         tyre.positions[b] += offset * 0.25;
         let forces = vec![DVec3::ZERO; tyre.positions().len()];

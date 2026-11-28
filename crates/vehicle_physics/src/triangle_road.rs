@@ -76,6 +76,50 @@ impl TriangleRoad {
         self.faces.find(point, self.max_vertical_depth_m, &mut hit);
         hit
     }
+
+    pub(crate) fn tread_patch(&self, points: &[DVec3]) -> TreadPatch<'_> {
+        let (min, max) = points.iter().fold(
+            (DVec3::splat(f64::INFINITY), DVec3::splat(f64::NEG_INFINITY)),
+            |(min, max), &point| (min.min(point), max.max(point)),
+        );
+        let envelope = Bounds {
+            min,
+            max: max + self.max_vertical_depth_m * DVec3::Y,
+        };
+        let mut patch = TreadPatch {
+            road: self,
+            faces: [None; 16],
+            len: 0,
+            max_y: f64::NEG_INFINITY,
+            complete: true,
+        };
+        patch.complete = self.faces.collect_patch(envelope, &mut patch);
+        patch
+    }
+}
+
+pub(crate) struct TreadPatch<'a> {
+    road: &'a TriangleRoad,
+    faces: [Option<&'a Face>; 16],
+    len: usize,
+    max_y: f64,
+    complete: bool,
+}
+
+impl TreadPatch<'_> {
+    pub(crate) fn contact(&self, point: DVec3) -> Option<SurfaceHit> {
+        if !self.complete {
+            return self.road.contact(point);
+        }
+        if point.y >= self.max_y {
+            return None;
+        }
+        let mut hit = None;
+        for face in self.faces[..self.len].iter().flatten() {
+            face.consider(point, self.road.max_vertical_depth_m, &mut hit);
+        }
+        hit
+    }
 }
 
 // Allow round-off at shared edges when computing barycentric coordinates.
@@ -102,6 +146,10 @@ impl Bounds {
             && point.z <= self.max.z
             && point.y < self.max.y
             && point.y + depth >= self.min.y
+    }
+
+    fn overlaps(self, other: Self) -> bool {
+        self.min.cmple(other.max).all() && self.max.cmpge(other.min).all()
     }
 }
 
@@ -167,6 +215,21 @@ impl Face {
             normal: self.normal,
         })
     }
+
+    fn consider(&self, point: DVec3, max_depth: f64, hit: &mut Option<SurfaceHit>) {
+        if let Some(candidate) = self.hit(point, max_depth)
+            && hit.as_ref().is_none_or(|best| {
+                // Take the first road above the node, breaking ties by source index.
+                candidate
+                    .vertical_depth
+                    .total_cmp(&best.vertical_depth)
+                    .then(candidate.index.cmp(&best.index))
+                    .is_lt()
+            })
+        {
+            *hit = Some(candidate);
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -230,18 +293,7 @@ impl FaceTree {
         match &self.contents {
             FaceTreeContents::Leaf(faces) => {
                 for face in faces {
-                    if let Some(candidate) = face.hit(point, max_depth)
-                        && hit.as_ref().is_none_or(|best| {
-                            // Take the first road above the node, breaking ties by source index.
-                            candidate
-                                .vertical_depth
-                                .total_cmp(&best.vertical_depth)
-                                .then(candidate.index.cmp(&best.index))
-                                .is_lt()
-                        })
-                    {
-                        *hit = Some(candidate);
-                    }
+                    face.consider(point, max_depth, hit);
                 }
             }
             FaceTreeContents::Branch(children) => {
@@ -251,11 +303,69 @@ impl FaceTree {
             }
         }
     }
+
+    fn collect_patch<'a>(&'a self, envelope: Bounds, patch: &mut TreadPatch<'a>) -> bool {
+        if !self.bounds.overlaps(envelope) {
+            return true;
+        }
+        match &self.contents {
+            FaceTreeContents::Leaf(faces) => {
+                for face in faces.iter().filter(|face| face.bounds.overlaps(envelope)) {
+                    let Some(slot) = patch.faces.get_mut(patch.len) else {
+                        return false;
+                    };
+                    *slot = Some(face);
+                    patch.len += 1;
+                    patch.max_y = patch.max_y.max(face.bounds.max.y);
+                }
+                true
+            }
+            FaceTreeContents::Branch(children) => children
+                .iter()
+                .all(|child| child.collect_patch(envelope, patch)),
+        }
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn batched_tread_lookup_matches_single_node_lookup_across_seams_and_layers() {
+        let points = [
+            DVec3::new(0.5, -0.01, 0.5),
+            DVec3::new(0.25, 0.02, 0.75),
+            DVec3::new(0.75, 0.99, 0.25),
+            DVec3::new(1.1, -0.01, 0.25),
+        ];
+        for count in [2, 20] {
+            let mut vertices = Vec::new();
+            let mut triangles = Vec::new();
+            for index in 0..count {
+                let first = vertices.len();
+                let origin = if index % 2 == 0 {
+                    DVec3::ZERO
+                } else {
+                    DVec3::Y
+                };
+                vertices.extend([
+                    origin,
+                    origin + DVec3::X,
+                    origin + DVec3::X + DVec3::Z,
+                    origin + DVec3::Z,
+                ]);
+                triangles.extend([[first, first + 1, first + 2], [first, first + 3, first + 2]]);
+            }
+            let road = TriangleRoad::new(&vertices, &triangles, 0.05).unwrap();
+            let patch = road.tread_patch(&points);
+            assert_eq!(patch.complete, count == 2);
+            for point in points {
+                let key = |hit: SurfaceHit| (hit.index, hit.vertical_depth, hit.normal);
+                assert_eq!(patch.contact(point).map(key), road.contact(point).map(key));
+            }
+        }
+    }
 
     #[test]
     fn road_faces_are_bounded_and_accept_both_windings_at_seams() {

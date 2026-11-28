@@ -188,15 +188,25 @@ pub(crate) struct MutableSection {
     pub entity: Entity,
     pub mesh: Handle<Mesh>,
     reflected: bool,
+    source_vertices: Vec<u32>,
+    rest_vertices: Vec<[f32; 3]>,
     rest_normals: Vec<[f32; 3]>,
 }
 
 impl MutableSection {
     pub(crate) fn update(&self, mesh: &mut Mesh, vertices: &[Vec3], at_rest: bool) -> Aabb {
-        mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, vertices.to_vec());
         if at_rest {
+            mesh.insert_attribute(Mesh::ATTRIBUTE_POSITION, self.rest_vertices.clone());
             mesh.insert_attribute(Mesh::ATTRIBUTE_NORMAL, self.rest_normals.clone());
         } else {
+            let Some(VertexAttributeValues::Float32x3(positions)) =
+                mesh.attribute_mut(Mesh::ATTRIBUTE_POSITION)
+            else {
+                unreachable!("imported sections have 3D positions");
+            };
+            for (position, &source) in positions.iter_mut().zip(&self.source_vertices) {
+                *position = vertices[source as usize].to_array();
+            }
             mesh.compute_area_weighted_normals();
             if let Some(VertexAttributeValues::Float32x3(normals)) =
                 mesh.attribute_mut(Mesh::ATTRIBUTE_NORMAL)
@@ -273,11 +283,14 @@ pub(crate) fn spawn_mesh_instances<'a>(
                 let mesh = &geometry[id.0];
                 appearance.sections[&id]
                     .iter()
+                    .filter(|section| !section.triangles.is_empty())
                     .map(|section| {
+                        let (section_mesh, source_vertices) =
+                            compact_section(mesh, &mesh.triangles[section.triangles.clone()]);
                         (
                             meshes.add(to_bevy_mesh_with_usage(
-                                mesh,
-                                &mesh.triangles[section.triangles.clone()],
+                                &section_mesh,
+                                &section_mesh.triangles,
                                 reflected,
                                 if dynamic {
                                     RenderAssetUsages::default()
@@ -286,11 +299,12 @@ pub(crate) fn spawn_mesh_instances<'a>(
                                 },
                             )),
                             surface_materials[section.material.0].clone(),
+                            source_vertices,
                         )
                     })
                     .collect::<Vec<_>>()
             });
-        for (mesh, material) in sections {
+        for (mesh, material, source_vertices) in sections {
             let mut entity = commands.spawn((
                 Name::new(instance.name.clone()),
                 Mesh3d(mesh.clone()),
@@ -307,12 +321,14 @@ pub(crate) fn spawn_mesh_instances<'a>(
             if dynamic {
                 let source = meshes.get(mesh.id()).unwrap();
                 entity.insert(source.get_aabb().unwrap());
-                let rest_normals = source
-                    .attribute(Mesh::ATTRIBUTE_NORMAL)
-                    .unwrap()
-                    .as_float3()
-                    .unwrap()
-                    .to_vec();
+                let rest_attribute = |attribute| {
+                    source
+                        .attribute(attribute)
+                        .unwrap()
+                        .as_float3()
+                        .unwrap()
+                        .to_vec()
+                };
                 mutable_sections
                     .entry(index)
                     .or_default()
@@ -320,7 +336,9 @@ pub(crate) fn spawn_mesh_instances<'a>(
                         entity: entity.id(),
                         mesh: mesh.clone(),
                         reflected,
-                        rest_normals,
+                        source_vertices: source_vertices.clone(),
+                        rest_vertices: rest_attribute(Mesh::ATTRIBUTE_POSITION),
+                        rest_normals: rest_attribute(Mesh::ATTRIBUTE_NORMAL),
                     });
             }
         }
@@ -561,6 +579,92 @@ fn texture_image(texture: &DiffuseTexture) -> Image {
 
 fn to_bevy_mesh(mesh: &TriangleMesh, triangles: &[[u32; 3]], reflected: bool) -> Mesh {
     to_bevy_mesh_with_usage(mesh, triangles, reflected, RenderAssetUsages::RENDER_WORLD)
+}
+
+// A material section only uploads the vertices that its own indices reference.
+// Keep the reverse map so skinning can still use the original mesh indices.
+fn compact_section(mesh: &TriangleMesh, triangles: &[[u32; 3]]) -> (TriangleMesh, Vec<u32>) {
+    let mut indices = vec![u32::MAX; mesh.vertices.len()];
+    let mut sources = Vec::new();
+    let triangles = triangles
+        .iter()
+        .map(|triangle| {
+            triangle.map(|source| {
+                let index = &mut indices[source as usize];
+                if *index == u32::MAX {
+                    *index = sources.len() as u32;
+                    sources.push(source);
+                }
+                *index
+            })
+        })
+        .collect();
+    let order = || sources.iter().map(|&index| index as usize);
+    let compact = TriangleMesh {
+        vertices: order().map(|index| mesh.vertices[index]).collect(),
+        triangles,
+        normals: mesh
+            .normals
+            .as_ref()
+            .map(|normals| order().map(|index| normals[index]).collect()),
+        uvs: mesh
+            .uvs
+            .as_ref()
+            .map(|uvs| order().map(|index| uvs[index]).collect()),
+    };
+    (compact, sources)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn material_section_updates_only_its_referenced_vertices() {
+        let geometry = TriangleMesh {
+            vertices: vec![Vec3::ZERO, Vec3::X, Vec3::Y, Vec3::Z],
+            triangles: vec![[2, 0, 3]],
+            normals: Some(vec![Vec3::X; 4]),
+            uvs: Some(vec![Vec2::ZERO, Vec2::X, Vec2::Y, Vec2::ONE]),
+        };
+        let (compact, sources) = compact_section(&geometry, &geometry.triangles);
+        assert_eq!(sources, [2, 0, 3]);
+        assert_eq!(compact.triangles, [[0, 1, 2]]);
+        assert_eq!(
+            compact.uvs.as_deref().unwrap(),
+            [Vec2::Y, Vec2::ZERO, Vec2::ONE]
+        );
+        let mut mesh = to_bevy_mesh_with_usage(
+            &compact,
+            &compact.triangles,
+            false,
+            RenderAssetUsages::default(),
+        );
+        let section = MutableSection {
+            entity: Entity::PLACEHOLDER,
+            mesh: Handle::default(),
+            reflected: false,
+            source_vertices: sources,
+            rest_vertices: compact.vertices.iter().map(|v| v.to_array()).collect(),
+            rest_normals: vec![Vec3::X.to_array(); 3],
+        };
+        let mut deformed = geometry.vertices;
+        deformed[2] += 0.2 * Vec3::Z;
+        section.update(&mut mesh, &deformed, false);
+        let positions = |mesh: &Mesh| {
+            mesh.attribute(Mesh::ATTRIBUTE_POSITION)
+                .unwrap()
+                .as_float3()
+                .unwrap()
+                .to_vec()
+        };
+        assert_eq!(
+            positions(&mesh),
+            [deformed[2], deformed[0], deformed[3]].map(|v| v.to_array())
+        );
+        section.update(&mut mesh, &deformed, true);
+        assert_eq!(positions(&mesh), section.rest_vertices);
+    }
 }
 
 fn to_bevy_mesh_with_usage(

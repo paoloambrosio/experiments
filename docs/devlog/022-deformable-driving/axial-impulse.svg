@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="680" height="212" viewBox="0 0 680 212" role="img" aria-labelledby="title description">
+  <title id="title">Axial beam impulses</title>
+  <desc id="description">A spring and damper connect two nodal masses. An impulse in one direction acts on the first node and the equal opposite impulse acts on the second.</desc>
+  <defs>
+    <marker id="arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
+      <path d="M0 0 8 4 0 8z" fill="#186969"/>
+    </marker>
+  </defs>
+  <rect x="1" y="1" width="678" height="210" rx="12" fill="#f4f6f9"/>
+  <g stroke="#314660" stroke-width="3" fill="none" stroke-linejoin="round">
+    <path d="M122 99V62H225l16-14 20 28 20-28 20 28 20-28 20 28 20-28 20 28 20-28 16 14H558V99"/>
+    <path d="M122 115v29h170m96 0h170v-29"/>
+    <path d="M292 128v32h72m-72-32h72m0 5v22m0-11h24"/>
+  </g>
+  <g fill="#314660">
+    <circle cx="122" cy="107" r="13"/>
+    <circle cx="558" cy="107" r="13"/>
+  </g>
+  <g stroke="#186969" stroke-width="3" marker-end="url(#arrow)">
+    <path d="M154 107H217"/>
+    <path d="M526 107H463"/>
+  </g>
+  <g font-family="sans-serif" font-size="16" text-anchor="middle" fill="#24364c">
+    <text x="340" y="32">Axial stiffness</text>
+    <text x="340" y="186">Axial damping</text>
+    <text x="122" y="186">Node a</text>
+    <text x="558" y="186">Node b</text>
+  </g>
+  <text x="340" y="108" font-family="sans-serif" text-anchor="middle" font-size="15" fill="#186969">Equal and opposite impulses</text>
+</svg>

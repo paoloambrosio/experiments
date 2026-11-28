@@ -83,6 +83,57 @@ fn write_archive(path: &Path, truck: &str) {
 }
 
 #[test]
+fn idle_command_beams_retain_a_panel_link_with_its_authored_material() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("panel.zip");
+    write_archive(
+        &path,
+        "+Hinged panel
+nodes
+0,0,0,0
+1,0,0.8,0
+2,-0.7,0.4,0
+3,-0.4,0.3,-0.2
+beams
+0,2,i
+1,2,i
+commands2
+set_beam_defaults 400000,600,400000,1000000
+set_beam_defaults_scale 0.5,0.25,1,1
+2,3,0.2,0.3,1,2,1,2,ip Panel
+commands
+1,3,0.2,1,2,3,4,i Trim
+0,3,0.2,1,2,5,6,r Cable
+end
+",
+    );
+    let imported = load_vehicle(&path, "pack/fixture.truck").unwrap();
+    let asset = &imported.vehicle;
+    let structure = asset.physics.structure.as_ref().unwrap();
+    assert_eq!(
+        asset.edges[2..],
+        [
+            [NodeId(2), NodeId(3)],
+            [NodeId(1), NodeId(3)],
+            [NodeId(0), NodeId(3)]
+        ]
+    );
+    for beam in &structure.beams[2..4] {
+        let beam = beam.unwrap();
+        assert_eq!(beam.kind, StructuralBeamKind::Bilateral);
+        assert_eq!(beam.stiffness_n_per_m, 200000.0);
+        assert_eq!(beam.damping_ns_per_m, 150.0);
+    }
+    assert!(structure.beams[4].is_none());
+    assert!(
+        imported
+            .warnings
+            .iter()
+            .any(|warning| warning.message.contains("tension-only command beam"))
+    );
+}
+
+#[test]
 fn imports_shock_attachments_in_shuffled_wheel_order() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("attachments.zip");

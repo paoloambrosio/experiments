@@ -25,5 +25,8 @@ Each entry documents a development step in the `vehicle_physics` core crate. Sup
 - [019 — Compression supports for chassis beams](019-compression-supports/README.md) checks that a support resists shortening, retains plastic set under load, and goes slack in extension.
 - [020 — Shortest rotation for suspension mounts](020-suspension-mount-rotation/README.md) keeps the wheel upright correction continuous across quaternion sign changes.
 - [021 — Simultaneous wall contacts](021-simultaneous-wall-contacts/README.md) keeps nearly simultaneous nose contacts in time order and resolves roundoff at the wall plane.
+- [022 — Deformable driving](022-deformable-driving/README.md) combines tread support, swept obstacle contact, and an implicit beam solve so stiff chassis can drive on the same substep clock as the tyres and suspension.
 
 These core milestones support the [reference car and track reports](../user/README.md#run-reports-on-the-reference-car-and-track).
+
+The next core milestone is beam fracture and breakaway parts. It will cover beam failure, detached-part collision, and separation of the attached meshes.

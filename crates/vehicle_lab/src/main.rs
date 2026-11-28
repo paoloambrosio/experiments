@@ -4,6 +4,7 @@ mod corner_experiment;
 mod corner_lab;
 mod coupled_chassis_report;
 mod crash_report;
+mod deformable_drive_report;
 mod drive_report;
 mod drop_experiment;
 mod drop_lab;
@@ -170,6 +171,8 @@ fn main() -> AppExit {
     for argument in std::env::args_os().skip(1) {
         let result = if argument == "--drive-report" {
             imported_reports::drive()
+        } else if argument == "--deformable-drive-report" {
+            deformable_drive_report::report()
         } else if argument == "--alignment-report" {
             imported_reports::alignment()
         } else if argument == "--crash-report" {

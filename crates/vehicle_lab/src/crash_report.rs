@@ -13,7 +13,8 @@ use vehicle_physics::{
 use vehicle_scene::{
     body_skin::BodySkin,
     crash::{
-        CRASH_TICKS, CrashFrame, CrashSession, CrashSetup, ImportedStructure, Obstacles, SPEED_MPS,
+        CRASH_TICKS, CrashFrame, CrashSetup, DeformableSession, ImportedStructure, Obstacles,
+        SPEED_MPS,
     },
     drive::{self, DriveSetup, TICKS_PER_SECOND},
 };
@@ -30,8 +31,8 @@ pub(crate) fn run(setup: &DriveSetup, asset: &VehicleAsset, target: &str) -> Res
         source,
         counts,
         mounts,
-    } = &crash.imported;
-    let rate = crash.substeps * TICKS_PER_SECOND;
+    } = &crash.vehicle.imported;
+    let rate = crash.vehicle.substeps * TICKS_PER_SECOND;
     println!(
         "Crash structure | {} sprung nodes | {} beams | {} body panels | {rate} substeps/s",
         structure.nodes.len(),
@@ -56,8 +57,9 @@ pub(crate) fn run(setup: &DriveSetup, asset: &VehicleAsset, target: &str) -> Res
         counts.support_extension_limits, counts.ground_exclusions
     );
     let approach = crash.approach;
-    let target_range = crash.obstacles.target.clone();
-    let triangle_source = crash.obstacles.source.clone();
+    let target_range = crash.vehicle.obstacles.target.clone();
+    let triangle_source = crash.vehicle.obstacles.source.clone();
+    let tyre_source = crash.vehicle.obstacles.tyre_source.clone();
     println!(
         "{target} | approach face {} | point {:.3?} m | travel direction {:.4?} | launch origin {:.3?} m",
         approach.triangle - target_range.start,
@@ -115,6 +117,21 @@ pub(crate) fn run(setup: &DriveSetup, asset: &VehicleAsset, target: &str) -> Res
     let (step, hit) = impact
         .first_body
         .ok_or("no chassis contact with the selected target")?;
+    if impact
+        .first_wheels
+        .iter()
+        .flatten()
+        .any(|wheel_step| *wheel_step <= step)
+    {
+        return Err(format!(
+            "frontal strike was not body-first: chassis step {step}, tyre steps {:?}",
+            impact.first_wheels
+        ));
+    }
+    println!(
+        "Wall-contact substeps | chassis {step} | wheels {:?}",
+        impact.first_wheels
+    );
     if let (Some(first), Some(first_hit), Some(corner)) = (
         impact.first_target,
         impact.first_target_contact,
@@ -125,7 +142,7 @@ pub(crate) fn run(setup: &DriveSetup, asset: &VehicleAsset, target: &str) -> Res
             first as f64 / f64::from(rate),
             WHEEL_NAMES[corner],
             first_hit.feature,
-            triangle_source[first_hit.triangle] - target_range.start
+            tyre_source[first_hit.triangle] - target_range.start
         );
     }
     let (edge, change) = impact
@@ -392,7 +409,7 @@ impl NoseGauge {
 }
 
 struct Bench {
-    session: CrashSession,
+    session: DeformableSession,
     gauge: NoseGauge,
     forward: DVec3,
 }
@@ -409,6 +426,7 @@ impl Bench {
             chassis,
             rims,
             source: obstacles.source.clone(),
+            tyre_source: obstacles.tyre_source.clone(),
             target: obstacles.target.clone(),
             gauge: self.gauge.clone(),
             forward: self.forward,
@@ -439,7 +457,12 @@ impl Bench {
             if let Some(contact) = trace.result.first_target_contact {
                 return Err(format!(
                     "stationary settling touched target at step {:?}: {contact:?}, source triangle {}",
-                    trace.result.first_target, trace.source[contact.triangle]
+                    trace.result.first_target,
+                    if trace.result.first_target_wheel.is_some() {
+                        trace.tyre_source[contact.triangle]
+                    } else {
+                        trace.source[contact.triangle]
+                    }
                 ));
             }
             if tick >= 2 * TICKS_PER_SECOND - sample_ticks {
@@ -513,6 +536,7 @@ struct CrashResult {
     first_target: Option<usize>,
     first_target_contact: Option<StaticContact>,
     first_target_wheel: Option<usize>,
+    first_wheels: [Option<usize>; 4],
     first_body: Option<(usize, StaticContact)>,
     first_other: Option<usize>,
     last_target: usize,
@@ -536,6 +560,7 @@ impl CrashResult {
                     .first_target_contact
                     .map(|hit| (hit.triangle, hit.feature))
             && self.first_target_wheel == replay.first_target_wheel
+            && self.first_wheels == replay.first_wheels
             && self
                 .first_body
                 .map(|(step, hit)| (step, hit.triangle, hit.feature))
@@ -565,6 +590,7 @@ struct Trace {
     chassis: Entity,
     rims: [Entity; 4],
     source: Arc<[usize]>,
+    tyre_source: Arc<[usize]>,
     target: Range<usize>,
     gauge: NoseGauge,
     forward: DVec3,
@@ -595,7 +621,12 @@ fn measure(
         let Some(hit) = reaction.first else {
             return None;
         };
-        if trace.target.contains(&trace.source[hit.triangle]) {
+        let source = if wheel.is_some() {
+            &trace.tyre_source
+        } else {
+            &trace.source
+        };
+        if trace.target.contains(&source[hit.triangle]) {
             if result.first_target.is_none() {
                 result.first_target = Some(step);
                 result.first_target_contact = Some(hit);
@@ -613,7 +644,9 @@ fn measure(
     for (i, rim) in trace.rims.into_iter().enumerate() {
         let tyre = tyres.get(rim).unwrap().tyre();
         trace.load[i] = tyre.triangle_reaction().normal_force.y;
-        measure_contact(tyre.obstacle_reaction(), Some(i));
+        if measure_contact(tyre.obstacle_reaction(), Some(i)).is_some() {
+            result.first_wheels[i].get_or_insert(step);
+        }
     }
     if let Some(hit) = first_body_hit
         && result.first_body.is_none()

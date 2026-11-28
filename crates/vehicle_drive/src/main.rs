@@ -8,7 +8,7 @@ use std::{collections::BTreeMap, path::PathBuf, process::ExitCode};
 use clap::{Arg, ArgAction, Command, value_parser};
 use vehicle_assets::ror::{ImportWarning, TerrainImport, VehicleImport, reference};
 use vehicle_scene::{
-    drive::{AlignmentMode, DriveSession, DriveSetup},
+    drive::{AlignmentMode, DriveSetup},
     placement,
 };
 
@@ -28,6 +28,13 @@ fn main() -> ExitCode {
                 .action(ArgAction::SetTrue)
                 .conflicts_with_all(["view-terrain", "view-vehicle", "crash-replay"])
                 .help("Drive the selected car (default)"),
+        )
+        .arg(
+            Arg::new("benchmark")
+                .long("benchmark")
+                .action(ArgAction::SetTrue)
+                .conflicts_with_all(["view-terrain", "view-vehicle", "crash-replay", "config"])
+                .help("Measure scripted driving and a frontal crash in the window"),
         )
         .arg(
             Arg::new("view-terrain")
@@ -56,6 +63,7 @@ fn main() -> ExitCode {
         args.get_flag("view-terrain"),
         args.get_flag("view-vehicle"),
         args.get_flag("crash-replay"),
+        args.get_flag("benchmark"),
     ) {
         Ok(true) => ExitCode::SUCCESS,
         Ok(false) => ExitCode::FAILURE,
@@ -71,6 +79,7 @@ fn run(
     view_terrain: bool,
     view_vehicle: bool,
     crash_replay: bool,
+    benchmark: bool,
 ) -> Result<bool, String> {
     let config = config_path.map(config::Config::read).transpose()?;
     let terrain = match &config {
@@ -103,8 +112,14 @@ fn run(
     if crash_replay {
         return crash_replay::run(setup, terrain, vehicle);
     }
-    setup.print_setup(&vehicle.entry, &terrain.terrain.name);
-    Ok(drive_view::run(DriveSession::new(setup)?, terrain, vehicle))
+    let mode = if config.is_some() {
+        drive_view::DriveMode::Configured
+    } else if benchmark {
+        drive_view::DriveMode::Benchmark
+    } else {
+        drive_view::DriveMode::Reference
+    };
+    drive_view::run(setup, terrain, vehicle, mode)
 }
 
 fn print_vehicle_summary(import: &VehicleImport) {

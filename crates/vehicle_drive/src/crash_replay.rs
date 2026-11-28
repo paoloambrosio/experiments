@@ -34,7 +34,7 @@ impl Replay {
     fn record(drive: &DriveSetup, vehicle: &VehicleImport) -> Result<Self, String> {
         let asset = &vehicle.vehicle;
         let crash = CrashSetup::new(drive, asset, "wall")?;
-        let skin = BodySkin::new(asset, &crash.imported.source)?;
+        let skin = BodySkin::new(asset, &crash.vehicle.imported.source)?;
         let objects: Vec<_> = skin.meshes.iter().map(|mesh| mesh.object).collect();
         let frames = crash
             .record()?
@@ -184,7 +184,7 @@ fn setup(
         sections: replay
             .objects
             .iter()
-            .map(|object| sections.remove(object).unwrap())
+            .map(|object| sections.remove(object).unwrap_or_default())
             .collect(),
         shown_frame: 0,
     });

@@ -378,10 +378,18 @@ impl TyreObstacles {
         let beads = (0..free.start).chain(free.end..positions.len());
         let limit = self.nodes.len().saturating_mul(2).max(128);
         loop {
+            let mut min = DVec3::splat(f64::INFINITY);
+            let mut max = DVec3::splat(f64::NEG_INFINITY);
             for (&position, &delta) in positions.iter().zip(travel.iter()) {
-                if !delta.is_finite() || !(position + delta).is_finite() {
+                let end = position + delta;
+                if !delta.is_finite() || !end.is_finite() {
                     return Err(ElasticTyreError::NonFiniteStep);
                 }
+                min = min.min(position.min(end));
+                max = max.max(position.max(end));
+            }
+            if contacts.is_empty() && !self.world.overlaps_bounds(min, max) {
+                return Ok(StaticReaction::default());
             }
             let Some(hit) = self.world.first_hit(
                 positions,
@@ -514,7 +522,7 @@ pub struct MountedTyre {
     kerb: Option<Kerb>,
     triangle_road: Option<(Arc<TriangleRoad>, ContactParameters)>,
     triangle_reaction: TriangleReaction,
-    obstacles: Option<TyreObstacles>,
+    obstacles: Option<Arc<TyreObstacles>>,
     obstacle_reaction: StaticReaction,
     tread_nodes: std::ops::Range<usize>,
     tread_triangles: Vec<[usize; 3]>,
@@ -668,7 +676,7 @@ impl MountedTyre {
         if !mass.recip().is_finite() || !inertia.recip().is_finite() {
             return Err(ElasticTyreError::InvalidMass);
         }
-        self.obstacles = Some(TyreObstacles {
+        self.obstacles = Some(Arc::new(TyreObstacles {
             world,
             nodes: (0..self.positions().len()).collect(),
             panels: triangulate(self.topology())
@@ -677,7 +685,7 @@ impl MountedTyre {
                 .collect(),
             inverse_rim_mass: mass.recip(),
             inverse_rim_inertia: inertia.recip(),
-        });
+        }));
         self.obstacle_reaction = StaticReaction::default();
         Ok(())
     }
@@ -872,11 +880,12 @@ impl MountedTyre {
                     Ok(())
                 };
                 if let Some((road, contact)) = triangle_road {
+                    let patch = road.tread_patch(&positions[tread_nodes.clone()]);
                     let axle = self.rim.rotation * DVec3::X;
                     let mut normal_load = 0.0;
                     let mut lateral_load_moment = 0.0;
                     for index in tread_nodes.clone() {
-                        let Some(hit) = road.contact(positions[index]) else {
+                        let Some(hit) = patch.contact(positions[index]) else {
                             continue;
                         };
                         let depth = hit.depth();

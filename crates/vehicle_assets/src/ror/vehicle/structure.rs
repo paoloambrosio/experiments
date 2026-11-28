@@ -125,6 +125,24 @@ impl BeamDefaults {
             plasticity: self.plasticity,
         }))
     }
+
+    pub(super) fn passive_command(
+        &self,
+        flags: &str,
+    ) -> Result<Result<StructuralBeam, String>, String> {
+        if flags.contains('r') {
+            return Ok(Err("unsupported tension-only command beam".into()));
+        }
+        if flags
+            .chars()
+            .any(|flag| !matches!(flag, 'n' | 'i' | 'c' | 'f' | 'p' | 'o'))
+        {
+            return Ok(Err(format!("unsupported command beam options {flags:?}")));
+        }
+        // Without a command input the hydraulic link keeps its spawn length.
+        // It still carries axial load using the authored beam defaults.
+        self.beam(&[])
+    }
 }
 
 pub(super) fn influence_nodes(
